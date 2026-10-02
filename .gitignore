@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 .emulator-data/
+.gmp_cache/
+bun.lock*
