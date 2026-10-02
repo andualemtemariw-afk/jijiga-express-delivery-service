@@ -1,0 +1,45 @@
+import { AppLocale } from './types';
+
+export const soLocale: AppLocale = {
+  brandName: 'Adeegga Gaarsiinta Jijiga Express',
+  tagline: 'Gaadiidka xawaaraha leh, dabagalka rakaabka tooska ah & adeegyada degdegga ah',
+  supportCustomPrompt: 'Si aad u codsato astaamo gaarsiin oo gaar ah, weydii taageerada.',
+  tabs: {
+    dashboard: 'Gaarsiinta & Dirista',
+    tracking: 'Dabagalka Wadada Tooska',
+    marketplace: 'Dalagyada & Cuntada Cusub',
+    history: 'Taariikhda Dalabyada',
+    profile: 'Xogta & Cinwaanka',
+  },
+  services: {
+    parcelTitle: 'Dirista Baakidhka Degdegga ah',
+    parcelSubtitle: 'Adeegga baakidhka ee Jijiga, Hargeysa & Diridhaba',
+    rideTitle: 'Jijiga Express Tagsi & Mooto',
+    rideSubtitle: 'Dalbashada gaadiidka degdegga ah & adeegga garoonka',
+    eeuTitle: 'Buuxinta Kaarka Korontada EEU',
+    eeuSubtitle: 'Ku shubashada mitirka 13-lambar ah iyo keenista kaarka',
+    foodTitle: 'Jikooyinka & Beeraha Maxalliga ah',
+    foodSubtitle: 'Cuntooyinka iyo dalagyada tooska ah ee beeraleyda',
+  },
+  routeMap: {
+    bannerTitle: 'Khariidadda Wadada Gaarsiinta • Dabagalka Rakaabka Tooska ah',
+    bannerSubtitle: 'Xogta GPS tooska ah, xawaaraha socodka, iyo xisaabinta imaanshaha',
+    liveRadar: 'RADAR-KA TOOSKA AH • GPS SHAQEYNAYA',
+    telemetryTitle: 'Xogta Tooska ah ee Wariyaha',
+    courierStatus: 'Wariyaha Wuu Socdaa',
+    speedLabel: 'Xawaaraha Hadda',
+    etaLabel: 'Waqtiga La Filayo',
+    distanceLabel: 'Fogaanta Hadhay',
+    tamperSealLabel: 'Shaabadda Ammaanka',
+    centerOnCourier: 'Ku Toosi Wariyaha',
+    fullscreen: 'Barixi Khariidadda',
+  },
+  common: {
+    confirmOrder: 'Xaqiiji Dalabka',
+    orderNow: 'Dalbo Hadda',
+    cancel: 'Jooji',
+    trackLive: 'Daba-gal Toos ah',
+    callDriver: 'Wac Wariyaha',
+    chatCourier: 'Kala Hadal Fariin',
+  },
+};

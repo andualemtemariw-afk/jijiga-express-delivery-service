@@ -1,0 +1,45 @@
+import { AppLocale } from './types';
+
+export const enLocale: AppLocale = {
+  brandName: 'Jijiga Express Delivery Service',
+  tagline: 'Hyper-local logistics, real-time courier tracking & rapid multi-service fulfillment',
+  supportCustomPrompt: 'To request custom delivery features, ask support.',
+  tabs: {
+    dashboard: 'Logistics & Dispatch',
+    tracking: 'Live Route Tracking',
+    marketplace: 'Fresh Batches & Food',
+    history: 'Order History',
+    profile: 'Profile & Address',
+  },
+  services: {
+    parcelTitle: 'Express Parcel Dispatch',
+    parcelSubtitle: 'Point-to-point courier across Jijiga, Hargeisa & Dire Dawa',
+    rideTitle: 'Jijiga Express Taxi & Moto',
+    rideSubtitle: 'Instant passenger ride dispatch & airport transfer',
+    eeuTitle: 'EEU Prepaid Electricity Recharge',
+    eeuSubtitle: '13-digit meter top-up with round-trip smart card custody',
+    foodTitle: 'Fresh Kitchens & Producers',
+    foodSubtitle: 'Direct producer batches & restaurant orders',
+  },
+  routeMap: {
+    bannerTitle: 'Delivery Route Map • Real-Time Courier Tracking',
+    bannerSubtitle: 'Live GPS telemetry, speed readings, and turn-by-turn route tracking',
+    liveRadar: 'LIVE COURIER RADAR • GPS ACTIVE',
+    telemetryTitle: 'Active Courier Telemetry',
+    courierStatus: 'Courier In Transit',
+    speedLabel: 'Current Speed',
+    etaLabel: 'Estimated Arrival',
+    distanceLabel: 'Remaining Distance',
+    tamperSealLabel: 'Verified Tamper Seal',
+    centerOnCourier: 'Center on Courier',
+    fullscreen: 'Expand Route Map',
+  },
+  common: {
+    confirmOrder: 'Confirm Order',
+    orderNow: 'Order Now',
+    cancel: 'Cancel',
+    trackLive: 'Track Live Delivery',
+    callDriver: 'Call Courier',
+    chatCourier: 'Chat with Courier',
+  },
+};

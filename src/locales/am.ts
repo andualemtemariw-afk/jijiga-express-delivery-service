@@ -1,0 +1,45 @@
+import { AppLocale } from './types';
+
+export const amLocale: AppLocale = {
+  brandName: 'ጅጅጋ ኤክስፕረስ የማድረሻ አገልግሎት',
+  tagline: 'ፈጣን የከተማ ውስጥ ሎጅስቲክስ፣ የቀጥታ መልእክተኛ መከታተያ እና ባለብዙ-አገልግሎት መድረክ',
+  supportCustomPrompt: 'ብጁ የማድረሻ አገልግሎቶችን ለመጠየቅ፣ ድጋፍ ሰጪን ያነጋግሩ።',
+  tabs: {
+    dashboard: 'ሎጅስቲክስ እና ስምሪት',
+    tracking: 'የቀጥታ መንገድ ክትትል',
+    marketplace: 'ትኩስ ምርቶች እና ምግብ',
+    history: 'የትዕዛዝ ታሪክ',
+    profile: 'መገለጫ እና አድራሻ',
+  },
+  services: {
+    parcelTitle: 'ፈጣን የዕቃ ማድረሻ',
+    parcelSubtitle: 'በጅጅጋ፣ ሃርጌሳ እና ድሬዳዋ መካከል የሚደረግ የፖስታ እና የዕቃ ማጓጓዝ',
+    rideTitle: 'ጅጅጋ ኤክስፕረስ ታክሲ እና ሞተር',
+    rideSubtitle: 'ፈጣን የከተማ ትራንስፖርት እና የኤርፖርት ጉዞ',
+    eeuTitle: 'የኢትዮጵያ ኤሌክትሪክ ቅድመ-ክፍያ ካርድ መሙያ',
+    eeuSubtitle: 'የ13-ዲጂት ቆጣሪ ካርድ መውሰድ፣ መሙላት እና መልሶ ማድረስ',
+    foodTitle: 'ትኩስ ማብሰያዎች እና አምራቾች',
+    foodSubtitle: 'ቀጥታ ከአምራች እና ከምርጥ ሬስቶራንቶች የሚደርስ ምግብ',
+  },
+  routeMap: {
+    bannerTitle: 'የማድረሻ መንገድ ካርታ • የቀጥታ መልእክተኛ ክትትል',
+    bannerSubtitle: 'የቀጥታ የጂፒኤስ ፍጥነት፣ የቀረው ርቀት እና የመድረሻ ሰዓት ማሳያ',
+    liveRadar: 'የቀጥታ ራዳር • ጂፒኤስ ነቅቷል',
+    telemetryTitle: 'የመልእክተኛው የቀጥታ መረጃ',
+    courierStatus: 'መልእክተኛው በመንገድ ላይ ነው',
+    speedLabel: 'የአሁን ፍጥነት',
+    etaLabel: 'የሚደርስበት ግምታዊ ሰዓት',
+    distanceLabel: 'የቀረው ርቀት',
+    tamperSealLabel: 'የተረጋገጠ የደህንነት ማህተም',
+    centerOnCourier: 'ወደ መልእክተኛው አተኩር',
+    fullscreen: 'ካርታውን አስፋ',
+  },
+  common: {
+    confirmOrder: 'ትዕዛዙን አረጋግጥ',
+    orderNow: 'አሁን እዘዝ',
+    cancel: 'ሰርዝ',
+    trackLive: 'በቀጥታ ተከታተል',
+    callDriver: 'መልእክተኛውን ደውል',
+    chatCourier: 'ከመልእክተኛው ጋር ተወያይ',
+  },
+};

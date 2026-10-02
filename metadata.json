@@ -1,0 +1,8 @@
+{
+  "name": " Jijiga Express ",
+  "description": "Seamlessly browse, order, and track verified local batch deliveries from pickup to doorstep with real-time updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

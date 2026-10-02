@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Authenticated user profile with role-based access",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "phone": { "type": "string" },
+        "city": { "type": "string" },
+        "address": { "type": "string" },
+        "plusCode": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "mamila", "runner", "rider", "admin"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "displayName", "email", "role"]
+    },
+    "Order": {
+      "title": "Delivery Order",
+      "description": "Logistics delivery order with status, pricing, courier tags and GPS coordinates",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "serviceType": { "type": "string" },
+        "batchId": { "type": "string" },
+        "batchName": { "type": "string" },
+        "mamilaId": { "type": "string" },
+        "mamilaName": { "type": "string" },
+        "mamilaLocation": { "type": "string" },
+        "price": { "type": "number" },
+        "quantity": { "type": "number" },
+        "deliveryFee": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerCity": { "type": "string" },
+        "customerPlusCode": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "runnerId": { "type": "string" },
+        "runnerName": { "type": "string" },
+        "riderId": { "type": "string" },
+        "riderName": { "type": "string" },
+        "runnerTagId": { "type": "string" },
+        "riderProofUrl": { "type": "string" },
+        "defectReason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "price", "totalPrice", "status", "customerId"]
+    },
+    "Batch": {
+      "title": "Store Product Batch",
+      "description": "Mamila store product batch inventory record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "mamilaId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "available": { "type": "number" },
+        "expiry": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "mamilaId", "name", "price", "available"]
+    },
+    "Mamila": {
+      "title": "Merchant Store",
+      "description": "Mamila and vendor profile details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "rating": { "type": "number" },
+        "location": { "type": "string" },
+        "plusCode": { "type": "string" },
+        "phone": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "name", "location"]
+    },
+    "ChatMessage": {
+      "title": "Dispatch Communication Message",
+      "description": "Vernacular runner-rider-customer coordination message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "orderId", "senderRole", "senderName", "text"]
+    },
+    "DeliveryEvent": {
+      "title": "Delivery Milestone Event",
+      "description": "Immutable log event representing delivery status transition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "required": ["id", "orderId", "status", "timestamp", "actorRole"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "/mamilas/{mamilaId}": {
+      "schema": "Mamila",
+      "description": "Merchant and vendor store profiles"
+    },
+    "/batches/{batchId}": {
+      "schema": "Batch",
+      "description": "Collection of store merchandise and food inventory batches"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of express delivery and parcel orders"
+    },
+    "/orders/{orderId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Order specific communication and dispatch coordination messages"
+    },
+    "/deliveryEvents/{eventId}": {
+      "schema": "DeliveryEvent",
+      "description": "Audit trail log of milestone state changes"
+    }
+  }
+}

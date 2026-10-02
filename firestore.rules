@@ -1,0 +1,146 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userEmail() {
+      return request.auth.token.email;
+    }
+
+    function getUserRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'customer';
+    }
+
+    function isAdmin() {
+      return signedIn() && getUserRole() == 'admin';
+    }
+
+    // 0. Connection validation probe
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // 1. Users profiles: readable by signed-in users, editable only by owner (without modifying role) or admin
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid
+        && (request.resource.data.role != 'admin' || userEmail() in ['andualemawraris4@gmail.com', 'andualemawraris104@gmail.com', 'andualemawraris3@gmail.com']);
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 2. Merchants / Mamilas catalog: public read, write restricted to admin or store owner
+    match /mamilas/{mamilaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. Batches / Products inventory: public read, write restricted to merchant or admin, stock updates
+    match /batches/{batchId} {
+      allow read: if true;
+      allow create: if isAdmin() || (signedIn() && (getUserRole() == 'mamila' || getUserRole() == 'admin'));
+      allow update: if isAdmin() || (signedIn() && (
+        getUserRole() == 'mamila' ||
+        getUserRole() == 'admin' ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available'])
+      ));
+      allow delete: if isAdmin();
+    }
+
+    // 4. Orders: strict role-based access control and immutable price constraints
+    match /orders/{orderId} {
+      allow read: if signedIn() && (
+        isAdmin() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.runnerId == request.auth.uid ||
+        resource.data.riderId == request.auth.uid ||
+        resource.data.status in [
+          'PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED', 'VERIFIED_READY', 
+          'READY_FOR_RIDER', 'RIDER_DISPATCHED', 'RIDER_ACCEPTED', 'IN_TRANSIT', 
+          'PICKED_UP', 'DELIVERED'
+        ]
+      );
+
+      // Customers can create orders with valid non-negative pricing without setting courier IDs
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && (isAdmin() || (!('runnerId' in request.resource.data) && !('riderId' in request.resource.data)))
+        && request.resource.data.price is number
+        && request.resource.data.totalPrice is number
+        && request.resource.data.price >= 0
+        && request.resource.data.totalPrice >= 0;
+
+      // Tiered updates per role
+      allow update: if signedIn() && (
+        isAdmin() ||
+        // Customer: can cancel pending orders or add dispute/rating/review, CANNOT alter price, paymentStatus, self-deliver, or assign couriers
+        (
+          resource.data.customerId == request.auth.uid &&
+          request.resource.data.customerId == resource.data.customerId &&
+          request.resource.data.price == resource.data.price &&
+          request.resource.data.totalPrice == resource.data.totalPrice &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl']) &&
+          (
+            request.resource.data.status == resource.data.status ||
+            (resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'] && request.resource.data.status == 'CANCELLED')
+          )
+        ) ||
+        // Runner: can claim available unassigned order, verify package, and advance to VERIFIED_READY / READY_FOR_RIDER
+        (
+          (getUserRole() == 'runner' || isAdmin()) &&
+          (resource.data.runnerId == request.auth.uid || (resource.data.runnerId == null && request.resource.data.runnerId == request.auth.uid)) &&
+          request.resource.data.price == resource.data.price &&
+          request.resource.data.totalPrice == resource.data.totalPrice &&
+          request.resource.data.customerId == resource.data.customerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+        ) ||
+        // Rider: can claim dispatch for ready orders, update transit status, upload proof of delivery, update COD paymentStatus
+        (
+          (getUserRole() == 'rider' || isAdmin()) &&
+          (resource.data.riderId == request.auth.uid || (resource.data.riderId == null && request.resource.data.riderId == request.auth.uid)) &&
+          request.resource.data.price == resource.data.price &&
+          request.resource.data.totalPrice == resource.data.totalPrice &&
+          request.resource.data.customerId == resource.data.customerId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+        )
+      );
+
+      // Deletion is strictly reserved for Admin
+      allow delete: if isAdmin();
+
+      // Subcollection: Dispatch and courier chat messages
+      match /messages/{messageId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.orderId == orderId;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // 5. Standalone order chats
+    match /orderChats/{chatId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // 6. Delivery Events audit log: immutable milestone history
+    match /deliveryEvents/{eventId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Catch-all: deny all unlisted collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
