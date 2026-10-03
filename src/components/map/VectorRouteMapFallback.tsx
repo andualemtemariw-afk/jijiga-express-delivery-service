@@ -273,8 +273,6 @@ export function VectorRouteMapFallback({
                 {order.mamilaName}
               </text>
             </g>
-            )}
-
 
             {/* Customer Dropoff Marker */}
             <g transform={`translate(${svgCoords.dest.x}, ${svgCoords.dest.y})`}>
@@ -287,10 +285,9 @@ export function VectorRouteMapFallback({
               </text>
             </g>
 
-            {/* Animated Courier Marker */}
-            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
-              {order.riderCoordinates && (
-            <g transform={`translate(${svgCoords.courier.x}, ${svgCoords.courier.y})`}>
+            {/* Live Courier Marker — only when real rider GPS exists */}
+            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && order.riderCoordinates && (
+              <g transform={`translate(${svgCoords.courier.x}, ${svgCoords.courier.y})`}>
                 <circle r="28" fill="#3b82f6" fillOpacity="0.25" className="animate-ping" />
                 <circle r="16" fill="#1d4ed8" stroke="#ffffff" strokeWidth="2.5" />
                 <text x="0" y="4" textAnchor="middle" fill="#ffffff" fontSize="11" fontWeight="bold">🏍️</text>
@@ -300,6 +297,7 @@ export function VectorRouteMapFallback({
                 </text>
               </g>
             )}
+
           </svg>
         </div>
       </div>
