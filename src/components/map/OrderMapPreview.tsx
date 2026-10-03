@@ -98,6 +98,7 @@ function LiveGoogleMap({
   const [showTraffic, setShowTraffic] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<'mamila' | 'rider' | 'customer' | null>(null);
   const [recenterCount, setRecenterCount] = useState(0);
+  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
   const [simulatedTransitFrac, setSimulatedTransitFrac] = useState(0.45);
 
   const hasAdvancedMarker = typeof window !== 'undefined' && !!window.google?.maps?.marker?.AdvancedMarkerElement;
@@ -130,8 +131,9 @@ function LiveGoogleMap({
 
   const riderPos: LatLng = useMemo(() => {
     if (order.riderCoordinates) return order.riderCoordinates;
-    return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedTransitFrac);
-  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedTransitFrac]);
+    if (demoSandboxEnabled) return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedTransitFrac);
+    return customerPos;
+  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
 
   const routePath = useMemo(() => {
     return generateRoutePoints(mamilaPos, customerPos);
@@ -263,7 +265,7 @@ function LiveGoogleMap({
           )}
 
           {/* Live Rider / Dispatch Courier Marker */}
-          {hasAdvancedMarker && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
+          {hasAdvancedMarker && order.riderCoordinates && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
             <AdvancedMarker
               position={riderPos}
               title={`Rider: ${order.riderName || 'Staff Rider'}`}
