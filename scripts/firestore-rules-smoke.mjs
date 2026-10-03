@@ -1,22 +1,22 @@
-import { createRequire } from 'node:module';
-import { initializeApp, deleteApp } from 'firebase/app';
+import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
+import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
-const require = createRequire(import.meta.url);
-const admin = require('../functions/node_modules/firebase-admin');
 const projectId = 'sunny-discipline-hvd6f';
-const databaseId = 'ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286';
+const databaseId = '(default)';
 const bucket = `${projectId}.firebasestorage.app`;
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
 
-admin.initializeApp({ projectId, storageBucket: bucket });
-const adminDb = admin.firestore(databaseId);
-const adminAuth = admin.auth();
+const adminApp = initializeAdminApp({ projectId, storageBucket: bucket });
+const adminDb = getAdminFirestore(adminApp);
+const adminAuth = getAdminAuth(adminApp);
 
 const firebaseConfig = {
   apiKey: 'demo-api-key',
@@ -43,7 +43,7 @@ async function createUser(key, role, active = true) {
 async function clientFor(key) {
   const app = initializeApp(firebaseConfig, `test-${key}-${Date.now()}`);
   const auth = getAuth(app);
-  const db = getFirestore(app, databaseId);
+  const db = getFirestore(app);
   const storage = getStorage(app);
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
@@ -209,8 +209,8 @@ async function main() {
   console.log('PASS order customer can read receipt');
 
   await Promise.all([signOut(customer.auth), signOut(rider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, rider, inactive, stranger]) await deleteApp(ctx.app);
-  await admin.app().delete();
+  for (const ctx of [customer, rider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
 
