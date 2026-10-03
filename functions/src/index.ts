@@ -33,7 +33,6 @@ async function requireAdmin(uid?: string): Promise<void> {
   }
 }
 
-const PAYMENT_PROVIDERS = new Set(['TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB']);
 const PAYMENT_METHODS = new Set([...PAYMENT_PROVIDERS, 'COD']);
 
 function isSafeOrderId(value: unknown): value is string {
