@@ -21,25 +21,25 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && getUserRole() == 'admin';
+      return isActiveUser() && getUserRole() == 'admin';
     }
 
-    function isStaffActive() {
-      return signedIn() && (
-        !('active' in currentUser().data) || currentUser().data.active == true
-      );
+    function isActiveUser() {
+      return signedIn()
+        && exists(/databases/$\(database\)/documents/users/$\(request.auth.uid\))
+        && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
 
     function isRunner() {
-      return isStaffActive() && getUserRole() == 'runner';
+      return isActiveUser() && getUserRole() == 'runner';
     }
 
     function isRider() {
-      return isStaffActive() && getUserRole() == 'rider';
+      return isActiveUser() && getUserRole() == 'rider';
     }
 
     function isMamila() {
-      return isStaffActive() && getUserRole() == 'mamila';
+      return isActiveUser() && getUserRole() == 'mamila';
     }
 
     function orderDoc(orderId) {
@@ -87,6 +87,42 @@ service cloud.firestore {
       );
     }
 
+    function validCustomerOrderCreate() {
+      return request.resource.data.keys().hasOnly([
+        'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
+        'mamilaLocation', 'price', 'quantity', 'deliveryFee', 'totalPrice',
+        'status', 'paymentMethod', 'paymentStatus', 'customerId', 'customerName',
+        'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
+        'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
+        'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
+        'khatDetails', 'createdAt'
+      ])
+      && request.resource.data.customerId == request.auth.uid
+      && request.resource.data.status == 'PENDING'
+      && request.resource.data.paymentMethod in [
+        'TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB', 'COD'
+      ]
+      && request.resource.data.paymentStatus == (
+        request.resource.data.paymentMethod == 'COD' ? 'UNPAID' : 'PAYMENT_PENDING'
+      )
+      && !request.resource.data.keys().hasAny([
+        'runnerId', 'runnerName', 'runnerTagId', 'runnerPhotoUrl',
+        'riderId', 'riderName', 'riderProofUrl', 'paymentProvider',
+        'paymentReference', 'paymentVerifiedAt', 'adminNotes'
+      ])
+      && request.resource.data.price is number
+      && request.resource.data.price >= 0
+      && request.resource.data.quantity is number
+      && request.resource.data.quantity > 0
+      && request.resource.data.deliveryFee is number
+      && request.resource.data.deliveryFee >= 0
+      && request.resource.data.totalPrice is number
+      && request.resource.data.totalPrice == (
+        request.resource.data.price * request.resource.data.quantity
+        + request.resource.data.deliveryFee
+      );
+    }
+
     // Connection probe only. Do not store sensitive data here.
     match /test/connection {
       allow read: if true;
@@ -115,7 +151,7 @@ service cloud.firestore {
         isAdmin()
         || (
           request.auth.uid == uid
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt'])
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
         )
       );
 
@@ -211,17 +247,7 @@ service cloud.firestore {
       );
 
       // Customer-created orders always start in PENDING state and cannot self-assign couriers.
-      allow create: if signedIn()
-        && request.resource.data.customerId == request.auth.uid
-        && request.resource.data.status == 'PENDING'
-        && !('runnerId' in request.resource.data)
-        && !('riderId' in request.resource.data)
-        && request.resource.data.price is number
-        && request.resource.data.totalPrice is number
-        && request.resource.data.price >= 0
-        && request.resource.data.totalPrice >= 0
-        && request.resource.data.quantity is number
-        && request.resource.data.quantity > 0;
+      allow create: if signedIn() && validCustomerOrderCreate();
 
       allow update: if signedIn() && (
         (isAdmin()
@@ -269,6 +295,10 @@ service cloud.firestore {
               && request.resource.data.status == 'DELIVERED'
               && request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
             )
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
+            || request.resource.data.riderLocationUpdatedAt is string
           )
         )
       );
