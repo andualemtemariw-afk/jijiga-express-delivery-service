@@ -250,7 +250,7 @@ async function main() {
     await getBytes(ref(stranger.storage, receiptPath));
   });
   const customerBytes = await getBytes(ref(customer.storage, receiptPath));
-  if (customerBytes.length !== 3) throw new Error('customer receipt read returned unexpected size');
+  if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
   await Promise.all([signOut(customer.auth), signOut(rider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
