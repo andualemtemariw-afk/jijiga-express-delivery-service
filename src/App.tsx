@@ -407,6 +407,11 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
       await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
@@ -448,6 +453,11 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
       await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
@@ -488,6 +498,11 @@ export default function App() {
     };
 
     setOrders(prev => [fullOrder, ...prev]);
+
+    if (isDemoMode) {
+      showAlert('Demo Mode: Khat order kept local; no inventory was reserved in production.', 'info');
+      return;
+    }
 
     try {
       // Khat consumes the same inventory as FOOD and must reserve stock atomically.
