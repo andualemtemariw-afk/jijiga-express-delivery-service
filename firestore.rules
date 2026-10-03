@@ -290,7 +290,7 @@ service cloud.firestore {
       allow update: if signedIn() && (
         (isAdmin()
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt'
+            'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt', 'paymentMerchantOrderId', 'paymentCheckoutPrepayId', 'paymentCheckoutCreatedAt'
           ])
         )
         || (
