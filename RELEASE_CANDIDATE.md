@@ -1,35 +1,46 @@
 # Jijiga Express — Release Candidate
 
 ## Candidate
+
 - Repository: andualemtemariw-afk/jijiga-express-delivery-service
 - Branch: feat/stage2-operational-remediations
 - Pull request: #1 — Apply Stage 3 production hardening
-- Reviewed head at document creation: 675c78a1295bbbd3c4cd1532709e85d54d8adf6c
+- Current reviewed head: c2dab969c00d58f2d92643c74e5d26b0a4afc5a9
 - Target: main
 
 ## Current gate
 
-**NOT READY FOR MERGE**
+NOT READY FOR MERGE
 
-## Completed hardening
-- Firestore self-service role-escalation protections.
-- Customer order field allowlisting and pricing validation.
-- Inactive-staff fail-closed authorization.
+## Completed in this candidate
+
+- Firestore authorization hardening.
+- Service-specific customer-order validation.
 - Atomic FOOD and KHAT inventory reservation.
-- Immutable EEU receipt uploads.
+- Immutable scoped EEU receipt storage.
 - Production/demo GPS separation.
-- Rider GPS freshness field.
-- Payment webhook replay/idempotency protection.
+- Rider delivery payment-state enforcement.
+- Payment webhook idempotency/replay protection.
 - Explicit demo-sandbox configuration.
-- Root and Functions npm lockfiles retained for reproducibility.
-- Reproducible frontend/Functions validation workflow added.
+- Firebase Emulator Storage configuration.
+- Security smoke suite and production-validation workflow.
+- Root and Functions lockfiles retained.
 
-## Outstanding gates
-1. Root dependency audit still resolves @grpc/grpc-js 1.9.16 through the Firebase Web Firestore dependency tree. The verified current Firebase package is 12.19.0 and its Firestore package is 4.17.2. No compatible patched Firebase release was identified in the current npm metadata reviewed; do not force an out-of-range override without compatibility testing.
-2. Firebase Emulator security tests must be executed and recorded.
-3. Root and Functions CI must run and produce successful build/typecheck evidence.
-4. A provider-specific payment signature adapter and real provider credentials are still required before accepting production callbacks.
-5. No production Firebase deployment has been performed.
+## Evidence status
+
+- CI workflow has started for the current branch.
+- Emulator/build/audit job conclusions are not yet recorded in the release candidate.
+- No production Firebase deployment has been performed.
+
+## Remaining gates
+
+1. Obtain successful root and Functions build/typecheck results from CI.
+2. Obtain successful Firebase Emulator security-test results from CI.
+3. Review the root dependency audit, including the known @grpc/grpc-js 1.9.16 dependency path.
+4. Resolve or formally document the remaining dependency risk without unsafe overrides or forced downgrades.
+5. Complete the provider-specific payment signature adapter and production credential configuration.
+6. Perform controlled production smoke testing after backend deployment.
 
 ## Merge rule
-Do not merge PR #1 until every outstanding gate has recorded evidence. Passing documentation or static inspection alone is insufficient.
+
+Do not merge PR #1 while any of the above gates lacks recorded evidence.
