@@ -263,6 +263,9 @@ service cloud.firestore {
             && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerId == request.auth.uid
             && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status == 'CANCELLED'
             && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.action == 'RESERVE'
+            && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.customerId == request.auth.uid
+            && request.resource.data.batchId == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.batchId
+            && request.resource.data.quantity == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.quantity
           )
         );
       allow update, delete: if isAdmin();

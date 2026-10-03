@@ -204,6 +204,67 @@ async function main() {
 
 
 
+  const cancelOrderId = 'cancelable-food-order';
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', cancelOrderId);
+    const reservationRef = doc(customer.db, 'inventoryReservations', cancelOrderId);
+    const batchSnap = await tx.get(batchRef);
+    if (!batchSnap.exists()) throw new Error('test batch missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available - 1,
+      lastReservationId: cancelOrderId,
+      updatedAt: new Date().toISOString()
+    });
+    tx.set(orderRef, {
+      id: cancelOrderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+      mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+      price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+      status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+      customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+      createdAt: new Date().toISOString()
+    });
+    tx.set(reservationRef, {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', cancelOrderId);
+    const releaseRef = doc(customer.db, 'inventoryReservations', `${cancelOrderId}-release`);
+    const orderSnap = await tx.get(orderRef);
+    const batchSnap = await tx.get(batchRef);
+    if (!orderSnap.exists || !batchSnap.exists) throw new Error('cancellation fixtures missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available + 1,
+      lastReservationId: `${cancelOrderId}-release`,
+      updatedAt: new Date().toISOString()
+    });
+    tx.update(orderRef, { status: 'CANCELLED' });
+    tx.set(releaseRef, {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+  console.log('PASS customer can atomically cancel and release the exact reserved quantity');
+
+  await expectDenied('customer cannot release more inventory than reserved', async () => {
+    await setDoc(doc(customer.db, 'inventoryReservations', 'cancelable-food-order-bad-quantity'), {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 999, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await expectDenied('customer cannot release inventory from a different batch', async () => {
+    await setDoc(doc(customer.db, 'inventoryReservations', 'cancelable-food-order-bad-batch'), {
+      orderId: cancelOrderId, batchId: 'another-batch', customerId: customerUid,
+      quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+
   await expectDenied('customer cannot use an unintegrated payment provider', async () => {
     const orderId = 'unsupported-provider-food';
     const orderRef = doc(customer.db, 'orders', orderId);
