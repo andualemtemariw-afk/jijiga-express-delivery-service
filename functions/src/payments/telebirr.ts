@@ -136,7 +136,7 @@ function decodeURIComponentSafe(value: string): string {
 
 function verifySignature(fields: Record<string, unknown>, publicKeyPem: string): boolean {
   const signature = asString(fields.sign);
-  if (!signature || !asString(fields.sign_type)) return false;
+  if (!signature || asString(fields.sign_type) !== 'SHA256WithRSA') return false;
 
   const publicKey = normalizePublicKey(publicKeyPem);
   return canonicalVariants(fields).some((canonical) =>
