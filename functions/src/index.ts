@@ -17,10 +17,17 @@ const paymentWebhookSecret = defineSecret('PAYMENT_WEBHOOK_SECRET');
 
 async function requireAdmin(uid?: string): Promise<void> {
   if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+
   const token = await auth.getUser(uid);
-  if (token.customClaims?.role === 'admin') return;
+  if (token.customClaims?.role === 'admin' && token.customClaims?.active !== false) return;
+
   const userSnap = await db.doc(`users/${uid}`).get();
-  if (!userSnap.exists || userSnap.data()?.role !== 'admin') {
+  const profile = userSnap.data() || {};
+  if (
+    !userSnap.exists
+    || profile.role !== 'admin'
+    || profile.active === false
+  ) {
     throw new HttpsError('permission-denied', 'Administrator privileges are required.');
   }
 }
