@@ -363,6 +363,11 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
       await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
