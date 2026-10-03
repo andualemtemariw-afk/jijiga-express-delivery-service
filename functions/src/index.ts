@@ -7,7 +7,8 @@ import { defineSecret } from 'firebase-functions/params';
 
 initializeApp();
 
-const db = getFirestore();
+const FIRESTORE_DATABASE_ID = 'ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286';
+const db = getFirestore(FIRESTORE_DATABASE_ID);
 const auth = getAuth();
 
 const STAFF_ROLES = new Set(['mamila', 'runner', 'rider']);
