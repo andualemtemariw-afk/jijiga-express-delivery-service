@@ -180,6 +180,9 @@ async function main() {
   await expectDenied('inactive rider cannot read assigned order', async () => {
     await getDoc(doc(inactive.db, 'orders', validOrder.id));
   });
+  await expectDenied('inactive rider cannot read staff profiles', async () => {
+    await getDoc(doc(inactive.db, 'users', riderUid));
+  });
 
   const rider = await clientFor('rider');
   const unpaidOrder = { ...validOrder, id: 'test-unpaid-order', paymentStatus: 'PAYMENT_PENDING' };
@@ -200,6 +203,10 @@ async function main() {
       contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId }
     });
   });
+  await expectDenied('inactive rider cannot read EEU receipt', async () => {
+    await getBytes(ref(inactive.storage, receiptPath));
+  });
+
   const stranger = await clientFor('stranger');
   await expectDenied('unrelated customer cannot read receipt', async () => {
     await getBytes(ref(stranger.storage, receiptPath));
