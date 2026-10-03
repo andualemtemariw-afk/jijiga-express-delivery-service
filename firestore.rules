@@ -274,8 +274,14 @@ service cloud.firestore {
       allow read: if signedIn() && (
         isAdmin()
         || resource.data.customerId == request.auth.uid
-        || (isRunner() && (resource.data.runnerId == request.auth.uid || resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED']))
-        || (isRider() && (resource.data.riderId == request.auth.uid || resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY', 'RIDER_DISPATCHED', 'RIDER_ACCEPTED', 'IN_TRANSIT', 'PICKED_UP', 'DELIVERED']))
+        || (isRunner() && (
+          resource.data.runnerId == request.auth.uid
+          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+        ))
+        || (isRider() && (
+          resource.data.riderId == request.auth.uid
+          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+        ))
       );
 
       // Customer-created orders always start in PENDING state and cannot self-assign couriers.
