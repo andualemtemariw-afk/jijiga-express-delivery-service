@@ -2,45 +2,47 @@
 
 ## Candidate
 
-- Repository: andualemtemariw-afk/jijiga-express-delivery-service
-- Branch: feat/stage2-operational-remediations
+- Repository: `andualemtemariw-afk/jijiga-express-delivery-service`
+- Branch: `feat/stage2-operational-remediations`
 - Pull request: #1 — Apply Stage 3 production hardening
-- Current reviewed head: c2dab969c00d58f2d92643c74e5d26b0a4afc5a9
-- Target: main
+- Target: `main`
 
 ## Current gate
 
-NOT READY FOR MERGE
+**NOT READY FOR MERGE**
 
-## Completed in this candidate
+## Implemented
 
-- Firestore authorization hardening.
-- Service-specific customer-order validation.
+- Firestore authorization and service-specific order validation.
 - Atomic FOOD and KHAT inventory reservation.
-- Immutable scoped EEU receipt storage.
+- Immutable scoped EEU receipt storage independent of cross-database Storage lookups.
 - Production/demo GPS separation.
-- Rider delivery payment-state enforcement.
-- Payment webhook idempotency/replay protection.
-- Explicit demo-sandbox configuration.
-- Firebase Emulator Storage configuration.
-- Security smoke suite and production-validation workflow.
-- Root and Functions lockfiles retained.
+- Strict rider delivery/payment state.
+- Idempotent payment event handling.
+- Trusted staff provisioning and one-time admin bootstrap.
+- Reproducible npm lockfiles and CI workflows.
+- Firebase Emulator smoke-test harness and release documentation.
 
-## Evidence status
+## Verified evidence
 
-- CI workflow has started for the current branch.
-- Emulator/build/audit job conclusions are not yet recorded in the release candidate.
-- No production Firebase deployment has been performed.
+- Root install succeeded in CI.
+- Root typecheck succeeded in the last completed validation run.
+- Frontend production build succeeded in the last completed validation run.
+- Functions install/typecheck/build succeeded in the last completed validation run.
+- Functions high-severity audit gate succeeded.
+- Root audit still fails at high severity: 4 high and 3 moderate findings remain.
+- Current-head rules smoke test has not yet completed successfully.
 
-## Remaining gates
+## Remaining blockers
 
-1. Obtain successful root and Functions build/typecheck results from CI.
-2. Obtain successful Firebase Emulator security-test results from CI.
-3. Review the root dependency audit, including the known @grpc/grpc-js 1.9.16 dependency path.
-4. Resolve or formally document the remaining dependency risk without unsafe overrides or forced downgrades.
-5. Complete the provider-specific payment signature adapter and production credential configuration.
-6. Perform controlled production smoke testing after backend deployment.
+1. The current-head Firebase Emulator rules suite must pass.
+2. The root dependency tree still contains the gRPC high-severity and Capacitor/xcode/uuid moderate findings; no unsafe override or forced downgrade will be used.
+3. Functions contains 8 moderate uuid-chain findings even though its high-severity gate passes.
+4. The app uses a named Firestore database. Firebase Admin named-database support is public preview and requires explicit production architecture review before launch.
+5. The payment webhook remains provider-neutral; a real provider-specific signature adapter and production credentials are required.
+6. No production Firebase backend deployment has been performed.
+7. Controlled post-deploy production smoke testing remains outstanding.
 
 ## Merge rule
 
-Do not merge PR #1 while any of the above gates lacks recorded evidence.
+Do not merge PR #1 until the blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
