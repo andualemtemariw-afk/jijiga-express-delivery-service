@@ -30,6 +30,9 @@ async function createUser(key, role, active = true) {
   const email = `${key}@example.test`;
   const password = 'TestPassword-123!';
   const user = await adminAuth.createUser({ email, password, displayName: `${key} User` });
+  if (role === 'rider' || role === 'admin' || role === 'runner' || role === 'mamila') {
+    await adminAuth.setCustomUserClaims(user.uid, { role, active });
+  }
   await adminDb.doc(`users/${user.uid}`).set({
     uid: user.uid, displayName: `${key} User`, email, role, active, createdAt: new Date().toISOString()
   });
@@ -187,9 +190,9 @@ async function main() {
   await updateDoc(doc(rider.db, 'orders', validOrder.id), { status: 'DELIVERED' });
   console.log('PASS rider can deliver PAID_CONFIRMED non-COD order');
 
-  const receiptPath = `eeuReceipts/${validOrder.id}/rider.jpg`;
+  const receiptPath = `eeuReceipts/${validOrder.id}/${riderUid}/rider.jpg`;
   await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([1, 2, 3]), {
-    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId }
+    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId, customerId: customerUid }
   });
   console.log('PASS rider can create correctly scoped receipt');
   await expectDenied('rider cannot overwrite receipt', async () => {
