@@ -166,6 +166,12 @@ export interface Order {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus?: PaymentStatus;
+  paymentProvider?: PaymentMethod;
+  paymentReference?: string;
+  paymentMerchantOrderId?: string;
+  paymentCheckoutPrepayId?: string;
+  paymentVerifiedAt?: Date | string;
+  paymentCheckoutCreatedAt?: Date | string;
   customerId: string;
   customerName: string;
   customerPhone?: string;
