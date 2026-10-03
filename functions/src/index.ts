@@ -20,14 +20,14 @@ async function requireAdmin(uid?: string): Promise<void> {
   if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
 
   const token = await auth.getUser(uid);
-  if (token.customClaims?.role === 'admin' && token.customClaims?.active === true) return;
+  if (token.customClaims?.role === 'admin' && token.customClaims?.active !== false) return;
 
   const userSnap = await db.doc(`users/${uid}`).get();
   const profile = userSnap.data() || {};
   if (
     !userSnap.exists
     || profile.role !== 'admin'
-    || profile.active !== true
+    || profile.active === false
   ) {
     throw new HttpsError('permission-denied', 'Administrator privileges are required.');
   }
@@ -167,6 +167,10 @@ export const createServiceOrder = onCall(async (request) => {
   if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
 
   const data = (request.data || {}) as Record<string, unknown>;
+  const profileSnap = await db.doc(`users/${uid}`).get();
+  if (profileSnap.exists && profileSnap.data()?.active === false) {
+    throw new HttpsError('permission-denied', 'This account is inactive.');
+  }
   const serviceType = asBoundedString(data.serviceType, 'serviceType', 30);
   if (!['PARCEL', 'RIDE', 'EEU_RECHARGE'].includes(serviceType)) {
     throw new HttpsError('invalid-argument', 'Unsupported service order type.');
@@ -383,7 +387,7 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
       tx.set(paymentEventRef, {
         eventId,
         orderId,
-        provider,
+        provider: normalizedProvider,
         reference,
         status,
         amount,
@@ -393,7 +397,7 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
 
       tx.update(orderRef, {
         paymentStatus: status,
-        paymentProvider: provider,
+        paymentProvider: normalizedProvider,
         paymentReference: reference,
         paymentVerifiedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
