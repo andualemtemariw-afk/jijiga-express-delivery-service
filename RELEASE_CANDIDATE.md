@@ -6,24 +6,23 @@
 - Branch: `feat/stage2-operational-remediations`
 - Pull request: #1 — Apply Stage 3 production hardening
 - Target: `main`
-- Verified head: `3cf27f510d817bac5d2b097f48544ff4a1925761`
+- Verified CI head: `9e1ddcf313ac83f4ab4eb16a994c1b25c6d794c9`
 
 ## Current gate
 
 **NOT READY FOR MERGE**
 
-The current head is CI-green for the pull-request validation workflows. Production readiness is still blocked by real Telebirr credential provisioning, production Firebase deployment, controlled post-deploy verification, and dependency-risk disposition.
+The current release branch is CI-green for the pull-request validation workflows. Production readiness remains blocked by real Telebirr credential provisioning, production Firebase deployment, Hosting provisioning, controlled post-deploy verification, and dependency-risk disposition.
 
-## Verified automated evidence — 2026-10-03/04 UTC
+## Verified automated evidence — 2026-10-04 UTC
 
-- Production Validation run **37153708919** — **PASSED** on head `3cf27f510d817bac5d2b097f48544ff4a1925761`.
-- Firestore rules tests run **37153708987** — **PASSED** on the same head.
-- Root lint/typecheck and frontend production build passed in Production Validation.
+- Production Validation run **37155588106** — **PASSED** on head `9e1ddcf313ac83f4ab4eb16a994c1b25c6d794c9`.
+- Firestore rules tests run **37155588100** — **PASSED** on the same head.
+- Root typecheck and frontend production build passed.
 - Functions install, typecheck, and production build passed.
 - Root and Functions dependency audits passed at the configured **high-severity** gate.
 - Telebirr signature adapter smoke tests passed.
-- Firestore/Storage emulator security smoke tests passed.
-- The inventory-release security fixture is seeded with the trusted Admin SDK and verifies the customer-side mutation against the real Firestore rules.
+- Firestore/Storage emulator security tests passed, including the inventory-release customer attack test.
 
 ## Implemented
 
@@ -37,22 +36,27 @@ The current head is CI-green for the pull-request validation workflows. Producti
 - Telebirr provider-specific signature verification, merchant identity validation, server-side H5 checkout creation, merchant-order binding, idempotent callback settlement, and client redirect.
 - New customer payment methods are restricted to **TELEBIRR** and **COD**.
 - Generic normalized payment webhooks explicitly reject Telebirr and unintegrated providers.
+- Guarded Firebase Hosting live deployment workflow.
+- Guarded Firebase production preflight workflow.
+- Guarded Firebase backend deployment workflow.
 
-## Firebase Hosting status
+## Firebase deployment controls
 
-- Firebase Hosting deployment configuration is committed at `.github/workflows/firebase-hosting.yml`.
-- The workflow is guarded to deploy the **live** channel only from `main`.
-- The deployment requires the `FIREBASE_SERVICE_ACCOUNT` GitHub secret and the configured Firebase project.
-- The hosting site/domain still requires production provisioning and post-deploy URL evidence.
+The release branch now contains:
+- `.github/workflows/firebase-production-preflight.yml` — manually verifies the Firebase service-account secret, target project, required Firebase/Telebirr secrets, Hosting provisioning, demo-sandbox gate, and live-deployment guard without printing secret values.
+- `.github/workflows/firebase-production-backend-deploy.yml` — manually deploys Firestore rules, Storage rules, and Functions to `sunny-discipline-hvd6f` only after the production environment is selected and the required secrets are present.
+- `.github/workflows/firebase-hosting.yml` — deploys the Vite `dist/` output to the Firebase Hosting live channel only from `main`.
 
-## Remaining release blockers
+## Remaining production blockers
 
-1. **Telebirr production credentials.** Configure the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager.
-2. **Production Firebase deployment.** Deploy Firestore/Storage rules and Functions from the verified release head after confirming the production project, named Firestore database, Storage bucket, backups, monitoring, and rollback controls.
-3. **Firebase Hosting production provisioning.** Confirm the Hosting site/domain and required frontend `VITE_*` configuration, then perform the guarded `main` deployment.
-4. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against production with non-destructive data and documented rollback procedures.
-5. **Moderate dependency advisories.** The configured high-severity CI gates pass; remaining moderate findings require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
+1. **Telebirr production credentials.** Provision the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager.
+2. **Firebase production environment.** Confirm the production Firebase project, named Firestore database, Storage bucket, backups, monitoring, alerting, and rollback controls.
+3. **Run production preflight.** Execute the manual Firebase production preflight workflow and require a successful result.
+4. **Deploy backend.** Execute the guarded Firebase backend deployment workflow and record its deployment result.
+5. **Deploy frontend.** Merge only after the release candidate is approved, then use the guarded `main` Hosting deployment and record the live URL.
+6. **Post-deploy verification.** Execute controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle smoke tests using non-destructive test data and rollback procedures.
+7. **Moderate dependency advisories.** The high-severity CI gates pass; remaining moderate findings require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
 
 ## Merge rule
 
-Do not merge PR #1 until the remaining production blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
+Do not merge PR #1 until the production blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
