@@ -117,6 +117,9 @@ service cloud.firestore {
         (
           request.resource.data.serviceType == 'FOOD'
           && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price * request.resource.data.quantity
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
           && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
@@ -126,6 +129,9 @@ service cloud.firestore {
         || (
           request.resource.data.serviceType == 'KHAT'
           && request.resource.data.totalPrice == request.resource.data.price * request.resource.data.quantity + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
           && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
