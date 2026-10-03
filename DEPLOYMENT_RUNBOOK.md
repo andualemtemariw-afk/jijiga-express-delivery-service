@@ -8,6 +8,7 @@
 - Confirm the Firebase project target from .firebaserc.
 - Confirm Telebirr is the only online provider enabled for new orders and its production credentials are available.
 - Confirm Firebase Storage, monitoring, alerting, and backups are configured.
+- Confirm the production frontend hosting target is explicitly selected, configured, and controlled. The repository currently contains Vite build configuration but no committed Firebase Hosting, Vercel, Netlify, or GitHub Pages deployment configuration.
 
 ## Local validation
 
@@ -45,12 +46,27 @@ After emulator tests pass and the Firestore database architecture (current named
 
 Do not deploy the frontend with the demo-sandbox flag enabled.
 
+## Frontend publish
+
+The production frontend is a Vite static build. This repository does not currently declare which hosting provider will serve `dist/`.
+
+Before release:
+- Select the production hosting target and domain.
+- Configure the host to publish the Vite `dist/` directory.
+- Ensure SPA history fallback routes to `index.html` where the selected host requires explicit configuration.
+- Configure the required production `VITE_*` values without placing provider secrets in frontend variables.
+- Configure the production Google Maps API key restrictions for the actual frontend origin.
+- Verify HTTPS, custom-domain DNS, and rollback/version controls on the selected host.
+- Record the production frontend URL in the release evidence before marking the candidate READY.
+
 ## Frontend validation before publish
-- VITE_ENABLE_DEMO_SANDBOX must be false.
-- No production provider secrets may be exposed through VITE_* variables.
+- `VITE_ENABLE_DEMO_SANDBOX=false).
+- No production provider secrets may be exposed through `VITE_*` variables.
 - Restrict the Google Maps API key to the production origin and required APIs.
+- `npm run build` completes successfully and the generated `dist/` directory is the artifact published by the selected hosting platform.
 
 ## Post-deploy smoke test
 
 Repeat the production-safe subset of PRODUCTION_SMOKE_TESTS.md using controlled accounts.
 Stop rollout immediately if an authorization rule unexpectedly permits a protected mutation.
+Also verify the live frontend can authenticate, load Firestore data, create a controlled order, and reach the Telebirr checkout flow without exposing secrets.
