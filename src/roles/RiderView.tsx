@@ -301,7 +301,7 @@ export function RiderView({
                         </button>
 
                         <button
-                          onClick={() => setDialedPhone(order.customerPhone || '+251 91 123 4567')}
+                          onClick={() => order.customerPhone && setDialedPhone(order.customerPhone)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-700 font-semibold hover:bg-slate-100 transition-colors text-xs cursor-pointer"
                         >
                           <Phone className="w-3.5 h-3.5 text-emerald-600" />
@@ -612,7 +612,7 @@ export function RiderView({
           currentUserRole="RIDER"
           targetRole="CUSTOMER"
           targetName={activeChatOrder.customerName || 'Customer'}
-          targetPhone={activeChatOrder.customerPhone || '+251 91 123 4567'}
+          targetPhone={activeChatOrder.customerPhone || ''}
           messages={(orderMessages && orderMessages[activeChatOrder.id]) || []}
           onSendMessage={onSendMessage}
         />
