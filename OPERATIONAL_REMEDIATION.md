@@ -1,20 +1,26 @@
-# Operational Remediation - Stage 2
+# Jijiga Express — Operational Remediation
 
-Implemented in this build:
+## Implemented
 
-- Atomic order + inventory reservation transaction.
+- Atomic order + inventory reservation transaction for FOOD and KHAT.
 - Atomic customer cancellation + stock restoration.
-- Firestore reservation records and rules tying stock changes to the order/customer.
-- Rider payment-status restriction: riders may only mark COD as collected at delivery; they cannot self-confirm non-COD payments.
-- Real browser/device GPS telemetry for active rider jobs, throttled to 15 seconds or 30m movement.
-- Real EEU receipt image capture via mobile camera/file input.
-- Protected Firebase Storage path for EEU receipt images.
-- Receipt metadata includes order and rider identity.
+- Firestore reservation records tied to the order, batch, quantity, and customer.
+- Rider payment-status restrictions: riders cannot self-confirm non-COD payment.
+- Non-COD delivery is blocked unless backend payment state is PAID_CONFIRMED.
+- Real device GPS telemetry for active rider jobs, with a persisted riderLocationUpdatedAt timestamp.
+- Production map components no longer invent rider positions; synthetic positions are demo/development-only.
+- EEU receipt capture uses device image input and protected Firebase Storage.
+- Receipt objects are immutable after creation.
+- Demo behavior is controlled by VITE_ENABLE_DEMO_SANDBOX; production configuration defaults to false.
+- Firebase Emulator configuration includes Auth, Firestore, and Storage endpoints.
+- A GitHub Actions production-validation workflow runs root/Functions install, typecheck/build, and Firebase Emulator smoke tests.
+- A separate CI dependency-audit job records audit failures rather than hiding them.
 
-Important deployment requirements:
+## Deployment requirements
 
-1. Deploy `firestore.rules` and `storage.rules` together.
-2. Enable Firebase Storage for the project.
-3. Test Firestore rules with the Firebase Emulator before production deployment.
-4. Test Android/iOS location and camera permissions on physical devices.
-5. Payment gateway verification remains a separate backend integration; this build does not pretend that a client-side payment field is proof of payment.
+1. Run PRODUCTION_SMOKE_TESTS.md against the Emulator before backend deployment.
+2. Configure PAYMENT_WEBHOOK_SECRET in Firebase Secret Manager.
+3. Implement the provider-specific webhook signature adapter before real callbacks.
+4. Restrict production Google Maps keys to the production origin and required APIs.
+5. Keep VITE_ENABLE_DEMO_SANDBOX=false in production.
+6. Configure monitoring, alerting, and backups.
