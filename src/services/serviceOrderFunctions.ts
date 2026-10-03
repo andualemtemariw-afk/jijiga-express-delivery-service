@@ -19,3 +19,19 @@ export async function createServiceOrder(order: Record<string, unknown>): Promis
   const result = await callable(order);
   return result.data;
 }
+
+
+export interface CreateTelebirrCheckoutResponse {
+  checkoutUrl: string;
+  paymentMerchantOrderId: string;
+  prepayId: string;
+}
+
+export async function createTelebirrCheckout(orderId: string): Promise<CreateTelebirrCheckoutResponse> {
+  const callable = httpsCallable<{ orderId: string }, CreateTelebirrCheckoutResponse>(
+    functions,
+    'createTelebirrCheckout'
+  );
+  const result = await callable({ orderId });
+  return result.data;
+}
