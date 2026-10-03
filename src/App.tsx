@@ -36,6 +36,7 @@ import {
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
 import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
+import { createServiceOrder } from './services/serviceOrderFunctions';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -363,7 +364,7 @@ export default function App() {
     setOrders(prev => [fullOrder, ...prev]);
 
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -402,7 +403,7 @@ export default function App() {
     setOrders(prev => [fullOrder, ...prev]);
 
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -443,7 +444,7 @@ export default function App() {
     setOrders(prev => [fullOrder, ...prev]);
 
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
