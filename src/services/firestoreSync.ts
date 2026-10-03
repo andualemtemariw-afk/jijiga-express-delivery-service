@@ -202,7 +202,7 @@ export async function saveOrderToFirestore(order: Order): Promise<string> {
   const serializedOrder = removeUndefinedFields(rawOrder);
 
   try {
-    await setDoc(docRef, serializedOrder, { merge: true });
+    await setDoc(docRef, serializedOrder);
     return orderId;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `orders/${orderId}`);
