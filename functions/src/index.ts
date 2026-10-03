@@ -618,6 +618,11 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
   const status = body.status;
   const amount = body.amount;
 
+  if (provider === 'TELEBIRR') {
+    res.status(400).send('TELEBIRR_REQUIRES_PROVIDER_WEBHOOK');
+    return;
+  }
+
   if (
     !eventId || eventId.length > 128 || eventId.includes('/')
     || !orderId || !provider || !reference
