@@ -69,6 +69,7 @@ async function expectDenied(label, action) {
 
 async function main() {
   const customerUid = await createUser('customer', 'customer');
+  await createUser('admin', 'admin');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
@@ -210,6 +211,11 @@ async function main() {
     await getDoc(doc(inactive.db, 'users', riderUid));
   });
 
+  const admin = await clientFor('admin');
+  await expectDenied('admin cannot directly modify Telebirr checkout mapping', async () => {
+    await updateDoc(doc(admin.db, 'orders', validOrder.id), { paymentMerchantOrderId: 'FORGED-MERCHANT-ID' });
+  });
+
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
   await expectDenied('other active rider cannot read another rider assigned order', async () => {
@@ -253,8 +259,8 @@ async function main() {
   if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
-  await Promise.all([signOut(customer.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(admin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, admin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
