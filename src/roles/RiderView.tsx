@@ -24,13 +24,15 @@ import {
   ArrowRight,
   AlertTriangle
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { OrderMapPreview } from '../components/map/OrderMapPreview';
 import { CommunicationBridgeModal } from '../components/communication/CommunicationBridgeModal';
 import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispatchModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../services/googleAuth';
 
 interface Props {
   orders: Order[];
@@ -69,6 +71,33 @@ export function RiderView({
   const [cameraTokenInput, setCameraTokenInput] = useState<string>('4920 1928 4820 9182 3849');
   const [isCapturingReceipt, setIsCapturingReceipt] = useState(false);
   const [eeuErrorMsg, setEeuErrorMsg] = useState<Record<string, string | null>>({});
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const lastGpsWriteRef = useRef<Record<string, { at: number; lat: number; lng: number }>>({});
+
+  // Real device GPS telemetry. Updates are throttled to reduce battery/data usage.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation || activeJobs.length === 0) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+        const now = Date.now();
+        activeJobs.forEach((order) => {
+          const previous = lastGpsWriteRef.current[order.id];
+          const distanceApprox = previous
+            ? Math.sqrt(Math.pow((coords.lat - previous.lat) * 111000, 2) + Math.pow((coords.lng - previous.lng) * 111000, 2))
+            : Infinity;
+          if (!previous || now - previous.at >= 15000 || distanceApprox >= 30) {
+            lastGpsWriteRef.current[order.id] = { at: now, ...coords };
+            onUpdateOrder(order.id, { riderCoordinates: coords });
+          }
+        });
+      },
+      (error) => console.warn('Rider GPS unavailable:', error.message),
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [activeJobs.map(o => `${o.id}:${o.status}`).join('|'), onUpdateOrder]);
 
   const handleAdvanceEeuCustody = (order: Order, nextPhase: EeuCustodyPhase) => {
     if (!order.eeuDetails) return;
@@ -108,36 +137,46 @@ export function RiderView({
     });
   };
 
-  const handleCaptureReceiptSubmit = () => {
-    if (!cameraOrder || !cameraOrder.eeuDetails) return;
+  const handleReceiptFileSelected = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setEeuErrorMsg(prev => ({ ...prev, [cameraOrder?.id || 'unknown']: 'Please capture an image file.' })); return; }
+    if (file.size > 10 * 1024 * 1024) { setEeuErrorMsg(prev => ({ ...prev, [cameraOrder?.id || 'unknown']: 'Receipt image must be 10 MB or smaller.' })); return; }
+    setReceiptFile(file);
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    setReceiptPreviewUrl(URL.createObjectURL(file));
+  };
 
+  const handleCaptureReceiptSubmit = async () => {
+    if (!cameraOrder?.eeuDetails || !receiptFile) return;
     setIsCapturingReceipt(true);
-    setTimeout(() => {
+    try {
+      const objectRef = storageRef(storage, `eeuReceipts/${cameraOrder.id}/${currentRiderId}.jpg`);
+      await uploadBytes(objectRef, receiptFile, { contentType: receiptFile.type, customMetadata: { orderId: cameraOrder.id, riderId: currentRiderId } });
+      const receiptImageUrl = await getDownloadURL(objectRef);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const updatedEeu: EeuRechargeDetails = {
-        ...cameraOrder.eeuDetails!,
-        receiptImageUrl: '/src/assets/images/dairy_farm_essentials_1790430944133.jpg',
-        receiptTimestamp: `${new Date().toISOString().slice(0, 10)} ${nowTime}`,
-        tokenCode: cameraTokenInput.trim() || '4920-1928-4820-9182-3849',
-        custodyTimeline: [
-          ...cameraOrder.eeuDetails!.custodyTimeline,
-          {
-            phase: cameraOrder.eeuDetails!.custodyPhase,
-            label: cameraOrder.eeuDetails!.custodyLabel,
-            timestamp: nowTime,
-            note: 'Mandatory EEU terminal paper receipt photographed by Rider.',
-            actor: 'Rider Camera Intent'
-          }
-        ]
+        ...cameraOrder.eeuDetails,
+        receiptImageUrl,
+        receiptTimestamp: new Date().toISOString(),
+        tokenCode: cameraTokenInput.trim(),
+        custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
+          phase: cameraOrder.eeuDetails.custodyPhase,
+          label: cameraOrder.eeuDetails.custodyLabel,
+          timestamp: nowTime,
+          note: 'Actual EEU terminal receipt image uploaded from rider device.',
+          actor: `Rider ${currentRiderId}`
+        }]
       };
-
-      onUpdateOrder(cameraOrder.id, {
-        eeuDetails: updatedEeu
-      });
-
-      setIsCapturingReceipt(false);
+      onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu });
+      setReceiptFile(null);
+      if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+      setReceiptPreviewUrl(null);
       setCameraOrder(null);
-    }, 400);
+    } catch (error: any) {
+      setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: error?.message || 'Receipt upload failed.' }));
+    } finally {
+      setIsCapturingReceipt(false);
+    }
   };
 
   const handleTenderChange = (orderId: string, val: number) => {
@@ -430,7 +469,7 @@ export function RiderView({
                           <div className="space-y-2">
                             {!order.eeuDetails.receiptImageUrl ? (
                               <button
-                                onClick={() => setCameraOrder(order)}
+                                onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
                               >
                                 <Camera className="w-5 h-5 animate-pulse" />
@@ -601,8 +640,17 @@ export function RiderView({
                 </button>
               </div>
 
+              <input
+                id="eeu-receipt-camera"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleReceiptFileSelected(e.target.files?.[0])}
+              />
+
               <div className="p-5 space-y-4 text-xs">
-                {/* Simulated Camera Viewfinder */}
+                {/* Device camera / image capture */}
                 <div className="aspect-4/3 rounded-xl border-2 border-dashed border-amber-400 bg-slate-900 overflow-hidden relative flex flex-col items-center justify-center text-white p-4">
                   <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mb-2">
                     <Camera className="w-6 h-6 animate-pulse" />
@@ -619,9 +667,13 @@ export function RiderView({
                   <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-amber-400" />
 
                   <div className="absolute bottom-3 bg-slate-950/90 px-3 py-1 rounded-md text-[10px] font-mono text-emerald-400 border border-emerald-500/30">
-                    Auto-Exposure: LOCKED · Resolution: 1080p
+                    Device camera capture · Receipt image required
                   </div>
                 </div>
+
+                {receiptPreviewUrl && (
+                  <img src={receiptPreviewUrl} alt="Captured EEU receipt preview" className="w-full max-h-64 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                )}
 
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
@@ -643,7 +695,7 @@ export function RiderView({
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    This photographic receipt is cryptographically attached to Order #{cameraOrder.id} and shared immediately with the customer to verify smart card loading.
+                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
                   </p>
                 </div>
 
@@ -658,7 +710,7 @@ export function RiderView({
                   <button
                     type="button"
                     disabled={isCapturingReceipt || !cameraTokenInput.trim()}
-                    onClick={handleCaptureReceiptSubmit}
+                    onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isCapturingReceipt ? (

@@ -34,6 +34,7 @@ import {
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
+import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -270,11 +271,6 @@ export default function App() {
     const subtotal = batch.price * quantity;
     const totalPrice = subtotal + deliveryFee;
 
-    // Decrease inventory atomically
-    setInventory(prev => prev.map(b => 
-      b.id === batch.id ? { ...b, available: Math.max(0, b.available - quantity) } : b
-    ));
-
     const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId] || MAMILA_COORDINATES.m1;
     const destCoords = options?.customerCoordinates || DEFAULT_CUSTOMER_COORDINATES;
 
@@ -320,7 +316,7 @@ export default function App() {
 
     if (!isDemoMode && currentUser) {
       try {
-        await saveOrderToFirestore(newOrder);
+        await createOrderWithInventoryReservation(newOrder);
         await logDeliveryEventToFirestore({
           orderId: orderDocId,
           status: 'PENDING',
@@ -335,9 +331,6 @@ export default function App() {
         console.error('Failed to save order to Firestore:', err);
         // Data integrity rollback: undo optimistic additions so React state strictly matches database truth
         setOrders(prev => prev.filter(o => o.id !== orderDocId));
-        setInventory(prev => prev.map(b => 
-          b.id === batch.id ? { ...b, available: b.available + quantity } : b
-        ));
         showAlert(`Could not sync order to database: ${err.message}`, 'error');
       }
     }
@@ -578,11 +571,23 @@ export default function App() {
 
     if (targetOrder.status === 'RUNNER_ASSIGNED' || targetOrder.status === 'PENDING' || targetOrder.status === 'TRANSACTION_PENDING') {
       const qty = targetOrder.quantity || 1;
-      setInventory(prev => prev.map(b => 
-        b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b
-      ));
-
-      handleUpdateOrder(orderId, { status: 'CANCELLED' });
+      if (!isDemoMode && currentUser) {
+        try {
+          await cancelOrderAndRestoreInventory(orderId, currentUser.uid);
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+          await logDeliveryEventToFirestore({
+            orderId, status: 'CANCELLED', timestamp: new Date().toISOString(),
+            actorRole: 'CUSTOMER', actorId: currentUser.uid,
+            actorName: userProfile?.displayName || 'Customer',
+            note: 'Order cancelled and reserved stock restored atomically.'
+          });
+        } catch (err: any) {
+          showAlert(`Cancellation failed: ${err.message}`, 'error');
+        }
+      } else {
+        setInventory(prev => prev.map(b => b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b));
+        handleUpdateOrder(orderId, { status: 'CANCELLED' });
+      }
     }
   };
 

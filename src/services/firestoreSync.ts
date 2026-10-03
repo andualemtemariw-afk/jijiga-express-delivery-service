@@ -240,6 +240,7 @@ export async function saveChatMessageToFirestore(
     const messagesCol = collection(db, ORDERS_COLLECTION, orderId, 'messages');
     const rawMsg = {
       ...message,
+      senderId: auth.currentUser?.uid,
       orderId,
       timestamp: message.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       createdAt: serverTimestamp(),

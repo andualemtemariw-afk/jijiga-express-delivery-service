@@ -204,6 +204,7 @@ export interface ChatMessage {
   id: string;
   orderId: string;
   senderRole: MessageSenderRole;
+  senderId?: string;
   senderName: string;
   text: string;
   timestamp: string;

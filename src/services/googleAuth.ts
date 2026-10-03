@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { 
   getAuth, 
   connectAuthEmulator,
@@ -11,6 +12,10 @@ import {
 import { 
   connectFirestoreEmulator, 
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  enableIndexedDbPersistence,
   Firestore
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -22,9 +27,34 @@ export const WORKSPACE_SCOPES = [
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const storage: FirebaseStorage = getStorage(app);
 
-const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
-export const db: Firestore = getFirestore(app, firestoreDbId);
+const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
+
+// Initialize Cloud Firestore with IndexedDB multi-tab offline persistence
+// and experimentalForceLongPolling for robust iframe / proxy connectivity
+export const db: Firestore = (() => {
+  if (typeof window !== 'undefined') {
+    try {
+      return initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        }),
+        experimentalForceLongPolling: true,
+      }, firestoreDbId);
+    } catch (err: any) {
+      console.warn('Firestore persistentLocalCache initialization notice:', err?.message || err);
+      const fallbackDb = getFirestore(app, firestoreDbId);
+      try {
+        enableIndexedDbPersistence(fallbackDb).catch((persistErr) => {
+          console.warn('Firestore enableIndexedDbPersistence fallback notice:', persistErr?.code || persistErr?.message);
+        });
+      } catch {}
+      return fallbackDb;
+    }
+  }
+  return getFirestore(app, firestoreDbId);
+})();
 
 /**
  * Utility helper to subscribe to browser online/offline status changes.

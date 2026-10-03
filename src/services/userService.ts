@@ -39,10 +39,10 @@ export async function syncUserProfile(user: User): Promise<AppUserProfile> {
     displayName: user.displayName || user.email?.split('@')[0] || 'Jijiga Express Customer',
     email: user.email || '',
     photoURL: user.photoURL || '',
-    phone: user.phoneNumber || '+251 91 123 4567',
+    phone: user.phoneNumber || '',
     city: 'Jijiga',
-    address: 'Kebele 04, Central Sector, Jijiga',
-    plusCode: '8F2P+5H Jijiga',
+    address: '',
+    plusCode: '',
     role: initialRole,
     createdAt: new Date().toISOString(),
   };

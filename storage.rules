@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function userDoc() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)); }
+    function isAdmin() { return signedIn() && userDoc().data.role == 'admin'; }
+    function orderDoc(orderId) { return firestore.get(/databases/(default)/documents/orders/$(orderId)); }
+
+    match /eeuReceipts/{orderId}/{fileName} {
+      allow read: if isAdmin() || (signedIn() && orderDoc(orderId).data.riderId == request.auth.uid);
+      allow write: if signedIn()
+        && orderDoc(orderId).data.riderId == request.auth.uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+  }
+}
