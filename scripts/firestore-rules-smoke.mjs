@@ -163,6 +163,20 @@ async function main() {
     });
   });
   console.log('PASS valid FOOD order creation with inventory reservation');
+  // A cancellation release must restore exactly the quantity originally reserved.
+  const releaseOrderId = 'food-release-' + Date.now();
+  const releaseBatchId = 'batch-release-' + Date.now();
+  const releaseReservationRef = doc(customer.db, 'inventoryReservations', releaseOrderId);
+  const releaseBatchRef = doc(customer.db, 'batches', releaseBatchId);
+  const releaseOrderRef = doc(customer.db, 'orders', releaseOrderId);
+  await runTransaction(customer.db, async tx => {
+    tx.set(releaseOrderRef, { id: releaseOrderId, customerId: customerUid, serviceType: 'FOOD', status: 'CANCELLED', price: 10, quantity: 2, deliveryFee: 0, totalPrice: 20, paymentMethod: 'COD', paymentStatus: 'UNPAID' });
+    tx.set(releaseReservationRef, { orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId, quantity: 2, action: 'RESERVE', createdAt: new Date().toISOString() });
+    tx.set(releaseBatchRef, { id: releaseBatchId, mamilaId: 'mamila-release', price: 10, available: 8, lastReservationId: releaseOrderId });
+  });
+  const badReleaseRef = doc(customer.db, 'inventoryReservations', releaseOrderId + '-release');
+  await assertFails(setDoc(badReleaseRef, { orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId, quantity: 3, action: 'RELEASE', createdAt: new Date().toISOString() }));
+  console.log('PASS cancellation release cannot exceed reserved quantity');
 
   await expectDenied('customer cannot create an order with mismatched total', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-total'), {
