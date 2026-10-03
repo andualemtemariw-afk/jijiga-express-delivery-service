@@ -6,7 +6,7 @@
 - Do not use npm audit fix --force.
 - Do not downgrade Firebase packages to remove an audit finding.
 - Confirm the Firebase project target from .firebaserc.
-- Confirm the selected payment provider adapter and production credentials are available.
+- Confirm Telebirr is the only online provider enabled for new orders and its production credentials are available.
 - Confirm Firebase Storage, monitoring, alerting, and backups are configured.
 
 ## Local validation
@@ -28,12 +28,17 @@ The current Firebase project is defined in .firebaserc.
 
 Required backend secret:
 - PAYMENT_WEBHOOK_SECRET — store in Firebase Secret Manager. Never commit it to source control.
+- All Telebirr secrets listed above must also be stored in Firebase Secret Manager; no provider credential belongs in source or `VITE_*` variables.
 
-The payment endpoint is a provider-neutral normalized contract. A real Telebirr/eBirr/CBE Birr/Coop Pay integration must supply the provider-specific signature verification adapter before production callbacks are accepted.
+Payment production flow:
+- New online customer orders use Telebirr; COD does not use a webhook settlement adapter.
+- `telebirrWebhook` is the only provider-specific callback accepted for Telebirr payments.
+- `paymentWebhook` is retained only as a guarded normalized endpoint and explicitly rejects Telebirr and unintegrated providers.
+- Configure `TELEBIRR_FABRIC_APP_ID`, `TELEBIRR_APP_SECRET`, `TELEBIRR_MERCHANT_APP_ID`, `TELEBIRR_MERCHANT_CODE`, `TELEBIRR_PRIVATE_KEY`, `TELEBIRR_PUBLIC_KEY`, `TELEBIRR_NOTIFY_URL`, and `TELEBIRR_REDIRECT_URL` through Firebase Secret Manager.
 
 ## Rules and Functions deployment
 
-After emulator tests pass:
+After emulator tests pass and the Firestore named-database migration has been verified:
 
     firebase use <project-id>
     firebase deploy --only firestore:rules,storage,functions
