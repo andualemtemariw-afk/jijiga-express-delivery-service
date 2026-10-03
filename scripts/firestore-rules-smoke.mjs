@@ -2,9 +2,11 @@ import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
-import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from '../functions/node_modules/firebase-admin/app';
-import { getAuth as getAdminAuth } from '../functions/node_modules/firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from '../functions/node_modules/firebase-admin/firestore';
+import { createRequire } from 'node:module';
+const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
+const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = requireFromFunctions('firebase-admin/app');
+const { getAuth: getAdminAuth } = requireFromFunctions('firebase-admin/auth');
+const { getFirestore: getAdminFirestore } = requireFromFunctions('firebase-admin/firestore');
 
 const projectId = 'sunny-discipline-hvd6f';
 const databaseId = '(default)';
