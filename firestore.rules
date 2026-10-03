@@ -174,13 +174,10 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.uid == uid
         && request.resource.data.role == 'customer'
-        || (
-          signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.uid == uid
-          && request.resource.data.role == 'admin'
-          && userEmail() in ['andualemawraris4@gmail.com', 'andualemawraris104@gmail.com', 'andualemawraris3@gmail.com']
-        );
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
+          'address', 'plusCode', 'role', 'createdAt'
+        ]);
 
       allow update: if signedIn() && (
         isAdmin()
