@@ -480,7 +480,8 @@ export default function App() {
     setOrders(prev => [fullOrder, ...prev]);
 
     try {
-      await saveOrderToFirestore(fullOrder);
+      // Khat consumes the same inventory as FOOD and must reserve stock atomically.
+      await createOrderWithInventoryReservation(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -488,7 +489,7 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'}.`
+        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'} with atomic inventory reservation.`
       });
       showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
