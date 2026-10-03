@@ -234,7 +234,6 @@ export function parseAndVerifyTelebirrNotification(
   };
 }
 
-export function signTelebirrTestPayload(payload: Record<string, unknown>, privateKeyPem: string): string {
-  // Test-only helper for deterministic CI coverage; production code verifies only.
-  throw new Error('signTelebirrTestPayload is not available at runtime.');
+export function getTelebirrCanonicalString(payload: Record<string, unknown>): string {
+  return canonicalString(payload);
 }
