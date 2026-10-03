@@ -1,0 +1,68 @@
+name: Firebase production backend deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-production-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.32.1
+
+      - name: Authenticate Firebase CLI
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          test -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" || {
+            echo "FIREBASE_SERVICE_ACCOUNT GitHub secret is missing."
+            exit 1
+          }
+          printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Verify required Firebase secrets exist
+        env:
+          REQUIRED_SECRETS: >-
+            PAYMENT_WEBHOOK_SECRET
+            TELEBIRR_FABRIC_APP_ID
+            TELEBIRR_APP_SECRET
+            TELEBIRR_MERCHANT_APP_ID
+            TELEBIRR_MERCHANT_CODE
+            TELEBIRR_PRIVATE_KEY
+            TELEBIRR_PUBLIC_KEY
+            TELEBIRR_NOTIFY_URL
+            TELEBIRR_REDIRECT_URL
+        run: |
+          set -euo pipefail
+          for secret in $REQUIRED_SECRETS; do
+            firebase functions:secrets:access "$secret" >/dev/null
+          done
+          echo "Firebase production secrets are present."
+
+      - name: Deploy Firestore rules, Storage rules, and Functions
+        run: |
+          set -euo pipefail
+          firebase deploy             --project sunny-discipline-hvd6f             --non-interactive             --only firestore:rules,storage,functions
+
+      - name: Report deployment target
+        run: |
+          echo "Firebase backend deployment completed for project sunny-discipline-hvd6f."
