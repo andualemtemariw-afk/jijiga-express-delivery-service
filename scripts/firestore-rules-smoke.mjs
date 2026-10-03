@@ -79,7 +79,7 @@ async function main() {
     deliveryFee: 0, totalPrice: 100, status: 'PICKED_UP', paymentMethod: 'TELEBIRR',
     paymentStatus: 'PAID_CONFIRMED', customerId: customerUid, customerName: 'Customer User',
     customerPhone: '', customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test address',
-    createdAt: new Date().toISOString(), riderId: users.rider.uid, riderName: 'rider User'
+    createdAt: new Date().toISOString(), riderId, riderName: 'rider User'
   };
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
