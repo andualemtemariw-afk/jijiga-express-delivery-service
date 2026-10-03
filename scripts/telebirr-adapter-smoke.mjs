@@ -1,4 +1,4 @@
-import { generateKeyPairSync, createSign } from 'node:crypto';
+import { generateKeyPairSync, createSign, constants as cryptoConstants } from 'node:crypto';
 import { parseAndVerifyTelebirrNotification, getTelebirrCanonicalString } from '../functions/lib/payments/telebirr.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
@@ -13,7 +13,7 @@ function signPayload(payload) {
   signer.end();
   return signer.sign({
     key: privateKey,
-    padding: 6,
+    padding: cryptoConstants.RSA_PKCS1_PSS_PADDING,
     saltLength: 32,
   }).toString('base64');
 }
