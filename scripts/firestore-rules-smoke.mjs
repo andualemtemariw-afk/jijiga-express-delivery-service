@@ -2,9 +2,9 @@ import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
-import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from 'firebase-admin/app';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from '../functions/node_modules/firebase-admin/app';
+import { getAuth as getAdminAuth } from '../functions/node_modules/firebase-admin/auth';
+import { getFirestore as getAdminFirestore } from '../functions/node_modules/firebase-admin/firestore';
 
 const projectId = 'sunny-discipline-hvd6f';
 const databaseId = '(default)';
