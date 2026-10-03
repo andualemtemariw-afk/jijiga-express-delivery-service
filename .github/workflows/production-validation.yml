@@ -1,7 +1,7 @@
 name: Production Validation
 
 concurrency:
-  group: production-validation-${{ github.event.pull_request.number || github.ref }}
+  group: production-validation-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 on:
@@ -42,7 +42,7 @@ jobs:
           java-version: '21'
 
       - name: Firebase rules smoke tests
-        run: npm run test:rules
+        run: timeout 10m npm run test:rules
 
   root-dependency-audit:
     runs-on: ubuntu-latest
