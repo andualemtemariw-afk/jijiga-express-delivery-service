@@ -35,6 +35,9 @@ jobs:
       - name: Functions production build
         run: npm --prefix functions run build
 
+      - name: Telebirr signature adapter smoke tests
+        run: npm run test:telebirr
+
       - name: Set up Java 21 for Firebase Emulator
         uses: actions/setup-java@v6
         with:
