@@ -438,6 +438,17 @@ async function telebirrPostJson(
   return parsed;
 }
 
+function asMillis(value: unknown): number | null {
+  if (value && typeof (value as { toMillis?: () => number }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function buildTelebirrCheckoutUrl(
   prepayId: string,
   merchantAppId: string,
@@ -499,6 +510,9 @@ export const createTelebirrCheckout = onCall({
   if (order.paymentStatus !== 'PAYMENT_PENDING') {
     throw new HttpsError('failed-precondition', 'This order is not awaiting payment.');
   }
+  if (['CANCELLED', 'DELIVERED', 'RATED', 'DECLINED', 'DEFECT_REJECTED'].includes(String(order.status || ''))) {
+    throw new HttpsError('failed-precondition', 'This order is no longer eligible for payment.');
+  }
 
   const totalAmount = Number(order.totalPrice);
   if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
@@ -513,6 +527,17 @@ export const createTelebirrCheckout = onCall({
   const privateKey = telebirrPrivateKey.value();
   const notifyUrl = telebirrNotifyUrl.value().trim();
   const redirectUrl = telebirrRedirectUrl.value().trim();
+
+  const existingPrepayId = asString(order.paymentCheckoutPrepayId);
+  const existingMerchantOrderId = asString(order.paymentMerchantOrderId);
+  const existingCreatedAt = asMillis(order.paymentCheckoutCreatedAt);
+  if (existingPrepayId && existingMerchantOrderId && existingCreatedAt && Date.now() - existingCreatedAt < 110 * 60 * 1000) {
+    return {
+      checkoutUrl: buildTelebirrCheckoutUrl(existingPrepayId, merchantAppId, merchantCode, privateKey),
+      paymentMerchantOrderId: existingMerchantOrderId,
+      prepayId: existingPrepayId,
+    };
+  }
 
   if (!fabricAppId || !appSecret || !merchantAppId || !merchantCode || !privateKey || !notifyUrl) {
     throw new HttpsError('failed-precondition', 'Telebirr production credentials are not configured.');
