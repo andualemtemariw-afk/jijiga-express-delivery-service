@@ -1,18 +1,21 @@
-# Firestore Named-Database to Default-Database Migration Runbook
+# Optional Firestore Named-Database to Default-Database Migration Runbook
 
 ## Scope
 
-This runbook migrates the Jijiga Express Firestore data from:
+This runbook documents an optional migration path if the project owner later chooses to consolidate Jijiga Express onto `(default)`. Current Firebase documentation supports named Firestore databases, so migration is **not a release prerequisite** for this application.
 
 `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`
 
-to the supported production default database:
+to the default database:
 
 `(default)`
 
-Do not change the application database target until the migration has been completed and verified.
+Do not change the application database target merely for this runbook. Keep the current named database in service unless an explicit architecture decision is made to migrate.
 
-## Pre-migration controls
+## Decision and pre-migration controls
+
+Use this procedure only after an explicit decision to consolidate databases.
+
 
 1. Confirm Google Cloud billing/Blaze requirements and required Firestore/Storage permissions are available.
 2. Freeze application writes and administrative changes.
@@ -71,6 +74,10 @@ After verification, change both application layers to use the default Firestore 
 Remove the named database ID from `firebase-applet-config.json` and from the Functions initialization code.
 
 Run the complete CI/security suite on the cutover commit, deploy the backend, and perform controlled production smoke testing before reopening writes. Keep the source database intact until the post-deployment checks pass.
+
+## Current release decision
+
+The application may remain on the existing named database. Firebase supports multiple named databases per project, and Security Rules are deployed separately to each database. Use this runbook only for an intentional future consolidation or database-location/architecture change.
 
 ## Rollback
 
