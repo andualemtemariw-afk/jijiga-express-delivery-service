@@ -9,7 +9,7 @@ const { getAuth: getAdminAuth } = requireFromFunctions('firebase-admin/auth');
 const { getFirestore: getAdminFirestore } = requireFromFunctions('firebase-admin/firestore');
 
 const projectId = 'sunny-discipline-hvd6f';
-const databaseId = process.env.SMOKE_FIRESTORE_DATABASE_ID || 'ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286';
+const databaseId = '(default)';
 const bucket = `${projectId}.firebasestorage.app`;
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
@@ -17,7 +17,7 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
 
 const adminApp = initializeAdminApp({ projectId, storageBucket: bucket });
-const adminDb = getAdminFirestore(adminApp, databaseId);
+const adminDb = getAdminFirestore(adminApp);
 const adminAuth = getAdminAuth(adminApp);
 
 const firebaseConfig = {
@@ -45,7 +45,7 @@ async function createUser(key, role, active = true) {
 async function clientFor(key) {
   const app = initializeApp(firebaseConfig, `test-${key}-${Date.now()}`);
   const auth = getAuth(app);
-  const db = getFirestore(app, databaseId);
+  const db = getFirestore(app);
   const storage = getStorage(app);
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
