@@ -174,7 +174,7 @@ export function BookRideModal({
                   if (city === 'Hargeisa') {
                     setPickup('Egal International Airport Terminal 1');
                     setDropoff('Mansoor Hotel & Conference Hall');
-                    setPaymentMethod('ZAAD');
+                    setPaymentMethod('COD');
                   } else {
                     setPickup('Kebele 04, Central Plaza');
                     setDropoff('Taiwan Commercial Market');
