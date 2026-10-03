@@ -26,8 +26,8 @@ service cloud.firestore {
 
     function isActiveUser() {
       return signedIn()
-        && exists(/databases/$\(database\)/documents/users/$\(request.auth.uid\))
-        && (!('active' in currentUser().data) || currentUser().data.active == true);
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && currentUser().data.active == true;
     }
 
     function isRunner() {
