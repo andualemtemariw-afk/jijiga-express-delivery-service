@@ -163,16 +163,23 @@ async function main() {
     });
   });
   console.log('PASS valid FOOD order creation with inventory reservation');
-  // A cancellation release must restore exactly the quantity originally reserved.
+  // Seed a privileged fixture for the customer's release-quantity attack test.
   const releaseOrderId = 'food-release-' + Date.now();
   const releaseBatchId = 'batch-release-' + Date.now();
-  const releaseReservationRef = doc(adminDb, 'inventoryReservations', releaseOrderId);
-  const releaseBatchRef = doc(adminDb, 'batches', releaseBatchId);
-  const releaseOrderRef = doc(adminDb, 'orders', releaseOrderId);
-  await runTransaction(adminDb, async tx => {
-    tx.set(releaseOrderRef, { id: releaseOrderId, customerId: customerUid, serviceType: 'FOOD', status: 'CANCELLED', price: 10, quantity: 2, deliveryFee: 0, totalPrice: 20, paymentMethod: 'COD', paymentStatus: 'UNPAID' });
-    tx.set(releaseReservationRef, { orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId, quantity: 2, action: 'RESERVE', createdAt: new Date().toISOString() });
-    tx.set(releaseBatchRef, { id: releaseBatchId, mamilaId: 'mamila-release', price: 10, available: 8, lastReservationId: releaseOrderId });
+  const releaseReservationRef = adminDb.collection('inventoryReservations').doc(releaseOrderId);
+  const releaseBatchRef = adminDb.collection('batches').doc(releaseBatchId);
+  const releaseOrderRef = adminDb.collection('orders').doc(releaseOrderId);
+  await releaseOrderRef.set({
+    id: releaseOrderId, customerId: customerUid, serviceType: 'FOOD', status: 'CANCELLED',
+    price: 10, quantity: 2, deliveryFee: 0, totalPrice: 20, paymentMethod: 'COD', paymentStatus: 'UNPAID'
+  });
+  await releaseReservationRef.set({
+    orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId,
+    quantity: 2, action: 'RESERVE', createdAt: new Date().toISOString()
+  });
+  await releaseBatchRef.set({
+    id: releaseBatchId, mamilaId: 'mamila-release', price: 10, available: 8,
+    lastReservationId: releaseOrderId
   });
   const badReleaseRef = doc(customer.db, 'inventoryReservations', releaseOrderId + '-release');
   await assertFails(setDoc(badReleaseRef, { orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId, quantity: 3, action: 'RELEASE', createdAt: new Date().toISOString() }));
