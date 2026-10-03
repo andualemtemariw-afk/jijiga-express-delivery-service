@@ -219,7 +219,7 @@ service cloud.firestore {
         && request.resource.data.price == resource.data.price
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available', 'updatedAt', 'lastReservationId'])
         && request.resource.data.available >= 0
-        && request.resource.data.lastReservationId != resource.data.lastReservationId
+        && (!('lastReservationId' in resource.data) || request.resource.data.lastReservationId != resource.data.lastReservationId)
         && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId))
         && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.customerId == request.auth.uid
         && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.batchId == batchId
