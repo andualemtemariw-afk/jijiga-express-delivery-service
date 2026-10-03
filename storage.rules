@@ -4,11 +4,15 @@ service firebase.storage {
     function signedIn() { return request.auth != null; }
     function isActiveAdmin() {
       return signedIn()
+        && 'role' in request.auth.token
+        && 'active' in request.auth.token
         && request.auth.token.role == 'admin'
         && request.auth.token.active == true;
     }
     function isActiveRider() {
       return signedIn()
+        && 'role' in request.auth.token
+        && 'active' in request.auth.token
         && request.auth.token.role == 'rider'
         && request.auth.token.active == true;
     }
