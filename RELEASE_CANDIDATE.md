@@ -6,13 +6,13 @@
 - Branch: `feat/stage2-operational-remediations`
 - Pull request: #1 — Apply Stage 3 production hardening
 - Target: `main`
-- Current head: `90e059dd02416302601bb718b01580e44cc5e746`
+- Current head: `f0da46cc71d14723547854b656191af7dd75e372`
 
 ## Current gate
 
 **NOT READY FOR MERGE**
 
-Automated CI/security validation is green on the current head. The remaining work is production architecture, credential provisioning, deployment, and controlled post-deploy verification.
+Automated CI/security validation is green on runtime head `5d57dc9`; the latest documentation head `f0da46c` also passed fresh Firestore rules and Production Validation runs. Remaining work is production credential provisioning, deployment, controlled post-deploy verification, and dependency-risk disposition.
 
 ## Implemented
 
@@ -30,8 +30,8 @@ Automated CI/security validation is green on the current head. The remaining wor
 
 ## Verified evidence — 2026-10-03 UTC
 
-- Production Validation run **37150064530** passed on head `90e059dd02416302601bb718b01580e44cc5e746`.
-- Firestore rules tests run **37150064522** passed on the same head.
+- Production Validation run **37152937776** passed on documentation head `f0da46cc71d14723547854b656191af7dd75e372`.
+- Firestore rules tests run **37152937798** passed on the same documentation head.
 - Root typecheck and frontend production build passed.
 - Functions install, typecheck, and production build passed.
 - Root dependency audit passed at the configured high-severity gate.
@@ -41,12 +41,10 @@ Automated CI/security validation is green on the current head. The remaining wor
 
 ## Remaining release blockers
 
-1. **Named Firestore database architecture.** The app and Functions currently use the named database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. Current Firebase Admin and Web SDK references mark named-database access as Public Preview and advise against production use. Do not silently switch to `(default)`; complete a controlled data migration and configuration change first.
-2. **Telebirr production credentials.** Configure the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager. No secrets belong in source control.
-3. **Non-Telebirr providers.** The current customer payment set is intentionally limited to Telebirr and COD. eBirr/CBE Birr/Coop Pay/etc. must not be enabled until each has its own verified provider callback adapter.
-4. **Production Firebase deployment.** No production backend deployment has been performed from this PR.
-5. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against the production project with non-destructive data and rollback procedures.
-6. **Moderate dependency advisories.** The configured high-severity gates pass, but remaining moderate advisories still require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
+1. **Telebirr production credentials.** Configure the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager.
+2. **Production Firebase deployment.** Deploy Firestore/Storage rules and Functions from the release head after production environment checks.
+3. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against production with non-destructive data and rollback procedures.
+4. **Moderate dependency advisories.** The configured high-severity CI gates pass; remaining moderate findings require documented owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
 
 ## Merge rule
 
