@@ -307,7 +307,6 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                   }`}
                 >
                   {pm === 'TELEBIRR' && 'Telebirr Wallet'}
-                  {pm === 'CBE_BIRR' && 'CBE Birr'}
                   {pm === 'COD' && 'Cash Handover'}
                 </button>
               ))}
