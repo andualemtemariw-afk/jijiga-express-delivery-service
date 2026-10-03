@@ -88,13 +88,16 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
+  const eventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
   const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
   const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
   const reference = typeof body.reference === 'string' ? body.reference.trim() : '';
   const status = body.status;
   const amount = body.amount;
+
   if (
-    !orderId || !provider || !reference
+    !eventId || eventId.length > 128 || eventId.includes('/')
+    || !orderId || !provider || !reference
     || typeof status !== 'string' || !PAYMENT_STATUSES.has(status)
     || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0
     || body.currency !== 'ETB'
@@ -104,33 +107,94 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
   }
 
   const orderRef = db.doc(`orders/${orderId}`);
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(orderRef);
-    if (!snap.exists) throw new Error('ORDER_NOT_FOUND');
-    const order = snap.data() || {};
-    if (Math.abs(Number(order.totalPrice || 0) - amount) > 0.01) throw new Error('AMOUNT_MISMATCH');
+  const paymentEventRef = db.doc(`paymentEvents/${eventId}`);
 
-    tx.update(orderRef, {
-      paymentStatus: status,
-      paymentProvider: provider,
-      paymentReference: reference,
-      paymentVerifiedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    const eventRef = db.collection('deliveryEvents').doc();
-    tx.set(eventRef, {
-      orderId,
-      actorRole: 'PAYMENT_PROVIDER',
-      actorId: provider,
-      actorName: provider,
-      status: order.status || 'PENDING',
-      eventType: 'PAYMENT_VERIFIED',
-      paymentStatus: status,
-      paymentReference: reference,
-      amount,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-  });
+  try {
+    await db.runTransaction(async (tx) => {
+      const [orderSnap, previousEventSnap] = await Promise.all([
+        tx.get(orderRef),
+        tx.get(paymentEventRef),
+      ]);
 
-  res.status(200).json({ ok: true });
+      if (!orderSnap.exists) throw new Error('ORDER_NOT_FOUND');
+      const order = orderSnap.data() || {};
+
+      if (previousEventSnap.exists) {
+        const previous = previousEventSnap.data() || {};
+        const sameEvent =
+          previous.orderId === orderId
+          && previous.provider === provider
+          && previous.reference === reference
+          && previous.status === status
+          && Number(previous.amount) === amount
+          && previous.currency === 'ETB';
+
+        if (!sameEvent) throw new Error('PAYMENT_EVENT_CONFLICT');
+        return;
+      }
+
+      if (
+        order.paymentStatus === 'PAID_CONFIRMED'
+        && (status === 'PAID_CONFIRMED' || status === 'REFUNDED')
+        && order.paymentReference
+        && order.paymentReference !== reference
+      ) {
+        throw new Error('PAYMENT_ALREADY_CONFIRMED');
+      }
+
+      if (status === 'REFUNDED' && order.paymentStatus !== 'PAID_CONFIRMED') {
+        throw new Error('INVALID_REFUND_STATE');
+      }
+
+      if (Math.abs(Number(order.totalPrice || 0) - amount) > 0.01) {
+        throw new Error('AMOUNT_MISMATCH');
+      }
+
+      tx.set(paymentEventRef, {
+        eventId,
+        orderId,
+        provider,
+        reference,
+        status,
+        amount,
+        currency: 'ETB',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.update(orderRef, {
+        paymentStatus: status,
+        paymentProvider: provider,
+        paymentReference: reference,
+        paymentVerifiedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      const auditRef = db.collection('deliveryEvents').doc();
+      tx.set(auditRef, {
+        orderId,
+        actorRole: 'PAYMENT_PROVIDER',
+        actorId: provider,
+        actorName: provider,
+        status: order.status || 'PENDING',
+        eventType: 'PAYMENT_VERIFIED',
+        paymentStatus: status,
+        paymentReference: reference,
+        amount,
+        eventId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    res.status(200).json({ ok: true });
+  } catch (error: unknown) {
+    const code = error instanceof Error ? error.message : 'PAYMENT_EVENT_FAILED';
+    const responseCodes: Record<string, number> = {
+      ORDER_NOT_FOUND: 404,
+      PAYMENT_EVENT_CONFLICT: 409,
+      PAYMENT_ALREADY_CONFIRMED: 409,
+      INVALID_REFUND_STATE: 409,
+      AMOUNT_MISMATCH: 409,
+    };
+    res.status(responseCodes[code] || 400).send(code);
+  }
 });
