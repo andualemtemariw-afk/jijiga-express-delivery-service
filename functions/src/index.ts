@@ -55,6 +55,14 @@ function isSafeOrderId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(value);
 }
 
+function asString(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim()
+    : value !== undefined && value !== null
+      ? String(value).trim()
+      : '';
+}
+
 function asBoundedString(value: unknown, field: string, maxLength = 500): string {
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > maxLength) {
     throw new HttpsError('invalid-argument', `Invalid ${field}.`);
