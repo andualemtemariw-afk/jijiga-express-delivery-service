@@ -1,0 +1,89 @@
+name: Firebase production preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-production-preflight
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools@15.32.1
+
+      - name: Authenticate Firebase CLI
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" || {
+            echo "FIREBASE_SERVICE_ACCOUNT GitHub secret is missing."
+            exit 1
+          }
+          printf '%s' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Verify Firebase project
+        run: |
+          test "$(node -e "console.log(require('./.firebaserc').projects.default)")" = "sunny-discipline-hvd6f"
+          firebase projects:list --json >/tmp/firebase-projects.json
+          node -e "const p=require('/tmp/firebase-projects.json'); const xs=p.result ?? p.results ?? []; if(!Array.isArray(xs) || !xs.some(x=>x.projectId==='sunny-discipline-hvd6f')) process.exit(1);"
+
+      - name: Verify required Firebase Functions secrets exist
+        env:
+          REQUIRED_SECRETS: >-
+            PAYMENT_WEBHOOK_SECRET
+            TELEBIRR_FABRIC_APP_ID
+            TELEBIRR_APP_SECRET
+            TELEBIRR_MERCHANT_APP_ID
+            TELEBIRR_MERCHANT_CODE
+            TELEBIRR_PRIVATE_KEY
+            TELEBIRR_PUBLIC_KEY
+            TELEBIRR_NOTIFY_URL
+            TELEBIRR_REDIRECT_URL
+        run: |
+          set -euo pipefail
+          for secret in $REQUIRED_SECRETS; do
+            echo "Checking Firebase secret: $secret"
+            firebase functions:secrets:access "$secret" >/dev/null
+          done
+          echo "All required Firebase Functions secrets are present."
+
+      - name: Verify Firebase Hosting target
+        run: |
+          firebase hosting:sites:list --json >/tmp/firebase-hosting.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('/tmp/firebase-hosting.json', 'utf8'));
+          const sites = p.result?.sites || p.sites || [];
+          if (!Array.isArray(sites) || !sites.length) {
+            console.error('No Firebase Hosting site is provisioned.');
+            process.exit(1);
+          }
+          console.log('Hosting site(s) provisioned:', sites.map(s => s.name || s.siteId).join(', '));
+          NODE
+
+      - name: Verify production/demo gate
+        run: |
+          test "$(node -e "const fs=require('fs'); const c=fs.readFileSync('.env.example','utf8'); const m=c.match(/VITE_ENABLE_DEMO_SANDBOX="([^"]*)"/); console.log(m?.[1] || '')")" = "false"
+
+      - name: Verify deployment workflow guard
+        run: |
+          grep -q "github.ref == 'refs/heads/main'" .github/workflows/firebase-hosting.yml
+          grep -q "channelId: live" .github/workflows/firebase-hosting.yml
+          echo "Firebase Hosting workflow is guarded to live deployment from main."
