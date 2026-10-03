@@ -1,5 +1,9 @@
 name: Production Validation
 
+concurrency:
+  group: production-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
@@ -40,7 +44,7 @@ jobs:
       - name: Firebase rules smoke tests
         run: npx --yes firebase-tools@15.30.2 emulators:exec --only auth,firestore,storage "node scripts/firestore-rules-smoke.mjs"
 
-  dependency-audit:
+  root-dependency-audit:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,6 +60,19 @@ jobs:
         run: npm ci
       - name: Root dependency audit
         run: npm audit --audit-level=high
+
+  functions-dependency-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - name: Install Functions dependencies
         run: npm --prefix functions ci
       - name: Functions dependency audit
