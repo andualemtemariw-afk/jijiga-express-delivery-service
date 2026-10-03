@@ -99,17 +99,13 @@ service cloud.firestore {
       ])
       && request.resource.data.customerId == request.auth.uid
       && request.resource.data.status == 'PENDING'
+      && request.resource.data.serviceType in ['FOOD', 'PARCEL', 'RIDE', 'EEU_RECHARGE', 'KHAT']
       && request.resource.data.paymentMethod in [
         'TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB', 'COD'
       ]
       && request.resource.data.paymentStatus == (
         request.resource.data.paymentMethod == 'COD' ? 'UNPAID' : 'PAYMENT_PENDING'
       )
-      && !request.resource.data.keys().hasAny([
-        'runnerId', 'runnerName', 'runnerTagId', 'runnerPhotoUrl',
-        'riderId', 'riderName', 'riderProofUrl', 'paymentProvider',
-        'paymentReference', 'paymentVerifiedAt', 'adminNotes'
-      ])
       && request.resource.data.price is number
       && request.resource.data.price >= 0
       && request.resource.data.quantity is number
@@ -117,10 +113,41 @@ service cloud.firestore {
       && request.resource.data.deliveryFee is number
       && request.resource.data.deliveryFee >= 0
       && request.resource.data.totalPrice is number
-      && request.resource.data.totalPrice == (
-        request.resource.data.price * request.resource.data.quantity
-        + request.resource.data.deliveryFee
-      );
+      && (
+        (
+          request.resource.data.serviceType == 'FOOD'
+          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (
+          request.resource.data.serviceType == 'KHAT'
+          && request.resource.data.totalPrice == request.resource.data.price * request.resource.data.quantity + request.resource.data.deliveryFee
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (
+          request.resource.data.serviceType in ['PARCEL', 'RIDE', 'EEU_RECHARGE']
+          && request.resource.data.quantity == 1
+          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+        )
+      )
+      && (!('distanceKm' in request.resource.data) || (
+        request.resource.data.distanceKm is number
+        && request.resource.data.distanceKm >= 0
+        && request.resource.data.distanceKm <= 10000
+      ))
+      && (!('etaMinutes' in request.resource.data) || (
+        request.resource.data.etaMinutes is number
+        && request.resource.data.etaMinutes >= 0
+        && request.resource.data.etaMinutes <= 100000
+      ));
     }
 
     // Connection probe only. Do not store sensitive data here.
