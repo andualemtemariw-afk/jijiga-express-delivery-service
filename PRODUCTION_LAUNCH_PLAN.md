@@ -26,7 +26,7 @@ For Telebirr, the production flow is:
 5. The Function verifies Telebirr's signature and merchant identity before settling the order transactionally.
 6. Duplicate callbacks are idempotent through `paymentEvents`.
 
-The generic `paymentWebhook` is not an adapter for Telebirr and explicitly rejects Telebirr traffic.
+The generic `paymentWebhook` is not an adapter for Telebirr and explicitly rejects Telebirr traffic. New customer payment methods are restricted to Telebirr and COD.
 
 ## Staff provisioning
 
@@ -34,10 +34,10 @@ Create or deactivate staff through `provisionStaff` and `setStaffActive` callabl
 
 ## Remaining deployment work
 
-1. Migrate production data from the named Firestore database to the default database before production use of this release.
+1. No Firestore migration is required solely because the project uses a named database; migrate only after an explicit architecture decision.
 2. Configure Telebirr production secrets in Firebase Secret Manager.
 3. Keep non-Telebirr payment methods disabled until their provider-specific adapters are implemented and tested.
-4. Deploy Firestore/Storage rules and Functions from the release commit.
+4. Deploy Firestore/Storage rules and Functions from the release commit after environment and secret checks.
 5. Run controlled production smoke tests for authentication, order creation, inventory reservation, delivery-state transitions, receipt upload, and the Telebirr payment lifecycle.
 6. Review and disposition remaining moderate dependency advisories.
 
