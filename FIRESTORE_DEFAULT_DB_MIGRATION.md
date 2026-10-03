@@ -14,11 +14,12 @@ Do not change the application database target until the migration has been compl
 
 ## Pre-migration controls
 
-1. Freeze application writes and administrative changes.
-2. Take a current backup/export of the named database.
+1. Confirm Google Cloud billing/Blaze requirements and required Firestore/Storage permissions are available.
+2. Freeze application writes and administrative changes.
 3. Confirm the destination `(default)` database is not being used for live application traffic.
 4. Deploy the same Firestore rules to both source and destination.
-5. Record the export location and the exact migration time.
+5. Record the migration start time, operator, source database ID, destination database ID, and export location.
+6. Inventory current collection counts, representative documents, and any indexes used by the application before export.
 
 ## Export the source database
 
@@ -31,7 +32,7 @@ gcloud firestore export gs://<MIGRATION_BUCKET>/<timestamp> \
   --async
 ```
 
-Monitor the operation until it completes successfully.
+Monitor the operation until it completes successfully. The managed export is not an exact point-in-time snapshot, so the write freeze must remain in force throughout the export. Managed exports require billing and a suitable Cloud Storage bucket.
 
 ## Import into the default database
 
@@ -58,6 +59,8 @@ Verify at minimum:
 
 Compare representative document counts and sample records. Verify that customer IDs, order IDs, payment status, inventory quantities, and timestamps are preserved.
 
+Also verify the destination index configuration against the source inventory. Firestore exports do not carry index definitions; the destination uses its current index definitions during import. Do not declare the migration complete until application queries used by production have been tested against `(default)`.
+
 ## Application cutover
 
 After verification, change both application layers to use the default Firestore service:
@@ -67,7 +70,7 @@ After verification, change both application layers to use the default Firestore 
 
 Remove the named database ID from `firebase-applet-config.json` and from the Functions initialization code.
 
-Run the complete CI/security suite, deploy the backend, and perform controlled production smoke testing before reopening writes.
+Run the complete CI/security suite on the cutover commit, deploy the backend, and perform controlled production smoke testing before reopening writes. Keep the source database intact until the post-deployment checks pass.
 
 ## Rollback
 
