@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
 
 const require = createRequire(import.meta.url);
@@ -79,6 +79,90 @@ async function main() {
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
   const customer = await clientFor('customer');
+
+  const validCustomerOrder = {
+    id: 'customer-create-valid',
+    serviceType: 'RIDE',
+    batchId: 'ride-taxi',
+    batchName: 'Test ride',
+    mamilaId: 'm4',
+    mamilaName: 'Test',
+    mamilaLocation: 'Jijiga',
+    price: 100,
+    quantity: 1,
+    deliveryFee: 20,
+    totalPrice: 120,
+    status: 'PENDING',
+    paymentMethod: 'TELEBIRR',
+    paymentStatus: 'PAYMENT_PENDING',
+    customerId: customerUid,
+    customerName: 'Customer User',
+    customerPhone: '',
+    customerCity: 'Jijiga',
+    customerPlusCode: '',
+    customerAddress: 'Test',
+    createdAt: new Date().toISOString()
+  };
+  await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
+  console.log('PASS valid customer order creation');
+
+  await expectDenied('customer cannot create already-paid non-COD order', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
+      ...validCustomerOrder,
+      id: 'malicious-paid-create',
+      paymentStatus: 'PAID_CONFIRMED'
+    });
+  });
+
+  await expectDenied('customer cannot add payment verification fields on create', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-payment-fields'), {
+      ...validCustomerOrder,
+      id: 'malicious-payment-fields',
+      paymentReference: 'FAKE-REF'
+    });
+  });
+
+  await expectDenied('customer cannot create an order with mismatched total', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-total'), {
+      ...validCustomerOrder,
+      id: 'malicious-total',
+      totalPrice: 1
+    });
+  });
+
+  await adminDb.doc('batches/test-food').set({
+    id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
+    price: 100, available: 5, expiry: 'test', imageUrl: '/test.jpg'
+  });
+
+  await expectDenied('customer cannot reserve stock while underpricing FOOD order', async () => {
+    const orderId = 'malicious-underpriced-food';
+    const orderRef = doc(customer.db, 'orders', orderId);
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const reservationRef = doc(customer.db, 'inventoryReservations', orderId);
+    await runTransaction(customer.db, async (tx) => {
+      const batchSnap = await tx.get(batchRef);
+      if (!batchSnap.exists()) throw new Error('test batch missing');
+      tx.update(batchRef, {
+        available: batchSnap.data().available - 1,
+        lastReservationId: orderId,
+        updatedAt: new Date().toISOString()
+      });
+      tx.set(orderRef, {
+        id: orderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+        mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+        price: 1, quantity: 1, deliveryFee: 20, totalPrice: 21,
+        status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+        customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+        customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+        createdAt: new Date().toISOString()
+      });
+      tx.set(reservationRef, {
+        orderId, batchId: 'test-food', customerId: customerUid,
+        quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+      });
+    });
+  });
   await expectDenied('customer cannot inject runnerId on creation', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-order'), {
       id: 'malicious-order', serviceType: 'RIDE', batchId: 'ride', batchName: 'Ride',
