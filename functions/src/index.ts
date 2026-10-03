@@ -33,6 +33,206 @@ async function requireAdmin(uid?: string): Promise<void> {
   }
 }
 
+const PAYMENT_PROVIDERS = new Set(['TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB']);
+const PAYMENT_METHODS = new Set([...PAYMENT_PROVIDERS, 'COD']);
+
+function isSafeOrderId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(value);
+}
+
+function asBoundedString(value: unknown, field: string, maxLength = 500): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > maxLength) {
+    throw new HttpsError('invalid-argument', `Invalid ${field}.`);
+  }
+  return value.trim();
+}
+
+function paymentStateFor(method: string): string {
+  return method === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING';
+}
+
+function calculateParcelPricing(details: Record<string, unknown>) {
+  const senderCity = asBoundedString(details.senderCity, 'parcelDetails.senderCity', 100);
+  const receiverCity = asBoundedString(details.receiverCity, 'parcelDetails.receiverCity', 100);
+  const weightCategory = asBoundedString(details.weightCategory, 'parcelDetails.weightCategory', 30);
+  const weightAddons: Record<string, number> = {
+    '< 1 kg': 50,
+    '1 - 3 kg': 100,
+    '3 - 5 kg': 180,
+    '5 - 10 kg': 250,
+  };
+  const weightAddon = weightAddons[weightCategory];
+  if (weightAddon === undefined) throw new HttpsError('invalid-argument', 'Invalid parcel weight category.');
+  const tamperSeal = details.tamperSealRequested === true;
+  const deliveryFee = senderCity !== receiverCity ? 200 : 120;
+  const price = weightAddon + (tamperSeal ? 30 : 0);
+  return { quantity: 1, price, deliveryFee, totalPrice: price + deliveryFee };
+}
+
+function calculateRidePricing(details: Record<string, unknown>) {
+  const vehicleType = asBoundedString(details.vehicleType, 'rideDetails.vehicleType', 40);
+  if (!['MARHABA_TAXI', 'MARHABA_MOTO'].includes(vehicleType)) {
+    throw new HttpsError('invalid-argument', 'Invalid ride vehicle type.');
+  }
+  const distanceKm = vehicleType === 'MARHABA_TAXI' ? 6.8 : 5.4;
+  const baseFare = vehicleType === 'MARHABA_TAXI' ? 120 : 60;
+  const perKmRate = vehicleType === 'MARHABA_TAXI' ? 24 : 14;
+  const price = Math.round(baseFare + distanceKm * perKmRate);
+  return {
+    quantity: 1,
+    price,
+    deliveryFee: 0,
+    totalPrice: price,
+    distanceKm,
+    etaMinutes: Math.round(distanceKm * 2.2 + 3),
+  };
+}
+
+function calculateEeuPricing(details: Record<string, unknown>) {
+  const rechargeAmount = Number(details.rechargeAmount);
+  if (!Number.isInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0) {
+    throw new HttpsError('invalid-argument', 'Recharge amount must be ETB 100-15000 in 50 ETB increments.');
+  }
+  const meterNumber = String(details.meterNumber || '').replace(/\D/g, '');
+  if (meterNumber.length !== 13) {
+    throw new HttpsError('invalid-argument', 'EEU meter number must contain exactly 13 digits.');
+  }
+  const serviceFee = 75;
+  return {
+    quantity: 1,
+    price: rechargeAmount,
+    deliveryFee: serviceFee,
+    totalPrice: rechargeAmount + serviceFee,
+    rechargeAmount,
+    meterNumber,
+    kwhUnits: Math.round((rechargeAmount / 2.15) * 10) / 10,
+  };
+}
+
+function sanitizeParcelDetails(input: Record<string, unknown>) {
+  return {
+    senderName: asBoundedString(input.senderName, 'parcelDetails.senderName', 120),
+    senderPhone: asBoundedString(input.senderPhone, 'parcelDetails.senderPhone', 40),
+    senderCity: asBoundedString(input.senderCity, 'parcelDetails.senderCity', 100),
+    senderAddress: asBoundedString(input.senderAddress, 'parcelDetails.senderAddress', 300),
+    receiverName: asBoundedString(input.receiverName, 'parcelDetails.receiverName', 120),
+    receiverPhone: asBoundedString(input.receiverPhone, 'parcelDetails.receiverPhone', 40),
+    receiverCity: asBoundedString(input.receiverCity, 'parcelDetails.receiverCity', 100),
+    receiverAddress: asBoundedString(input.receiverAddress, 'parcelDetails.receiverAddress', 300),
+    parcelCategory: asBoundedString(input.parcelCategory, 'parcelDetails.parcelCategory', 40),
+    weightCategory: asBoundedString(input.weightCategory, 'parcelDetails.weightCategory', 30),
+    description: asBoundedString(input.description, 'parcelDetails.description', 500),
+    isFragile: input.isFragile === true,
+    tamperSealRequested: input.tamperSealRequested === true,
+    trackingCode: '',
+  };
+}
+
+function sanitizeRideDetails(input: Record<string, unknown>, pricing: ReturnType<typeof calculateRidePricing>) {
+  return {
+    vehicleType: asBoundedString(input.vehicleType, 'rideDetails.vehicleType', 40),
+    pickupLocation: asBoundedString(input.pickupLocation, 'rideDetails.pickupLocation', 300),
+    dropoffLocation: asBoundedString(input.dropoffLocation, 'rideDetails.dropoffLocation', 300),
+    city: asBoundedString(input.city, 'rideDetails.city', 100),
+    tripDistanceKm: pricing.distanceKm,
+    tripDurationMins: pricing.etaMinutes,
+    rideStatus: 'REQUESTED',
+  };
+}
+
+function sanitizeEeuDetails(input: Record<string, unknown>, pricing: ReturnType<typeof calculateEeuPricing>, hubName: string) {
+  const cardSerialNumber = typeof input.cardSerialNumber === 'string'
+    ? input.cardSerialNumber.trim().slice(0, 100)
+    : '';
+  return {
+    meterNumber: pricing.meterNumber,
+    cardSerialNumber: cardSerialNumber || undefined,
+    rechargeAmount: pricing.rechargeAmount,
+    serviceFee: pricing.deliveryFee,
+    eeuHubName: hubName,
+    custodyPhase: 'WITH_CUSTOMER',
+    custodyLabel: 'WITH_CUSTOMER',
+    custodyTimeline: [{
+      phase: 'WITH_CUSTOMER',
+      label: 'WITH_CUSTOMER',
+      timestamp: new Date().toISOString(),
+      note: 'Service request created; physical smart card remains with customer pending rider pickup.',
+      actor: 'Customer',
+    }],
+    kwhUnits: pricing.kwhUnits,
+  };
+}
+
+export const createServiceOrder = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+
+  const data = (request.data || {}) as Record<string, unknown>;
+  const serviceType = asBoundedString(data.serviceType, 'serviceType', 30);
+  if (!['PARCEL', 'RIDE', 'EEU_RECHARGE'].includes(serviceType)) {
+    throw new HttpsError('invalid-argument', 'Unsupported service order type.');
+  }
+
+  const paymentMethod = asBoundedString(data.paymentMethod, 'paymentMethod', 30).toUpperCase();
+  if (!PAYMENT_METHODS.has(paymentMethod)) {
+    throw new HttpsError('invalid-argument', 'Unsupported payment method.');
+  }
+
+  const orderId = isSafeOrderId(data.id) ? data.id : db.collection('orders').doc().id;
+  const existing = await db.doc(`orders/${orderId}`).get();
+  if (existing.exists) throw new HttpsError('already-exists', 'Order ID already exists.');
+
+  const common = {
+    id: orderId,
+    serviceType,
+    batchId: typeof data.batchId === 'string' ? data.batchId.trim().slice(0, 128) : serviceType.toLowerCase(),
+    batchName: asBoundedString(data.batchName, 'batchName', 200),
+    mamilaId: typeof data.mamilaId === 'string' ? data.mamilaId.trim().slice(0, 128) : serviceType.toLowerCase(),
+    mamilaName: asBoundedString(data.mamilaName, 'mamilaName', 200),
+    mamilaLocation: asBoundedString(data.mamilaLocation, 'mamilaLocation', 300),
+    status: 'PENDING',
+    paymentMethod,
+    paymentStatus: paymentStateFor(paymentMethod),
+    customerId: uid,
+    customerName: asBoundedString(data.customerName, 'customerName', 120),
+    customerPhone: asBoundedString(data.customerPhone, 'customerPhone', 40),
+    customerCity: asBoundedString(data.customerCity, 'customerCity', 100),
+    customerPlusCode: typeof data.customerPlusCode === 'string' ? data.customerPlusCode.trim().slice(0, 100) : '',
+    customerAddress: asBoundedString(data.customerAddress, 'customerAddress', 300),
+    specialInstructions: typeof data.specialInstructions === 'string' ? data.specialInstructions.trim().slice(0, 500) : '',
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  } as Record<string, unknown>;
+
+  let derived: Record<string, unknown>;
+  if (serviceType === 'PARCEL') {
+    if (!data.parcelDetails || typeof data.parcelDetails !== 'object') {
+      throw new HttpsError('invalid-argument', 'Parcel details are required.');
+    }
+    const parcelDetails = sanitizeParcelDetails(data.parcelDetails as Record<string, unknown>);
+    const pricing = calculateParcelPricing(parcelDetails);
+    parcelDetails.trackingCode = `PARCEL-${orderId.slice(-8).toUpperCase()}`;
+    derived = { ...pricing, parcelDetails, distanceKm: pricing.deliveryFee === 200 ? 145 : 6.5, etaMinutes: pricing.deliveryFee === 200 ? 180 : 35 };
+  } else if (serviceType === 'RIDE') {
+    if (!data.rideDetails || typeof data.rideDetails !== 'object') {
+      throw new HttpsError('invalid-argument', 'Ride details are required.');
+    }
+    const pricing = calculateRidePricing(data.rideDetails as Record<string, unknown>);
+    derived = { ...pricing, rideDetails: sanitizeRideDetails(data.rideDetails as Record<string, unknown>, pricing) };
+  } else {
+    if (!data.eeuDetails || typeof data.eeuDetails !== 'object') {
+      throw new HttpsError('invalid-argument', 'EEU recharge details are required.');
+    }
+    const details = data.eeuDetails as Record<string, unknown>;
+    const pricing = calculateEeuPricing(details);
+    const hubName = asBoundedString(details.eeuHubName, 'eeuDetails.eeuHubName', 200);
+    derived = { ...pricing, eeuDetails: sanitizeEeuDetails(details, pricing, hubName) };
+  }
+
+  await db.doc(`orders/${orderId}`).set({ ...common, ...derived });
+  return { orderId, price: derived.price, deliveryFee: derived.deliveryFee, totalPrice: derived.totalPrice, paymentStatus: common.paymentStatus };
+});
+
 /** Provision staff through trusted Admin SDK code instead of client-side role assignment. */
 export const provisionStaff = onCall(async (request) => {
   await requireAdmin(request.auth?.uid);
