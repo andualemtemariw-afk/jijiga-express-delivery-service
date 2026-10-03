@@ -188,8 +188,8 @@ export const createServiceOrder = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'A user profile is required.');
   }
   const profile = profileSnap.data() || {};
-  if (profile.role !== 'customer' && profile.active !== true) {
-    throw new HttpsError('permission-denied', 'This staff account is inactive.');
+  if (profile.role !== 'customer') {
+    throw new HttpsError('permission-denied', 'Only customer accounts can create service orders.');
   }
   const serviceType = asBoundedString(data.serviceType, 'serviceType', 30);
   if (!['PARCEL', 'RIDE', 'EEU_RECHARGE'].includes(serviceType)) {
