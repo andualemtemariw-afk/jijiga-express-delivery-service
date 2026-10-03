@@ -306,7 +306,25 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
           && (
             request.resource.data.status == resource.data.status
-            || (resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'] && request.resource.data.status == 'CANCELLED')
+            || (
+              resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED']
+              && request.resource.data.status == 'CANCELLED'
+              && resource.data.paymentStatus != 'PAID_CONFIRMED'
+              && (
+                resource.data.serviceType in ['FOOD', 'KHAT']
+                ? (
+                  existsAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release'))
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.action == 'RELEASE'
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.orderId == orderId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.customerId == request.auth.uid
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.batchId == resource.data.batchId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.quantity == resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available == get(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available + resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.lastReservationId == orderId + '-release'
+                )
+                : true
+              )
+            )
             || (resource.data.status in ['DELIVERED', 'RATED'] && request.resource.data.status in ['DELIVERED', 'RATED'])
           )
         )

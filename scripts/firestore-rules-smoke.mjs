@@ -249,6 +249,10 @@ async function main() {
       quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
     });
   });
+  await expectDenied('customer cannot cancel inventory-backed order without release transaction', async () => {
+    await updateDoc(doc(customer.db, 'orders', cancelOrderId), { status: 'CANCELLED' });
+  });
+
   console.log('PASS customer can atomically cancel and release the exact reserved quantity');
 
   await expectDenied('customer cannot release more inventory than reserved', async () => {
@@ -292,6 +296,19 @@ async function main() {
         quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
       });
     });
+  });
+
+  const paidPendingOrderId = 'paid-pending-cancel-order';
+  await adminDb.doc(`orders/${paidPendingOrderId}`).set({
+    ...validOrder,
+    id: paidPendingOrderId,
+    status: 'PENDING',
+    paymentStatus: 'PAID_CONFIRMED',
+    riderId: undefined,
+    riderName: undefined
+  });
+  await expectDenied('customer cannot cancel a paid order', async () => {
+    await updateDoc(doc(customer.db, 'orders', paidPendingOrderId), { status: 'CANCELLED' });
   });
 
   const inactive = await clientFor('inactive-rider');

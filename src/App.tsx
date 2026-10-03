@@ -628,21 +628,34 @@ export default function App() {
 
     if (targetOrder.status === 'RUNNER_ASSIGNED' || targetOrder.status === 'PENDING' || targetOrder.status === 'TRANSACTION_PENDING') {
       const qty = targetOrder.quantity || 1;
+      if (targetOrder.paymentStatus === 'PAID_CONFIRMED') {
+        showAlert('Paid orders cannot be cancelled from the customer portal. Please contact support for a refund.', 'error');
+        return;
+      }
+
       if (!isDemoMode && currentUser) {
         try {
-          await cancelOrderAndRestoreInventory(orderId, currentUser.uid);
+          if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
+            await cancelOrderAndRestoreInventory(orderId, currentUser.uid);
+          } else {
+            await updateOrderInFirestore(orderId, { status: 'CANCELLED' });
+          }
           setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
           await logDeliveryEventToFirestore({
             orderId, status: 'CANCELLED', timestamp: new Date().toISOString(),
             actorRole: 'CUSTOMER', actorId: currentUser.uid,
             actorName: userProfile?.displayName || 'Customer',
-            note: 'Order cancelled and reserved stock restored atomically.'
+            note: targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT'
+              ? 'Order cancelled and reserved stock restored atomically.'
+              : 'Service order cancelled before dispatch.'
           });
         } catch (err: any) {
           showAlert(`Cancellation failed: ${err.message}`, 'error');
         }
       } else {
-        setInventory(prev => prev.map(b => b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b));
+        if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
+          setInventory(prev => prev.map(b => b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b));
+        }
         handleUpdateOrder(orderId, { status: 'CANCELLED' });
       }
     }

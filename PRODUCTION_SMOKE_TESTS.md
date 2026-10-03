@@ -22,34 +22,36 @@ Run these tests against the Firebase Emulator before deployment, then repeat the
 ## Inventory
 14. FOOD and KHAT order creation reserves stock atomically.
 15. A reservation exceeding available stock fails without creating the order.
-16. Customer cancellation restores the reserved quantity exactly once.
-17. A customer cannot directly change inventory outside a valid reservation transaction.
+16. Customer cancellation restores the reserved quantity exactly once; inventory-backed cancellation must include the release transaction.
+17. A paid non-COD order cannot be customer-cancelled before a refund workflow exists.
+18. A direct inventory-backed cancellation without its release/batch transaction is rejected.
+19. A customer cannot directly change inventory outside a valid reservation transaction.
 
 ## Storage
-18. A rider can upload an EEU receipt only for an order assigned to that rider.
-19. Receipt upload must be an image and no larger than 10 MiB.
-20. Receipt metadata must contain the matching orderId and rider UID.
-21. Existing receipt objects cannot be overwritten by a rider.
-22. Customer, assigned rider, and active admin can read the receipt; unrelated users cannot.
+20. A rider can upload an EEU receipt only for an order assigned to that rider.
+21. Receipt upload must be an image and no larger than 10 MiB.
+22. Receipt metadata must contain the matching orderId and rider UID.
+23. Existing receipt objects cannot be overwritten by a rider.
+24. Customer, assigned rider, and active admin can read the receipt; unrelated users cannot.
 
 ## Payment webhook
-23. Missing or incorrect webhook authentication is rejected.
-24. Unknown order, non-ETB currency, amount mismatch, or invalid payment status is rejected.
-25. Replaying the same eventId with the same payload is idempotent.
-26. Reusing an eventId with a different payload is rejected.
-27. A different payment reference cannot replace an already confirmed payment.
-28. A refund cannot be applied to an order that was never confirmed paid.
+25. Missing or incorrect webhook authentication is rejected.
+26. Unknown order, non-ETB currency, amount mismatch, or invalid payment status is rejected.
+27. Replaying the same eventId with the same payload is idempotent.
+28. Reusing an eventId with a different payload is rejected.
+29. A different payment reference cannot replace an already confirmed payment.
+30. A refund cannot be applied to an order that was never confirmed paid.
 
 ## Demo separation
-29. Synthetic courier/GPS simulation is available only in development or when VITE_ENABLE_DEMO_SANDBOX=true.
-30. Production order creation does not initialize rider GPS with merchant coordinates.
-31. Production simulation controls do not advance live orders.
+31. Synthetic courier/GPS simulation is available only in development or when VITE_ENABLE_DEMO_SANDBOX=true.
+32. Production order creation does not initialize rider GPS with merchant coordinates.
+33. Production simulation controls do not advance live orders.
 
 ## Build and release
-32. npm ci succeeds at repository root.
-33. npm run lint succeeds.
-34. npm run build succeeds.
-35. npm --prefix functions ci, npm --prefix functions run lint, and npm --prefix functions run build succeed.
-36. npm audit --audit-level=high and the Functions audit are reviewed and recorded before merge.
+34. npm ci succeeds at repository root.
+35. npm run lint succeeds.
+36. npm run build succeeds.
+37. npm --prefix functions ci, npm --prefix functions run lint, and npm --prefix functions run build succeed.
+38. npm audit --audit-level=high and the Functions audit are reviewed and recorded before merge.
 
 Do not mark a test passed merely because the code path exists. Record the actual command, environment, date, and observed result.
