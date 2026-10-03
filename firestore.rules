@@ -47,15 +47,15 @@ service cloud.firestore {
     }
 
     function isOrderCustomer(orderId) {
-      return signedIn() && orderDoc(orderId).data.customerId == request.auth.uid;
+      return isActiveUser() && orderDoc(orderId).data.customerId == request.auth.uid;
     }
 
     function isOrderRunner(orderId) {
-      return signedIn() && orderDoc(orderId).data.runnerId == request.auth.uid;
+      return isActiveUser() && orderDoc(orderId).data.runnerId == request.auth.uid;
     }
 
     function isOrderRider(orderId) {
-      return signedIn() && orderDoc(orderId).data.riderId == request.auth.uid;
+      return isActiveUser() && orderDoc(orderId).data.riderId == request.auth.uid;
     }
 
     function roleMatchesSender() {
@@ -165,7 +165,9 @@ service cloud.firestore {
     // Staff/admin roles must be provisioned by an existing admin or the explicit bootstrap emails.
     match /users/{uid} {
       allow read: if signedIn() && (
-        isAdmin() || request.auth.uid == uid || getUserRole() in ['runner', 'rider']
+        isAdmin()
+        || (isActiveUser() && request.auth.uid == uid)
+        || (isActiveUser() && getUserRole() in ['runner', 'rider'])
       );
 
       allow create: if signedIn()
@@ -319,7 +321,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
           && validRiderTransition()
           && (
             request.resource.data.paymentStatus == resource.data.paymentStatus
