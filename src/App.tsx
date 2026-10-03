@@ -536,6 +536,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'} with atomic inventory reservation.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
