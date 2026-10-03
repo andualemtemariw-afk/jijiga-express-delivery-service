@@ -253,8 +253,8 @@ async function main() {
   if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
-  await Promise.all([signOut(customer.auth), signOut(rider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, rider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
