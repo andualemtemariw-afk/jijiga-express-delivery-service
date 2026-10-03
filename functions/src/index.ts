@@ -578,6 +578,10 @@ export const createTelebirrCheckout = onCall({
       total_amount: totalAmount.toFixed(2),
       trans_currency: 'ETB',
       timeout_express: '120m',
+      business_type: 'BuyGoods',
+      payee_identifier: merchantCode,
+      payee_identifier_type: '04',
+      payee_type: '5000',
     };
     if (redirectUrl) bizContent.redirect_url = redirectUrl;
 

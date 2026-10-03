@@ -30,6 +30,10 @@ const payload = {
   trans_end_time: '1784756474676',
   notify_time: '1784756475676',
   notify_url: 'https://api.example.com/telebirrWebhook',
+  business_type: 'BuyGoods',
+  payee_identifier: '123456',
+  payee_identifier_type: '04',
+  payee_type: '5000',
 };
 
 const signed = { ...payload, sign_type: 'SHA256WithRSA' };

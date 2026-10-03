@@ -244,7 +244,7 @@ export function parseAndVerifyTelebirrNotification(
   let status: 'PAID_CONFIRMED' | 'FAILED';
   if (tradeStatus === 'Completed' || tradeStatus === 'PAY_SUCCESS') {
     status = 'PAID_CONFIRMED';
-  } else if (tradeStatus === 'PAY_FAILED' || tradeStatus === 'PAY_CANCEL' || tradeStatus === 'FAILED') {
+  } else if (tradeStatus === 'PAY_FAILED' || tradeStatus === 'PAY_CANCEL' || tradeStatus === 'FAILED' || tradeStatus === 'Failure' || tradeStatus === 'Expired') {
     status = 'FAILED';
   } else {
     throw new Error('UNSUPPORTED_TRADE_STATUS');
