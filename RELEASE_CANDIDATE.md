@@ -6,45 +6,52 @@
 - Branch: `feat/stage2-operational-remediations`
 - Pull request: #1 — Apply Stage 3 production hardening
 - Target: `main`
-- Current head: `f0da46cc71d14723547854b656191af7dd75e372`
+- Verified head: `3cf27f510d817bac5d2b097f48544ff4a1925761`
 
 ## Current gate
 
 **NOT READY FOR MERGE**
 
-Automated CI/security validation is green on runtime head `5d57dc9`; the latest documentation head `f0da46c` also passed fresh Firestore rules and Production Validation runs. Remaining work is production credential provisioning, deployment, controlled post-deploy verification, and dependency-risk disposition.
+The current head is CI-green for the pull-request validation workflows. Production readiness is still blocked by real Telebirr credential provisioning, production Firebase deployment, controlled post-deploy verification, and dependency-risk disposition.
+
+## Verified automated evidence — 2026-10-03/04 UTC
+
+- Production Validation run **37153708919** — **PASSED** on head `3cf27f510d817bac5d2b097f48544ff4a1925761`.
+- Firestore rules tests run **37153708987** — **PASSED** on the same head.
+- Root lint/typecheck and frontend production build passed in Production Validation.
+- Functions install, typecheck, and production build passed.
+- Root and Functions dependency audits passed at the configured **high-severity** gate.
+- Telebirr signature adapter smoke tests passed.
+- Firestore/Storage emulator security smoke tests passed.
+- The inventory-release security fixture is seeded with the trusted Admin SDK and verifies the customer-side mutation against the real Firestore rules.
 
 ## Implemented
 
 - Firestore authorization and service-specific order validation.
 - Atomic FOOD and KHAT inventory reservation.
-- Immutable scoped EEU receipt storage independent of cross-database Storage lookups.
+- Immutable scoped EEU receipt storage.
 - Production/demo GPS separation.
 - Strict rider delivery/payment state.
-- Idempotent payment event handling.
-- Trusted staff provisioning and one-time admin bootstrap.
+- Trusted staff provisioning.
 - Reproducible npm lockfiles and CI workflows.
-- Firebase Emulator smoke-test harness.
-- Telebirr provider-specific signing verification, merchant identity validation, server-side H5 checkout creation, merchant-order binding, idempotent callback settlement, and client redirect.
-- Generic normalized payment webhooks explicitly reject Telebirr so the provider-specific callback cannot be bypassed.
+- Telebirr provider-specific signature verification, merchant identity validation, server-side H5 checkout creation, merchant-order binding, idempotent callback settlement, and client redirect.
+- New customer payment methods are restricted to **TELEBIRR** and **COD**.
+- Generic normalized payment webhooks explicitly reject Telebirr and unintegrated providers.
 
-## Verified evidence — 2026-10-03 UTC
+## Firebase Hosting status
 
-- Production Validation run **37152937776** passed on documentation head `f0da46cc71d14723547854b656191af7dd75e372`.
-- Firestore rules tests run **37152937798** passed on the same documentation head.
-- Root typecheck and frontend production build passed.
-- Functions install, typecheck, and production build passed.
-- Root dependency audit passed at the configured high-severity gate.
-- Functions dependency audit passed at the configured high-severity gate.
-- Telebirr signature adapter smoke tests passed.
-- Firestore/Storage security smoke tests passed against the single supported emulator database.
+- Firebase Hosting deployment configuration is committed at `.github/workflows/firebase-hosting.yml`.
+- The workflow is guarded to deploy the **live** channel only from `main`.
+- The deployment requires the `FIREBASE_SERVICE_ACCOUNT` GitHub secret and the configured Firebase project.
+- The hosting site/domain still requires production provisioning and post-deploy URL evidence.
 
 ## Remaining release blockers
 
 1. **Telebirr production credentials.** Configure the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager.
-2. **Production Firebase deployment.** Deploy Firestore/Storage rules and Functions from the release head after production environment checks.
-3. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against production with non-destructive data and rollback procedures.
-4. **Moderate dependency advisories.** The configured high-severity CI gates pass; remaining moderate findings require documented owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
+2. **Production Firebase deployment.** Deploy Firestore/Storage rules and Functions from the verified release head after confirming the production project, named Firestore database, Storage bucket, backups, monitoring, and rollback controls.
+3. **Firebase Hosting production provisioning.** Confirm the Hosting site/domain and required frontend `VITE_*` configuration, then perform the guarded `main` deployment.
+4. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against production with non-destructive data and documented rollback procedures.
+5. **Moderate dependency advisories.** The configured high-severity CI gates pass; remaining moderate findings require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
 
 ## Merge rule
 
