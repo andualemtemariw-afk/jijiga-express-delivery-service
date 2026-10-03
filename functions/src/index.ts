@@ -13,6 +13,7 @@ const auth = getAuth();
 
 const STAFF_ROLES = new Set(['mamila', 'runner', 'rider']);
 const PAYMENT_STATUSES = new Set(['PAID_CONFIRMED', 'FAILED', 'REFUNDED']);
+const PAYMENT_PROVIDERS = new Set(['TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB']);
 const paymentWebhookSecret = defineSecret('PAYMENT_WEBHOOK_SECRET');
 
 async function requireAdmin(uid?: string): Promise<void> {
@@ -141,17 +142,39 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
         return;
       }
 
-      if (
-        order.paymentStatus === 'PAID_CONFIRMED'
-        && (status === 'PAID_CONFIRMED' || status === 'REFUNDED')
-        && order.paymentReference
-        && order.paymentReference !== reference
-      ) {
-        throw new Error('PAYMENT_ALREADY_CONFIRMED');
+      const normalizedProvider = provider.toUpperCase();
+      if (!PAYMENT_PROVIDERS.has(normalizedProvider)) {
+        throw new Error('UNSUPPORTED_PROVIDER');
+      }
+      if (String(order.paymentMethod || '').toUpperCase() !== normalizedProvider) {
+        throw new Error('PAYMENT_PROVIDER_MISMATCH');
+      }
+
+      if (order.paymentStatus === 'PAID_CONFIRMED') {
+        if (
+          status === 'PAID_CONFIRMED'
+          && order.paymentProvider === normalizedProvider
+          && order.paymentReference === reference
+        ) {
+          return;
+        }
+        if (status !== 'REFUNDED') {
+          throw new Error('PAYMENT_STATE_CONFLICT');
+        }
+        if (order.paymentReference && order.paymentReference !== reference) {
+          throw new Error('PAYMENT_ALREADY_CONFIRMED');
+        }
       }
 
       if (status === 'REFUNDED' && order.paymentStatus !== 'PAID_CONFIRMED') {
         throw new Error('INVALID_REFUND_STATE');
+      }
+
+      if (
+        order.paymentStatus === 'REFUNDED'
+        && status !== 'REFUNDED'
+      ) {
+        throw new Error('PAYMENT_STATE_CONFLICT');
       }
 
       if (Math.abs(Number(order.totalPrice || 0) - amount) > 0.01) {
