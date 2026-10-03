@@ -150,8 +150,9 @@ export function RiderView({
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
     setIsCapturingReceipt(true);
     try {
-      const objectRef = storageRef(storage, `eeuReceipts/${cameraOrder.id}/${currentRiderId}.jpg`);
-      await uploadBytes(objectRef, receiptFile, { contentType: receiptFile.type, customMetadata: { orderId: cameraOrder.id, riderId: currentRiderId } });
+      const extension = (receiptFile?.type.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '');
+      const objectRef = storageRef(storage, `eeuReceipts/${cameraOrder.id}/${currentRiderId}/receipt-${Date.now()}.${extension}`);
+      await uploadBytes(objectRef, receiptFile, { contentType: receiptFile.type, customMetadata: { orderId: cameraOrder.id, riderId: currentRiderId, customerId: cameraOrder.customerId } });
       const receiptImageUrl = await getDownloadURL(objectRef);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const updatedEeu: EeuRechargeDetails = {
