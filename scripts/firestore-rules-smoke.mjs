@@ -80,7 +80,7 @@ async function main() {
     deliveryFee: 0, totalPrice: 100, status: 'PICKED_UP', paymentMethod: 'TELEBIRR',
     paymentStatus: 'PAID_CONFIRMED', customerId: customerUid, customerName: 'Customer User',
     customerPhone: '', customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test address',
-    createdAt: new Date().toISOString(), riderUid, riderName: 'rider User'
+    createdAt: new Date().toISOString(), riderId: riderUid, riderName: 'rider User'
   };
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
@@ -225,12 +225,12 @@ async function main() {
 
   const receiptPath = `eeuReceipts/${validOrder.id}/${riderUid}/rider.jpg`;
   await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([1, 2, 3]), {
-    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderUid, customerId: customerUid }
+    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid, customerId: customerUid }
   });
   console.log('PASS rider can create correctly scoped receipt');
   await expectDenied('rider cannot overwrite receipt', async () => {
     await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([4, 5, 6]), {
-      contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderUid }
+      contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid }
     });
   });
   await expectDenied('inactive rider cannot read EEU receipt', async () => {
