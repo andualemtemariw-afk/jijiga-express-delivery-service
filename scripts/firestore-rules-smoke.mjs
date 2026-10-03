@@ -338,13 +338,14 @@ async function main() {
   });
 
   const paidPendingOrderId = 'paid-pending-cancel-order';
+  const paidPendingFixture = { ...validOrder };
+  delete paidPendingFixture.riderId;
+  delete paidPendingFixture.riderName;
   await adminDb.doc(`orders/${paidPendingOrderId}`).set({
-    ...validOrder,
+    ...paidPendingFixture,
     id: paidPendingOrderId,
     status: 'PENDING',
-    paymentStatus: 'PAID_CONFIRMED',
-    riderId: undefined,
-    riderName: undefined
+    paymentStatus: 'PAID_CONFIRMED'
   });
   await expectDenied('customer cannot cancel a paid order', async () => {
     await updateDoc(doc(customer.db, 'orders', paidPendingOrderId), { status: 'CANCELLED' });
