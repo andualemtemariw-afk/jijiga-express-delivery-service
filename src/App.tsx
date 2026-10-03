@@ -304,7 +304,6 @@ export default function App() {
       customerAddress: effectiveAddress,
       customerCoordinates: destCoords,
       mamilaCoordinates: originCoords,
-      riderCoordinates: originCoords,
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
       distanceKm: 3.2,
