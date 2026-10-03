@@ -20,14 +20,14 @@ async function requireAdmin(uid?: string): Promise<void> {
   if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
 
   const token = await auth.getUser(uid);
-  if (token.customClaims?.role === 'admin' && token.customClaims?.active !== false) return;
+  if (token.customClaims?.role === 'admin' && token.customClaims?.active === true) return;
 
   const userSnap = await db.doc(`users/${uid}`).get();
   const profile = userSnap.data() || {};
   if (
     !userSnap.exists
     || profile.role !== 'admin'
-    || profile.active === false
+    || profile.active !== true
   ) {
     throw new HttpsError('permission-denied', 'Administrator privileges are required.');
   }
@@ -168,8 +168,12 @@ export const createServiceOrder = onCall(async (request) => {
 
   const data = (request.data || {}) as Record<string, unknown>;
   const profileSnap = await db.doc(`users/${uid}`).get();
-  if (profileSnap.exists && profileSnap.data()?.active === false) {
-    throw new HttpsError('permission-denied', 'This account is inactive.');
+  if (!profileSnap.exists) {
+    throw new HttpsError('permission-denied', 'A user profile is required.');
+  }
+  const profile = profileSnap.data() || {};
+  if (profile.role !== 'customer' && profile.active !== true) {
+    throw new HttpsError('permission-denied', 'This staff account is inactive.');
   }
   const serviceType = asBoundedString(data.serviceType, 'serviceType', 30);
   if (!['PARCEL', 'RIDE', 'EEU_RECHARGE'].includes(serviceType)) {
