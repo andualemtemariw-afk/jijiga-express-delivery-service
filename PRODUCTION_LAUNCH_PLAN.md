@@ -8,26 +8,25 @@
 - Staff access honors the `active` flag so deactivated staff lose role access.
 - Removed demo/default EEU token from the Rider receipt workflow.
 - Added a trusted Firebase Functions layer for staff provisioning/deactivation.
-- Added a provider-neutral payment webhook contract that validates order ID, amount, currency and payment state before writing `paymentStatus`.
-- Registered the `functions/` source directory in `firebase.json`.
+- Added a provider-neutral payment settlement path with strict order, amount, currency, provider, and payment-state validation.
 - Added a trusted `createServiceOrder` callable for PARCEL, RIDE, and EEU_RECHARGE pricing and order creation; direct customer Firestore creation is limited to inventory-backed FOOD/KHAT.
 - Added an npm root override for `@grpc/grpc-js` 1.14.5 and locked its transitive dependency tree.
+- Added a provider-specific Telebirr adapter with RSA-PSS verification, merchant identity checks, H5 checkout creation, merchant-order binding, and idempotent settlement.
 
 ## Payment integration rule
 
 Do not connect a payment provider directly to React to set `PAID_CONFIRMED`.
-The provider adapter must authenticate the provider's webhook/signature and then send a normalized event to `paymentWebhook`.
 
-Normalized event fields:
+For Telebirr, the production flow is:
 
-- `orderId`
-- `provider`
-- `reference`
-- `status`
-- `amount`
-- `currency` (`ETB`)
+1. Customer creates an order with `paymentMethod=TELEBIRR`.
+2. React calls `createTelebirrCheckout`.
+3. The trusted Function creates the Telebirr H5 pre-order and signs it server-side.
+4. Telebirr calls `telebirrWebhook`.
+5. The Function verifies Telebirr's signature and merchant identity before settling the order transactionally.
+6. Duplicate callbacks are idempotent through `paymentEvents`.
 
-The backend rejects unknown orders, unsupported currency, and amount mismatches.
+The generic `paymentWebhook` is not an adapter for Telebirr and explicitly rejects Telebirr traffic.
 
 ## Staff provisioning
 
@@ -35,8 +34,10 @@ Create or deactivate staff through `provisionStaff` and `setStaffActive` callabl
 
 ## Remaining deployment work
 
-1. Install `functions/` dependencies and generate its lockfile.
-2. Configure `PAYMENT_WEBHOOK_SECRET` using Firebase Secret Manager, not source code.
-3. Implement the specific payment-provider signature adapter before accepting real provider callbacks.
-4. Run Firebase Emulator rules tests against `firestore.rules` and `storage.rules`.
-5. Review the remaining moderate dependency findings and add monitoring/alerts and production backups before public launch.
+1. Migrate production data from the named Firestore database to the default database before production use of this release.
+2. Configure Telebirr production secrets in Firebase Secret Manager.
+3. Keep non-Telebirr payment methods disabled until their provider-specific adapters are implemented and tested.
+4. Deploy Firestore/Storage rules and Functions from the release commit.
+5. Run controlled production smoke tests for authentication, order creation, inventory reservation, delivery-state transitions, receipt upload, and the Telebirr payment lifecycle.
+6. Review and disposition remaining moderate dependency advisories.
+

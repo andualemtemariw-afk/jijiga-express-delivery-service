@@ -6,13 +6,13 @@
 - Branch: `feat/stage2-operational-remediations`
 - Pull request: #1 — Apply Stage 3 production hardening
 - Target: `main`
-- Current head: `442f78f81fae850087bc1abce1f3c206b655387a`
+- Current head: `90e059dd02416302601bb718b01580e44cc5e746`
 
 ## Current gate
 
 **NOT READY FOR MERGE**
 
-CI/security validation is green on the current head. The remaining items are production architecture, payment-provider integration, dependency-risk disposition, deployment, and post-deploy verification.
+Automated CI/security validation is green on the current head. The remaining work is production architecture, credential provisioning, deployment, and controlled post-deploy verification.
 
 ## Implemented
 
@@ -24,28 +24,30 @@ CI/security validation is green on the current head. The remaining items are pro
 - Idempotent payment event handling.
 - Trusted staff provisioning and one-time admin bootstrap.
 - Reproducible npm lockfiles and CI workflows.
-- Firebase Emulator smoke-test harness and release documentation.
+- Firebase Emulator smoke-test harness.
+- Telebirr provider-specific signing verification, merchant identity validation, server-side H5 checkout creation, merchant-order binding, idempotent callback settlement, and client redirect.
+- Generic normalized payment webhooks explicitly reject Telebirr so the provider-specific callback cannot be bypassed.
 
 ## Verified evidence — 2026-10-03 UTC
 
-- Production Validation run **37146148474** passed on current head `442f78f81fae`.
-- Current-head root typecheck passed.
-- Current-head frontend production build passed.
-- Current-head Functions install/typecheck/build passed.
-- Current-head root dependency audit passed at the configured **high-severity** gate.
-- Current-head Functions dependency audit passed at the configured **high-severity** gate.
-- Current-head Firebase rules/Storage smoke tests passed.
-- Dedicated Firestore rules run **37146148458** passed on current head.
-- The earlier stale smoke-test run was canceled after the workflow was corrected to isolate runs by commit and bound smoke execution to 10 minutes.
+- Production Validation run **37150064530** passed on head `90e059dd02416302601bb718b01580e44cc5e746`.
+- Firestore rules tests run **37150064522** passed on the same head.
+- Root typecheck and frontend production build passed.
+- Functions install, typecheck, and production build passed.
+- Root dependency audit passed at the configured high-severity gate.
+- Functions dependency audit passed at the configured high-severity gate.
+- Telebirr signature adapter smoke tests passed.
+- Firestore/Storage security smoke tests passed against the single supported emulator database.
 
-## Remaining blockers
+## Remaining release blockers
 
-1. **Dependency risk disposition.** The root tree still has moderate advisories in the Capacitor/xcode/uuid dependency chain. Functions still has moderate `uuid`-chain advisories through Google Cloud dependencies. The CI high-severity gates pass, but these moderate findings still require owner acceptance, upstream remediation, or a tested dependency upgrade before a stronger release claim is made.
-2. **Named Firestore database architecture.** The app and Functions use the named Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. Current Firebase Admin and Web SDK references document named-database access as Public Preview, so production use requires an explicit architecture decision. This must not be changed silently because migrating to `(default)` could require a data migration.
-3. **Payment-provider integration.** `paymentWebhook` currently accepts a normalized event after a shared secret check. The code explicitly documents that a concrete Telebirr/eBirr/CBE Birr/Coop Pay/etc. adapter must authenticate the provider's real callback signature before forwarding the normalized event. A real provider adapter and production credentials are still required.
+1. **Named Firestore database architecture.** The app and Functions currently use the named database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. Current Firebase Admin and Web SDK references mark named-database access as Public Preview and advise against production use. Do not silently switch to `(default)`; complete a controlled data migration and configuration change first.
+2. **Telebirr production credentials.** Configure the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager. No secrets belong in source control.
+3. **Non-Telebirr providers.** The current customer payment set is intentionally limited to Telebirr and COD. eBirr/CBE Birr/Coop Pay/etc. must not be enabled until each has its own verified provider callback adapter.
 4. **Production Firebase deployment.** No production backend deployment has been performed from this PR.
-5. **Post-deploy production smoke testing.** After deployment, run controlled Auth/Firestore/Storage/Functions/payment lifecycle checks against the production project with non-destructive test data and rollback procedures.
+5. **Post-deploy production smoke testing.** Run controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle checks against the production project with non-destructive data and rollback procedures.
+6. **Moderate dependency advisories.** The configured high-severity gates pass, but remaining moderate advisories still require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
 
 ## Merge rule
 
-Do not merge PR #1 until the remaining blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
+Do not merge PR #1 until the remaining production blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
