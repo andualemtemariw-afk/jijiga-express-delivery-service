@@ -203,6 +203,36 @@ async function main() {
   });
 
 
+
+  await expectDenied('customer cannot use an unintegrated payment provider', async () => {
+    const orderId = 'unsupported-provider-food';
+    const orderRef = doc(customer.db, 'orders', orderId);
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const reservationRef = doc(customer.db, 'inventoryReservations', orderId);
+    await runTransaction(customer.db, async (tx) => {
+      const batchSnap = await tx.get(batchRef);
+      if (!batchSnap.exists()) throw new Error('test batch missing');
+      tx.update(batchRef, {
+        available: batchSnap.data().available - 1,
+        lastReservationId: orderId,
+        updatedAt: new Date().toISOString()
+      });
+      tx.set(orderRef, {
+        id: orderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+        mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+        price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+        status: 'PENDING', paymentMethod: 'CBE_BIRR', paymentStatus: 'PAYMENT_PENDING',
+        customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+        customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+        createdAt: new Date().toISOString()
+      });
+      tx.set(reservationRef, {
+        orderId, batchId: 'test-food', customerId: customerUid,
+        quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+      });
+    });
+  });
+
   const inactive = await clientFor('inactive-rider');
   await expectDenied('inactive rider cannot read assigned order', async () => {
     await getDoc(doc(inactive.db, 'orders', validOrder.id));

@@ -49,7 +49,8 @@ async function requireAdmin(uid?: string): Promise<void> {
   }
 }
 
-const PAYMENT_METHODS = new Set([...PAYMENT_PROVIDERS, 'COD']);
+const PAYMENT_METHODS = new Set(['TELEBIRR', 'COD']);
+// Only providers with a live, verified adapter are offered for new customer orders.
 
 function isSafeOrderId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(value);

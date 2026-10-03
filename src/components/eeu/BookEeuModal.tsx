@@ -295,7 +295,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
           <div>
             <label className="font-bold text-slate-800 block mb-1">Payment Method for Float & Errand Fee</label>
             <div className="grid grid-cols-3 gap-2">
-              {(['TELEBIRR', 'CBE_BIRR', 'COD'] as PaymentMethod[]).map(pm => (
+              {(['TELEBIRR', 'COD'] as PaymentMethod[]).map(pm => (
                 <button
                   key={pm}
                   type="button"

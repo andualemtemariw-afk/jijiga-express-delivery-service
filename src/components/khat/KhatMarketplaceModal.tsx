@@ -636,10 +636,8 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Popular' },
-                      { id: 'CBE_BIRR', label: 'CBE Birr', badge: 'Direct' },
-                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' },
-                      { id: 'SAHAL', label: 'Sahal / Zaad', badge: 'Cross-border' }
+                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Online' },
+                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' }
                     ].map((m) => (
                       <button
                         key={m.id}

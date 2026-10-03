@@ -101,7 +101,7 @@ service cloud.firestore {
       && request.resource.data.status == 'PENDING'
       && request.resource.data.serviceType in ['FOOD', 'KHAT']
       && request.resource.data.paymentMethod in [
-        'TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB', 'COD'
+        'TELEBIRR', 'COD'
       ]
       && request.resource.data.paymentStatus == (
         request.resource.data.paymentMethod == 'COD' ? 'UNPAID' : 'PAYMENT_PENDING'

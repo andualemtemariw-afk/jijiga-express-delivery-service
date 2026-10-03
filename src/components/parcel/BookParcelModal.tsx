@@ -51,7 +51,7 @@ export function BookParcelModal({
   const [isFragile, setIsFragile] = useState(false);
   const [tamperSeal, setTamperSeal] = useState(true);
   const [specialNote, setSpecialNote] = useState('Handle with care, expedited courier delivery.');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ZAAD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
 
   if (!isOpen) return null;
 
@@ -332,13 +332,7 @@ export function BookParcelModal({
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: 'TELEBIRR', label: 'Telebirr', sub: 'Ethio Telecom' },
-                { id: 'ZAAD', label: 'Zaad', sub: 'Telesom' },
-                { id: 'EBIRR', label: 'eBIRR', sub: 'Mobile Wallet' },
-                { id: 'SAHAL', label: 'Sahal', sub: 'Golis Telecom' },
-                { id: 'COOP_PAY', label: 'Coop Pay', sub: 'CBO Bank' },
-                { id: 'CBE_BIRR', label: 'CBE Birr', sub: 'Commercial Bank' },
-                { id: 'E_DAHAB', label: 'e-Dahab', sub: 'Dahabshiil' },
+                { id: 'TELEBIRR', label: 'Telebirr', sub: 'Online payment' },
                 { id: 'COD', label: 'Cash (COD)', sub: 'Pay Courier' },
               ].map((m) => (
                 <button
