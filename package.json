@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:rules": "npx --yes firebase-tools@15.32.1 --config firebase.rules-test.json emulators:exec --only auth,firestore,storage \"node scripts/firestore-rules-smoke.mjs\""
+    "test:rules": "npx --yes firebase-tools@15.32.1 --config firebase.rules-test.json emulators:exec --only auth,firestore,storage \"node scripts/firestore-rules-smoke.mjs\"",
+    "test:telebirr": "node scripts/telebirr-adapter-smoke.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
