@@ -15,7 +15,8 @@ const auth = getAuth();
 
 const STAFF_ROLES = new Set(['mamila', 'runner', 'rider']);
 const PAYMENT_STATUSES = new Set(['PAID_CONFIRMED', 'FAILED', 'REFUNDED']);
-const PAYMENT_PROVIDERS = new Set(['TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB']);
+// Only provider-specific adapters implemented in production may settle payments.
+const PAYMENT_PROVIDERS = new Set(['TELEBIRR']);
 const paymentWebhookSecret = defineSecret('PAYMENT_WEBHOOK_SECRET');
 const telebirrFabricAppId = defineSecret('TELEBIRR_FABRIC_APP_ID');
 const telebirrAppSecret = defineSecret('TELEBIRR_APP_SECRET');
