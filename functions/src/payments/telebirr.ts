@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, verify as cryptoVerify, constants as cryptoConstants } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, verify as cryptoVerify, sign as cryptoSign, randomBytes, constants as cryptoConstants } from 'node:crypto';
 
 const EXCLUDED_FIELDS = new Set([
   'sign',
@@ -28,6 +28,42 @@ export interface TelebirrNotification {
   eventId: string;
   status: 'PAID_CONFIRMED' | 'FAILED';
   reference: string;
+}
+
+
+function normalizePrivateKey(value: string): string {
+  const trimmed = value.trim().replace(/\\n/g, '\n');
+  if (trimmed.includes('-----BEGIN')) return trimmed;
+  const body = trimmed.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) throw new Error('Invalid Telebirr private key format.');
+  const wrapped = body.match(/.{1,64}/g)?.join('\n') ?? body;
+  const candidates = [
+    `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`,
+    `-----BEGIN RSA PRIVATE KEY-----\n${wrapped}\n-----END RSA PRIVATE KEY-----\n`,
+  ];
+  for (const pem of candidates) {
+    try {
+      createPrivateKey(pem);
+      return pem;
+    } catch {
+      // Try the alternate DER container.
+    }
+  }
+  throw new Error('Unable to parse Telebirr private key.');
+}
+
+export function getTelebirrSignature(payload: Record<string, unknown>, privateKeyPem: string): string {
+  const privateKey = createPrivateKey(normalizePrivateKey(privateKeyPem));
+  const signature = cryptoSign(
+    'sha256',
+    Buffer.from(canonicalString(payload), 'utf8'),
+    { key: privateKey, padding: cryptoConstants.RSA_PKCS1_PSS_PADDING, saltLength: 32 }
+  );
+  return signature.toString('base64');
+}
+
+export function generateTelebirrMerchantOrderId(): string {
+  return `JX${Date.now().toString(36).toUpperCase()}${randomBytes(8).toString('hex').toUpperCase()}`.replace(/[^A-Za-z0-9]/g, '');
 }
 
 function asString(value: unknown): string {
