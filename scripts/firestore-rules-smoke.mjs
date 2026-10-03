@@ -223,6 +223,14 @@ async function main() {
   await updateDoc(doc(rider.db, 'orders', validOrder.id), { status: 'DELIVERED' });
   console.log('PASS rider can deliver PAID_CONFIRMED non-COD order');
 
+  const codOrder = { ...validOrder, id: 'test-cod-order', paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'PICKED_UP' };
+  await adminDb.doc(`orders/${codOrder.id}`).set(codOrder);
+  await expectDenied('rider cannot deliver COD order before collecting payment', async () => {
+    await updateDoc(doc(rider.db, 'orders', codOrder.id), { status: 'DELIVERED' });
+  });
+  await updateDoc(doc(rider.db, 'orders', codOrder.id), { status: 'DELIVERED', paymentStatus: 'COLLECTED_BY_RIDER' });
+  console.log('PASS rider can deliver COD order after collecting payment');
+
   const receiptPath = `eeuReceipts/${validOrder.id}/${riderUid}/rider.jpg`;
   await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([1, 2, 3]), {
     contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid, customerId: customerUid }
