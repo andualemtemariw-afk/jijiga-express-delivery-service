@@ -51,7 +51,7 @@ export const provisionStaff = onCall(async (request) => {
   if (data.mamilaId) profile.mamilaId = data.mamilaId;
 
   await db.doc(`users/${data.uid}`).set(profile, { merge: true });
-  await auth.setCustomUserClaims(data.uid, { role: data.role });
+  await auth.setCustomUserClaims(data.uid, { role: data.role, active: data.active !== false });
   logger.info('Staff provisioned', { uid: data.uid, role: data.role, by: request.auth?.uid });
   return { ok: true };
 });
