@@ -2,7 +2,9 @@
   "name": "jijiga-express-functions",
   "private": true,
   "packageManager": "npm@10.9.2",
-  "engines": { "node": "22" },
+  "engines": {
+    "node": "22"
+  },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
@@ -14,5 +16,8 @@
   },
   "devDependencies": {
     "typescript": "~5.8.2"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
   }
 }
