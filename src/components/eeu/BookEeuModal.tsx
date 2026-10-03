@@ -40,7 +40,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
-  const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '+251 91 234 5678');
+  const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
   const [specialNote, setSpecialNote] = useState<string>('');
 
