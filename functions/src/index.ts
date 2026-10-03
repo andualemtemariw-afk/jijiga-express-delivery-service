@@ -1,9 +1,11 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { parseAndVerifyTelebirrNotification, getTelebirrSignature, generateTelebirrMerchantOrderId } from './payments/telebirr';
 import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
+import { randomBytes } from 'node:crypto';
 
 initializeApp();
 
@@ -15,6 +17,19 @@ const STAFF_ROLES = new Set(['mamila', 'runner', 'rider']);
 const PAYMENT_STATUSES = new Set(['PAID_CONFIRMED', 'FAILED', 'REFUNDED']);
 const PAYMENT_PROVIDERS = new Set(['TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB']);
 const paymentWebhookSecret = defineSecret('PAYMENT_WEBHOOK_SECRET');
+const telebirrFabricAppId = defineSecret('TELEBIRR_FABRIC_APP_ID');
+const telebirrAppSecret = defineSecret('TELEBIRR_APP_SECRET');
+const telebirrMerchantAppId = defineSecret('TELEBIRR_MERCHANT_APP_ID');
+const telebirrMerchantCode = defineSecret('TELEBIRR_MERCHANT_CODE');
+const telebirrPrivateKey = defineSecret('TELEBIRR_PRIVATE_KEY');
+const telebirrPublicKey = defineSecret('TELEBIRR_PUBLIC_KEY');
+const telebirrNotifyUrl = defineSecret('TELEBIRR_NOTIFY_URL');
+const telebirrRedirectUrl = defineSecret('TELEBIRR_REDIRECT_URL');
+
+const TELEBIRR_API_BASE =
+  'https://superapp.ethiomobilemoney.et:38443/apiaccess/payment/gateway';
+const TELEBIRR_WEB_BASE =
+  'https://superapp.ethiomobilemoney.et:38443/payment/web/paygate?';
 
 async function requireAdmin(uid?: string): Promise<void> {
   if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
@@ -286,10 +301,301 @@ export const setStaffActive = onCall(async (request) => {
   return { ok: true };
 });
 
+type SettledPaymentEvent = {
+  eventId: string;
+  orderId: string;
+  provider: string;
+  reference: string;
+  status: 'PAID_CONFIRMED' | 'FAILED' | 'REFUNDED';
+  amount: number;
+  currency: 'ETB';
+};
+
+async function settlePaymentEvent(orderRef: FirebaseFirestore.DocumentReference, event: SettledPaymentEvent): Promise<void> {
+  const paymentEventRef = db.doc(`paymentEvents/${event.eventId}`);
+
+  await db.runTransaction(async (tx) => {
+    const [orderSnap, previousEventSnap] = await Promise.all([
+      tx.get(orderRef),
+      tx.get(paymentEventRef),
+    ]);
+
+    if (!orderSnap.exists) throw new Error('ORDER_NOT_FOUND');
+    const order = orderSnap.data() || {};
+
+    const normalizedProvider = event.provider.toUpperCase();
+    if (!PAYMENT_PROVIDERS.has(normalizedProvider)) {
+      throw new Error('UNSUPPORTED_PROVIDER');
+    }
+
+    if (previousEventSnap.exists) {
+      const previous = previousEventSnap.data() || {};
+      const sameEvent =
+        previous.orderId === event.orderId
+        && String(previous.provider || '').toUpperCase() === normalizedProvider
+        && previous.reference === event.reference
+        && previous.status === event.status
+        && Number(previous.amount) === event.amount
+        && previous.currency === 'ETB';
+
+      if (!sameEvent) throw new Error('PAYMENT_EVENT_CONFLICT');
+      return;
+    }
+
+    if (String(order.paymentMethod || '').toUpperCase() !== normalizedProvider) {
+      throw new Error('PAYMENT_PROVIDER_MISMATCH');
+    }
+
+    if (order.paymentStatus === 'PAID_CONFIRMED') {
+      if (
+        event.status === 'PAID_CONFIRMED'
+        && order.paymentProvider === normalizedProvider
+        && order.paymentReference === event.reference
+      ) {
+        return;
+      }
+      if (event.status !== 'REFUNDED') {
+        throw new Error('PAYMENT_STATE_CONFLICT');
+      }
+      if (order.paymentReference && order.paymentReference !== event.reference) {
+        throw new Error('PAYMENT_ALREADY_CONFIRMED');
+      }
+    }
+
+    if (event.status === 'REFUNDED' && order.paymentStatus !== 'PAID_CONFIRMED') {
+      throw new Error('INVALID_REFUND_STATE');
+    }
+
+    if (order.paymentStatus === 'REFUNDED' && event.status !== 'REFUNDED') {
+      throw new Error('PAYMENT_STATE_CONFLICT');
+    }
+
+    if (Math.abs(Number(order.totalPrice || 0) - event.amount) > 0.01) {
+      throw new Error('AMOUNT_MISMATCH');
+    }
+
+    tx.set(paymentEventRef, {
+      eventId: event.eventId,
+      orderId: event.orderId,
+      provider: normalizedProvider,
+      reference: event.reference,
+      status: event.status,
+      amount: event.amount,
+      currency: 'ETB',
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    tx.update(orderRef, {
+      paymentStatus: event.status,
+      paymentProvider: normalizedProvider,
+      paymentReference: event.reference,
+      paymentVerifiedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const auditRef = db.collection('deliveryEvents').doc();
+    tx.set(auditRef, {
+      orderId: event.orderId,
+      actorRole: 'PAYMENT_PROVIDER',
+      actorId: normalizedProvider,
+      actorName: normalizedProvider,
+      status: order.status || 'PENDING',
+      eventType: 'PAYMENT_VERIFIED',
+      paymentStatus: event.status,
+      paymentReference: event.reference,
+      amount: event.amount,
+      eventId: event.eventId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+async function telebirrPostJson(
+  url: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  const raw = await response.text();
+  let parsed: Record<string, unknown> = {};
+  try {
+    const json = raw ? JSON.parse(raw) : {};
+    if (json && typeof json === 'object' && !Array.isArray(json)) parsed = json;
+  } catch {
+    // Preserve an HTTP error response even when it is not JSON.
+  }
+
+  if (!response.ok) {
+    throw new Error(`TELEBIRR_HTTP_${response.status}`);
+  }
+
+  return parsed;
+}
+
+function buildTelebirrCheckoutUrl(
+  prepayId: string,
+  merchantAppId: string,
+  merchantCode: string,
+  privateKey: string,
+): string {
+  const params = {
+    appid: merchantAppId,
+    merch_code: merchantCode,
+    nonce_str: randomBytes(16).toString('hex').toUpperCase(),
+    prepay_id: prepayId,
+    timestamp: Math.floor(Date.now() / 1000).toString(),
+  };
+
+  const sign = getTelebirrSignature(params, privateKey);
+  const query = Object.entries({
+    ...params,
+    sign,
+    sign_type: 'SHA256WithRSA',
+    version: '1.0',
+    trade_type: 'Checkout',
+  }).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`).join('&');
+
+  return `${TELEBIRR_WEB_BASE}${query}`;
+}
+
 /**
- * Provider-neutral payment webhook contract.
- * The concrete Telebirr/eBirr/CBE Birr/Coop Pay adapter should authenticate the
- * provider signature before forwarding a normalized event to this endpoint.
+ * Creates a server-side Telebirr H5 checkout and binds the provider's
+ * merchant-order identifier to the internal order before returning the URL.
+ */
+export const createTelebirrCheckout = onCall({
+  secrets: [
+    telebirrFabricAppId,
+    telebirrAppSecret,
+    telebirrMerchantAppId,
+    telebirrMerchantCode,
+    telebirrPrivateKey,
+    telebirrNotifyUrl,
+    telebirrRedirectUrl,
+  ],
+}, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Authentication is required.');
+
+  const data = (request.data || {}) as Record<string, unknown>;
+  const orderId = asBoundedString(data.orderId, 'orderId', 128);
+  const orderRef = db.doc(`orders/${orderId}`);
+  const orderSnap = await orderRef.get();
+
+  if (!orderSnap.exists) throw new HttpsError('not-found', 'Order not found.');
+  const order = orderSnap.data() || {};
+
+  if (order.customerId !== uid) {
+    throw new HttpsError('permission-denied', 'You can only pay for your own order.');
+  }
+  if (String(order.paymentMethod || '').toUpperCase() !== 'TELEBIRR') {
+    throw new HttpsError('failed-precondition', 'This order is not configured for Telebirr.');
+  }
+  if (order.paymentStatus !== 'PAYMENT_PENDING') {
+    throw new HttpsError('failed-precondition', 'This order is not awaiting payment.');
+  }
+
+  const totalAmount = Number(order.totalPrice);
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    throw new HttpsError('failed-precondition', 'Order amount is invalid.');
+  }
+
+  const merchantOrderId = generateTelebirrMerchantOrderId();
+  const fabricAppId = telebirrFabricAppId.value().trim();
+  const appSecret = telebirrAppSecret.value();
+  const merchantAppId = telebirrMerchantAppId.value().trim();
+  const merchantCode = telebirrMerchantCode.value().trim();
+  const privateKey = telebirrPrivateKey.value();
+  const notifyUrl = telebirrNotifyUrl.value().trim();
+  const redirectUrl = telebirrRedirectUrl.value().trim();
+
+  if (!fabricAppId || !appSecret || !merchantAppId || !merchantCode || !privateKey || !notifyUrl) {
+    throw new HttpsError('failed-precondition', 'Telebirr production credentials are not configured.');
+  }
+  if (!/^\d{6}$/.test(merchantCode)) {
+    throw new HttpsError('failed-precondition', 'Telebirr merchant code must be six digits.');
+  }
+
+  try {
+    const tokenResponse = await telebirrPostJson(
+      `${TELEBIRR_API_BASE}/payment/v1/token`,
+      {
+        'Content-Type': 'application/json',
+        'X-APP-Key': fabricAppId,
+      },
+      { appSecret },
+    );
+
+    const fabricToken = typeof tokenResponse.token === 'string' ? tokenResponse.token.trim() : '';
+    if (!fabricToken) throw new Error('TELEBIRR_TOKEN_MISSING');
+
+    const bizContent: Record<string, unknown> = {
+      notify_url: notifyUrl,
+      appid: merchantAppId,
+      merch_code: merchantCode,
+      merch_order_id: merchantOrderId,
+      trade_type: 'Checkout',
+      title: `Jijiga Express Order ${orderId.slice(-8)}`,
+      total_amount: totalAmount.toFixed(2),
+      trans_currency: 'ETB',
+      timeout_express: '120m',
+    };
+    if (redirectUrl) bizContent.redirect_url = redirectUrl;
+
+    const requestBody: Record<string, unknown> = {
+      timestamp: Math.floor(Date.now() / 1000).toString(),
+      nonce_str: randomBytes(16).toString('hex').toUpperCase(),
+      method: 'payment.preorder',
+      version: '1.0',
+      biz_content: bizContent,
+    };
+    requestBody.sign = getTelebirrSignature(requestBody, privateKey);
+    requestBody.sign_type = 'SHA256WithRSA';
+
+    const createOrderResponse = await telebirrPostJson(
+      `${TELEBIRR_API_BASE}/payment/v1/merchant/preOrder`,
+      {
+        'Content-Type': 'application/json',
+        Authorization: fabricToken,
+        'X-APP-Key': fabricAppId,
+      },
+      requestBody,
+    );
+
+    const responseBiz = createOrderResponse.biz_content;
+    const prepayId = responseBiz && typeof responseBiz === 'object'
+      ? String((responseBiz as Record<string, unknown>).prepay_id || '')
+      : '';
+    if (!prepayId) throw new Error('TELEBIRR_PREPAY_ID_MISSING');
+
+    await orderRef.set({
+      paymentMerchantOrderId: merchantOrderId,
+      paymentCheckoutPrepayId: prepayId,
+      paymentCheckoutCreatedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return {
+      checkoutUrl: buildTelebirrCheckoutUrl(prepayId, merchantAppId, merchantCode, privateKey),
+      paymentMerchantOrderId: merchantOrderId,
+      prepayId,
+    };
+  } catch (error: unknown) {
+    const code = error instanceof Error ? error.message : 'TELEBIRR_CHECKOUT_FAILED';
+    logger.error('Telebirr checkout failed', { orderId, code });
+    throw new HttpsError('failed-precondition', 'Telebirr checkout could not be created.');
+  }
+});
+
+/**
+ * Generic normalized webhook contract. External payment providers must first
+ * pass their real signature verification and then call/forward a normalized
+ * event to this endpoint using the shared secret.
  */
 export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, async (req, res) => {
   if (req.method !== 'POST') {
@@ -307,7 +613,7 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
   const body = (req.body ?? {}) as Record<string, unknown>;
   const eventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
   const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
-  const provider = typeof body.provider === 'string' ? body.provider.trim() : '';
+  const provider = typeof body.provider === 'string' ? body.provider.trim().toUpperCase() : '';
   const reference = typeof body.reference === 'string' ? body.reference.trim() : '';
   const status = body.status;
   const amount = body.amount;
@@ -323,107 +629,16 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
     return;
   }
 
-  const orderRef = db.doc(`orders/${orderId}`);
-  const paymentEventRef = db.doc(`paymentEvents/${eventId}`);
-
   try {
-    await db.runTransaction(async (tx) => {
-      const [orderSnap, previousEventSnap] = await Promise.all([
-        tx.get(orderRef),
-        tx.get(paymentEventRef),
-      ]);
-
-      if (!orderSnap.exists) throw new Error('ORDER_NOT_FOUND');
-      const order = orderSnap.data() || {};
-
-      if (previousEventSnap.exists) {
-        const previous = previousEventSnap.data() || {};
-        const sameEvent =
-          previous.orderId === orderId
-          && previous.provider === provider
-          && previous.reference === reference
-          && previous.status === status
-          && Number(previous.amount) === amount
-          && previous.currency === 'ETB';
-
-        if (!sameEvent) throw new Error('PAYMENT_EVENT_CONFLICT');
-        return;
-      }
-
-      const normalizedProvider = provider.toUpperCase();
-      if (!PAYMENT_PROVIDERS.has(normalizedProvider)) {
-        throw new Error('UNSUPPORTED_PROVIDER');
-      }
-      if (String(order.paymentMethod || '').toUpperCase() !== normalizedProvider) {
-        throw new Error('PAYMENT_PROVIDER_MISMATCH');
-      }
-
-      if (order.paymentStatus === 'PAID_CONFIRMED') {
-        if (
-          status === 'PAID_CONFIRMED'
-          && order.paymentProvider === normalizedProvider
-          && order.paymentReference === reference
-        ) {
-          return;
-        }
-        if (status !== 'REFUNDED') {
-          throw new Error('PAYMENT_STATE_CONFLICT');
-        }
-        if (order.paymentReference && order.paymentReference !== reference) {
-          throw new Error('PAYMENT_ALREADY_CONFIRMED');
-        }
-      }
-
-      if (status === 'REFUNDED' && order.paymentStatus !== 'PAID_CONFIRMED') {
-        throw new Error('INVALID_REFUND_STATE');
-      }
-
-      if (
-        order.paymentStatus === 'REFUNDED'
-        && status !== 'REFUNDED'
-      ) {
-        throw new Error('PAYMENT_STATE_CONFLICT');
-      }
-
-      if (Math.abs(Number(order.totalPrice || 0) - amount) > 0.01) {
-        throw new Error('AMOUNT_MISMATCH');
-      }
-
-      tx.set(paymentEventRef, {
-        eventId,
-        orderId,
-        provider: normalizedProvider,
-        reference,
-        status,
-        amount,
-        currency: 'ETB',
-        createdAt: FieldValue.serverTimestamp(),
-      });
-
-      tx.update(orderRef, {
-        paymentStatus: status,
-        paymentProvider: normalizedProvider,
-        paymentReference: reference,
-        paymentVerifiedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      const auditRef = db.collection('deliveryEvents').doc();
-      tx.set(auditRef, {
-        orderId,
-        actorRole: 'PAYMENT_PROVIDER',
-        actorId: provider,
-        actorName: provider,
-        status: order.status || 'PENDING',
-        eventType: 'PAYMENT_VERIFIED',
-        paymentStatus: status,
-        paymentReference: reference,
-        amount,
-        eventId,
-        createdAt: FieldValue.serverTimestamp(),
-      });
+    await settlePaymentEvent(db.doc(`orders/${orderId}`), {
+      eventId,
+      orderId,
+      provider,
+      reference,
+      status: status as SettledPaymentEvent['status'],
+      amount,
+      currency: 'ETB',
     });
-
     res.status(200).json({ ok: true });
   } catch (error: unknown) {
     const code = error instanceof Error ? error.message : 'PAYMENT_EVENT_FAILED';
@@ -433,7 +648,92 @@ export const paymentWebhook = onRequest({ secrets: [paymentWebhookSecret] }, asy
       PAYMENT_ALREADY_CONFIRMED: 409,
       INVALID_REFUND_STATE: 409,
       AMOUNT_MISMATCH: 409,
+      PAYMENT_STATE_CONFLICT: 409,
     };
     res.status(responseCodes[code] || 400).send(code);
+  }
+});
+
+/**
+ * Real Telebirr provider callback. Unlike paymentWebhook, this route verifies
+ * the RSA-PSS signature from Telebirr itself and validates our merchant identity
+ * before settling the internal order.
+ */
+export const telebirrWebhook = onRequest({
+  secrets: [telebirrPublicKey, telebirrMerchantAppId, telebirrMerchantCode, telebirrNotifyUrl],
+}, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  const rawBody = (() => {
+    const candidate = (req as typeof req & { rawBody?: Buffer }).rawBody;
+    if (candidate instanceof Buffer) return candidate.toString('utf8');
+    if (typeof req.body === 'string') return req.body;
+    return JSON.stringify(req.body ?? {});
+  })();
+
+  try {
+    const publicKey = telebirrPublicKey.value().trim();
+    const merchantAppId = telebirrMerchantAppId.value().trim();
+    const merchantCode = telebirrMerchantCode.value().trim();
+    const notifyUrl = telebirrNotifyUrl.value().trim();
+    if (!publicKey || !merchantAppId || !merchantCode || !notifyUrl) {
+      throw new Error('TELEBIRR_NOT_CONFIGURED');
+    }
+
+    const notification = parseAndVerifyTelebirrNotification(rawBody, publicKey);
+
+    if (
+      notification.appId !== merchantAppId
+      || notification.merchCode !== merchantCode
+      || notification.notifyUrl !== notifyUrl
+    ) {
+      res.status(401).json({ ok: false, error: 'MERCHANT_IDENTITY_MISMATCH' });
+      return;
+    }
+
+    const orderQuery = await db.collection('orders')
+      .where('paymentMerchantOrderId', '==', notification.merchantOrderId)
+      .limit(1)
+      .get();
+
+    if (orderQuery.empty) {
+      res.status(404).json({ ok: false, error: 'ORDER_NOT_FOUND' });
+      return;
+    }
+
+    const orderDoc = orderQuery.docs[0];
+    await settlePaymentEvent(orderDoc.ref, {
+      eventId: notification.eventId,
+      orderId: orderDoc.id,
+      provider: 'TELEBIRR',
+      reference: notification.reference,
+      status: notification.status,
+      amount: notification.amount,
+      currency: 'ETB',
+    });
+
+    res.status(200).json({ ok: true });
+  } catch (error: unknown) {
+    const code = error instanceof Error ? error.message : 'TELEBIRR_WEBHOOK_FAILED';
+    const responseCodes: Record<string, number> = {
+      INVALID_JSON: 400,
+      INVALID_PAYLOAD: 400,
+      INVALID_SIGNATURE: 401,
+      INVALID_PAYMENT_FIELDS: 400,
+      UNSUPPORTED_TRADE_STATUS: 400,
+      TELEBIRR_NOT_CONFIGURED: 503,
+      ORDER_NOT_FOUND: 404,
+      PAYMENT_EVENT_CONFLICT: 409,
+      PAYMENT_ALREADY_CONFIRMED: 409,
+      INVALID_REFUND_STATE: 409,
+      AMOUNT_MISMATCH: 409,
+      PAYMENT_STATE_CONFLICT: 409,
+    };
+    const statusCode = responseCodes[code] || (code.startsWith('TELEBIRR_') ? 400 : 400);
+    logger.warn('Telebirr webhook rejected', { code });
+    res.status(statusCode).json({ ok: false, error: code });
   }
 });
