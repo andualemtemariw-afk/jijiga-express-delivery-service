@@ -24,16 +24,22 @@ service cloud.firestore {
       return signedIn() && getUserRole() == 'admin';
     }
 
+    function isStaffActive() {
+      return signedIn() && (
+        !('active' in currentUser().data) || currentUser().data.active == true
+      );
+    }
+
     function isRunner() {
-      return signedIn() && getUserRole() == 'runner';
+      return isStaffActive() && getUserRole() == 'runner';
     }
 
     function isRider() {
-      return signedIn() && getUserRole() == 'rider';
+      return isStaffActive() && getUserRole() == 'rider';
     }
 
     function isMamila() {
-      return signedIn() && getUserRole() == 'mamila';
+      return isStaffActive() && getUserRole() == 'mamila';
     }
 
     function orderDoc(orderId) {
@@ -218,7 +224,11 @@ service cloud.firestore {
         && request.resource.data.quantity > 0;
 
       allow update: if signedIn() && (
-        isAdmin()
+        (isAdmin()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt'
+          ])
+        )
         || (
           // Customer may cancel eligible orders, rate delivered orders, and file/update a dispute.
           resource.data.customerId == request.auth.uid

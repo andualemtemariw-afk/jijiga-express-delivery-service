@@ -68,7 +68,7 @@ export function RiderView({
 
   // EEU Prepaid Card State Machine & Camera Receipt Intent State
   const [cameraOrder, setCameraOrder] = useState<Order | null>(null);
-  const [cameraTokenInput, setCameraTokenInput] = useState<string>('4920 1928 4820 9182 3849');
+  const [cameraTokenInput, setCameraTokenInput] = useState<string>('');
   const [isCapturingReceipt, setIsCapturingReceipt] = useState(false);
   const [eeuErrorMsg, setEeuErrorMsg] = useState<Record<string, string | null>>({});
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -516,7 +516,7 @@ export function RiderView({
                         <button 
                           onClick={() => onUpdateOrder(order.id, { 
                             status: 'DELIVERED',
-                            paymentStatus: order.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : 'PAID_CONFIRMED'
+                            ...(order.paymentMethod === 'COD' ? { paymentStatus: 'COLLECTED_BY_RIDER' as const } : {})
                           })} 
                           className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 flex items-center justify-center gap-2 cursor-pointer shadow-md"
                         >

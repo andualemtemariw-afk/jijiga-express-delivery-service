@@ -540,6 +540,12 @@ export default function App() {
           });
         }
       } catch (err: any) {
+        // Persistence failed: restore the previous in-memory order so UI cannot
+        // advertise a state that Firestore rejected.
+        const fresh = orders.find(o => o.id === orderId);
+        if (fresh) {
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...fresh } : o));
+        }
         showAlert(`Status update failed: ${err.message}`, 'error');
       }
     }
@@ -654,7 +660,7 @@ export default function App() {
     } else if (target.status === 'PICKED_UP' || target.status === 'IN_TRANSIT') {
       handleUpdateOrder(orderId, { 
         status: 'DELIVERED',
-        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : 'PAID_CONFIRMED'
+        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : target.paymentStatus
       });
     }
   };
