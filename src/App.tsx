@@ -36,7 +36,7 @@ import {
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
 import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
-import { createServiceOrder } from './services/serviceOrderFunctions';
+import { createServiceOrder, createTelebirrCheckout } from './services/serviceOrderFunctions';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -331,6 +331,11 @@ export default function App() {
           actorName: effectiveCustomerName,
           note: `Order placed for ${batch.name} (${paymentMethod}) and entered unassigned runner pool.`
         });
+        if (paymentMethod === 'TELEBIRR') {
+          const checkout = await createTelebirrCheckout(orderDocId);
+          window.location.assign(checkout.checkoutUrl);
+          return;
+        }
         showAlert(`Order #${orderDocId.slice(-6)} securely saved to Cloud Firestore!`, 'success');
       } catch (err: any) {
         console.error('Failed to save order to Firestore:', err);
@@ -379,6 +384,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express parcel booked: ${fullOrder.batchName}.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Parcel Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -423,6 +433,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express Bajaj ride requested.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Ride #${fullOrder.id.slice(-6)} recorded in Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -469,6 +484,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `EEU Prepaid electricity recharge booked.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`EEU Recharge Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
