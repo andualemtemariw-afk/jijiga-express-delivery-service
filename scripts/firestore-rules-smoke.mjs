@@ -249,8 +249,22 @@ async function main() {
       quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
     });
   });
+  const missingReleaseOrderId = 'missing-release-cancel-order';
+  await adminDb.doc(`orders/${missingReleaseOrderId}`).set({
+    id: missingReleaseOrderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+    mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+    price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+    status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+    customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+    customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+    createdAt: new Date().toISOString()
+  });
+  await adminDb.doc(`inventoryReservations/${missingReleaseOrderId}`).set({
+    orderId: missingReleaseOrderId, batchId: 'test-food', customerId: customerUid,
+    quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+  });
   await expectDenied('customer cannot cancel inventory-backed order without release transaction', async () => {
-    await updateDoc(doc(customer.db, 'orders', cancelOrderId), { status: 'CANCELLED' });
+    await updateDoc(doc(customer.db, 'orders', missingReleaseOrderId), { status: 'CANCELLED' });
   });
 
   console.log('PASS customer can atomically cancel and release the exact reserved quantity');
