@@ -70,6 +70,7 @@ async function expectDenied(label, action) {
 async function main() {
   const customerUid = await createUser('customer', 'customer');
   const riderUid = await createUser('rider', 'rider');
+  const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
   const strangerUid = await createUser('stranger', 'customer');
 
@@ -210,6 +211,10 @@ async function main() {
   });
 
   const rider = await clientFor('rider');
+  const otherRider = await clientFor('other-rider');
+  await expectDenied('other active rider cannot read another rider assigned order', async () => {
+    await getDoc(doc(otherRider.db, 'orders', validOrder.id));
+  });
   const unpaidOrder = { ...validOrder, id: 'test-unpaid-order', paymentStatus: 'PAYMENT_PENDING' };
   await adminDb.doc(`orders/${unpaidOrder.id}`).set(unpaidOrder);
   await expectDenied('rider cannot deliver non-COD unpaid order', async () => {
