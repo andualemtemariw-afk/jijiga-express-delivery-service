@@ -327,12 +327,13 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
           && validRiderTransition()
           && (
-            request.resource.data.paymentStatus == resource.data.paymentStatus
-            || (
+            request.resource.data.status == 'DELIVERED'
+            ? (
               resource.data.paymentMethod == 'COD'
-              && request.resource.data.status == 'DELIVERED'
-              && request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
+                ? request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
+                : request.resource.data.paymentStatus == 'PAID_CONFIRMED'
             )
+            : request.resource.data.paymentStatus == resource.data.paymentStatus
           )
           && (
             !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
