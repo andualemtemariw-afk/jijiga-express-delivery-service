@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
+const DEMO_SANDBOX_ENABLED = import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
@@ -62,7 +63,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<AppUserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    return localStorage.getItem('jijiga_mode') === 'demo';
+    return DEMO_SANDBOX_ENABLED && localStorage.getItem('jijiga_mode') === 'demo';
   });
 
   const [activeRole, setActiveRole] = useState<Role>('CUSTOMER');
@@ -181,6 +182,10 @@ export default function App() {
 
   const toggleMode = (mode: 'demo' | 'prod') => {
     const isDemo = mode === 'demo';
+    if (isDemo && !DEMO_SANDBOX_ENABLED) {
+      showAlert('Demo Sandbox is disabled in this production build.', 'error');
+      return;
+    }
     setIsDemoMode(isDemo);
     localStorage.setItem('jijiga_mode', isDemo ? 'demo' : 'prod');
     showAlert(`Switched to ${isDemo ? 'DEMO Mode (bundled data)' : 'PRODUCTION Mode (live Cloud Firestore)'}`, 'info');
@@ -597,10 +602,10 @@ export default function App() {
     }
   };
 
-  // Step-through simulation helper (Available exclusively in Demo Sandbox or for Admin diagnostics)
+  // Step-through simulation helper — never advances live production orders.
   const handleSimulateNextStep = (orderId: string) => {
-    if (!isDemoMode && userProfile?.role !== 'admin') {
-      showAlert('Dispatch progression in production is managed exclusively by verified couriers.', 'error');
+    if (!isDemoMode) {
+      showAlert('Simulation is disabled for live production orders.', 'error');
       return;
     }
     const target = orders.find(o => o.id === orderId);
@@ -1191,7 +1196,7 @@ export default function App() {
                 <Flame className="w-3.5 h-3.5" />
                 Return to Live Production
               </button>
-            ) : (
+            ) : DEMO_SANDBOX_ENABLED ? (
               <button
                 onClick={() => toggleMode('demo')}
                 className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer flex items-center gap-1"
@@ -1200,7 +1205,7 @@ export default function App() {
                 <Database className="w-3 h-3" />
                 Developer Demo Sandbox
               </button>
-            )}
+            ) : null}
             <span aria-hidden="true" className="text-slate-300">·</span>
             <button
               onClick={() => setShowKeyModal(true)}
