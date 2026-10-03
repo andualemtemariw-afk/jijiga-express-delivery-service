@@ -1,6 +1,9 @@
 name: Firebase production preflight
 
 on:
+  push:
+    branches:
+      - feat/stage2-operational-remediations
   workflow_dispatch:
 
 permissions:
