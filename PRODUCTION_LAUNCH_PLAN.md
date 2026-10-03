@@ -10,6 +10,8 @@
 - Added a trusted Firebase Functions layer for staff provisioning/deactivation.
 - Added a provider-neutral payment webhook contract that validates order ID, amount, currency and payment state before writing `paymentStatus`.
 - Registered the `functions/` source directory in `firebase.json`.
+- Added a trusted `createServiceOrder` callable for PARCEL, RIDE, and EEU_RECHARGE pricing and order creation; direct customer Firestore creation is limited to inventory-backed FOOD/KHAT.
+- Added an npm root override for `@grpc/grpc-js` 1.14.5 and locked its transitive dependency tree.
 
 ## Payment integration rule
 
@@ -37,4 +39,4 @@ Create or deactivate staff through `provisionStaff` and `setStaffActive` callabl
 2. Configure `PAYMENT_WEBHOOK_SECRET` using Firebase Secret Manager, not source code.
 3. Implement the specific payment-provider signature adapter before accepting real provider callbacks.
 4. Run Firebase Emulator rules tests against `firestore.rules` and `storage.rules`.
-5. Add monitoring/alerts and production backups before public launch.
+5. Review the remaining moderate dependency findings and add monitoring/alerts and production backups before public launch.
