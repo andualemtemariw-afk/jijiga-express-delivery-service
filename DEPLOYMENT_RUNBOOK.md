@@ -38,7 +38,7 @@ Payment production flow:
 
 ## Rules and Functions deployment
 
-After emulator tests pass and the Firestore named-database migration has been verified:
+After emulator tests pass and the Firestore database architecture (current named database or an explicitly completed migration to `(default)`) has been verified:
 
     firebase use <project-id>
     firebase deploy --only firestore:rules,storage,functions
