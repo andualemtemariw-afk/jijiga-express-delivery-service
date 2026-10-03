@@ -99,7 +99,7 @@ service cloud.firestore {
       ])
       && request.resource.data.customerId == request.auth.uid
       && request.resource.data.status == 'PENDING'
-      && request.resource.data.serviceType in ['FOOD', 'PARCEL', 'RIDE', 'EEU_RECHARGE', 'KHAT']
+      && request.resource.data.serviceType in ['FOOD', 'KHAT']
       && request.resource.data.paymentMethod in [
         'TELEBIRR', 'EBIRR', 'CBE_BIRR', 'COOP_PAY', 'SAHAL', 'ZAAD', 'E_DAHAB', 'COD'
       ]
@@ -162,7 +162,7 @@ service cloud.firestore {
     }
 
     // User profiles. Self-registration can ONLY create a customer profile.
-    // Staff/admin roles must be provisioned by an existing admin or the explicit bootstrap emails.
+    // Staff/admin roles are provisioned by trusted backend functions.
     match /users/{uid} {
       allow read: if signedIn() && (
         isAdmin()
