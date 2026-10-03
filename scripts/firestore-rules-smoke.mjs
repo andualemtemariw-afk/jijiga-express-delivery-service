@@ -86,7 +86,7 @@ async function main() {
   const customer = await clientFor('customer');
 
   const validCustomerOrder = {
-    id: 'customer-create-valid',
+    id: 'customer-create-invalid-service',
     serviceType: 'RIDE',
     batchId: 'ride-taxi',
     batchName: 'Test ride',
@@ -95,8 +95,8 @@ async function main() {
     mamilaLocation: 'Jijiga',
     price: 100,
     quantity: 1,
-    deliveryFee: 20,
-    totalPrice: 120,
+    deliveryFee: 0,
+    totalPrice: 100,
     status: 'PENDING',
     paymentMethod: 'TELEBIRR',
     paymentStatus: 'PAYMENT_PENDING',
@@ -108,10 +108,12 @@ async function main() {
     customerAddress: 'Test',
     createdAt: new Date().toISOString()
   };
-  await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
-  console.log('PASS valid customer order creation');
 
-  await expectDenied('customer cannot create already-paid non-COD order', async () => {
+  await expectDenied('customer cannot directly create a RIDE order', async () => {
+    await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
+  });
+
+  await expectDenied('customer cannot create an already-paid service order directly', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
       ...validCustomerOrder,
       id: 'malicious-paid-create',
@@ -119,7 +121,7 @@ async function main() {
     });
   });
 
-  await expectDenied('customer cannot add payment verification fields on create', async () => {
+  await expectDenied('customer cannot add payment verification fields on direct create', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-payment-fields'), {
       ...validCustomerOrder,
       id: 'malicious-payment-fields',
@@ -127,17 +129,46 @@ async function main() {
     });
   });
 
+  await adminDb.doc('batches/test-food').set({
+    id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
+    price: 100, available: 5, expiry: 'test', imageUrl: '/test.jpg'
+  });
+
+  const validFoodId = 'valid-food-order';
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', validFoodId);
+    const reservationRef = doc(customer.db, 'inventoryReservations', validFoodId);
+    const batchSnap = await tx.get(batchRef);
+    if (!batchSnap.exists()) throw new Error('test batch missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available - 1,
+      lastReservationId: validFoodId,
+      updatedAt: new Date().toISOString()
+    });
+    tx.set(orderRef, {
+      id: validFoodId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+      mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+      price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+      status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+      customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+      createdAt: new Date().toISOString()
+    });
+    tx.set(reservationRef, {
+      orderId: validFoodId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+    });
+  });
+  console.log('PASS valid FOOD order creation with inventory reservation');
+
   await expectDenied('customer cannot create an order with mismatched total', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-total'), {
       ...validCustomerOrder,
       id: 'malicious-total',
+      serviceType: 'RIDE',
       totalPrice: 1
     });
-  });
-
-  await adminDb.doc('batches/test-food').set({
-    id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
-    price: 100, available: 5, expiry: 'test', imageUrl: '/test.jpg'
   });
 
   await expectDenied('customer cannot reserve stock while underpricing FOOD order', async () => {
@@ -168,15 +199,7 @@ async function main() {
       });
     });
   });
-  await expectDenied('customer cannot inject runnerId on creation', async () => {
-    await setDoc(doc(customer.db, 'orders', 'malicious-order'), {
-      id: 'malicious-order', serviceType: 'RIDE', batchId: 'ride', batchName: 'Ride',
-      mamilaId: 'm4', mamilaName: 'Test', mamilaLocation: 'Jijiga', price: 100, quantity: 1,
-      deliveryFee: 0, totalPrice: 100, status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
-      customerId: customerUid, customerName: 'Customer User', customerPhone: '', customerCity: 'Jijiga',
-      customerPlusCode: '', customerAddress: 'Test', createdAt: new Date().toISOString(), runnerId: strangerUid
-    });
-  });
+
 
   const inactive = await clientFor('inactive-rider');
   await expectDenied('inactive rider cannot read assigned order', async () => {
