@@ -2,14 +2,8 @@ export type Role = 'CUSTOMER' | 'MAMILA' | 'RUNNER' | 'RIDER' | 'ADMIN';
 
 export type ServiceType = 'FOOD' | 'PARCEL' | 'RIDE' | 'EEU_RECHARGE' | 'KHAT';
 
-export type PaymentMethod = 
-  | 'TELEBIRR' 
-  | 'EBIRR' 
-  | 'CBE_BIRR' 
-  | 'COOP_PAY'
-  | 'SAHAL' 
-  | 'ZAAD' 
-  | 'E_DAHAB' 
+export type PaymentMethod =
+  | 'TELEBIRR'
   | 'COD';
 
 export type PaymentStatus = 
