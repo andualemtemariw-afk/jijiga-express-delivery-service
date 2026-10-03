@@ -182,8 +182,12 @@ async function main() {
     lastReservationId: releaseOrderId
   });
   const badReleaseRef = doc(customer.db, 'inventoryReservations', releaseOrderId + '-release');
-  await assertFails(setDoc(badReleaseRef, { orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId, quantity: 3, action: 'RELEASE', createdAt: new Date().toISOString() }));
-  console.log('PASS cancellation release cannot exceed reserved quantity');
+  await expectDenied('customer cannot release more than originally reserved quantity', async () => {
+    await setDoc(badReleaseRef, {
+      orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId,
+      quantity: 3, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
 
   await expectDenied('customer cannot create an order with mismatched total', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-total'), {
