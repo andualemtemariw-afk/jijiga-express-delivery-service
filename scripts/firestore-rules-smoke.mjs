@@ -223,6 +223,6 @@ async function main() {
 
 main().catch(async (error) => {
   console.error(error);
-  try { await admin.app().delete(); } catch {}
+  try { await deleteAdminApp(adminApp); } catch {}
   process.exit(1);
 });
