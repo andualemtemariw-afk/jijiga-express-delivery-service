@@ -2,25 +2,29 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
-    function userDoc() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)); }
     function isActiveAdmin() {
       return signedIn()
-        && userDoc().data.role == 'admin'
-        && (!('active' in userDoc().data) || userDoc().data.active == true);
+        && request.auth.token.role == 'admin'
+        && request.auth.token.active == true;
     }
-    function orderDoc(orderId) { return firestore.get(/databases/(default)/documents/orders/$(orderId)); }
+    function isActiveRider() {
+      return signedIn()
+        && request.auth.token.role == 'rider'
+        && request.auth.token.active == true;
+    }
 
-    match /eeuReceipts/{orderId}/{fileName} {
+    match /eeuReceipts/{orderId}/{riderId}/{fileName} {
       allow read: if isActiveAdmin()
-        || (signedIn() && orderDoc(orderId).data.customerId == request.auth.uid)
-        || (signedIn() && orderDoc(orderId).data.riderId == request.auth.uid);
-      allow create: if signedIn()
-        && orderDoc(orderId).data.riderId == request.auth.uid
+        || (signedIn() && resource.metadata.customerId == request.auth.uid)
+        || (signedIn() && resource.metadata.riderId == request.auth.uid);
+      allow create: if isActiveRider()
+        && riderId == request.auth.uid
         && resource == null
         && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*')
         && request.resource.metadata.orderId == orderId
-        && request.resource.metadata.riderId == request.auth.uid;
+        && request.resource.metadata.riderId == request.auth.uid
+        && request.resource.metadata.customerId is string;
       allow update: if false;
       allow delete: if isActiveAdmin();
     }
