@@ -100,3 +100,29 @@ jobs:
           grep -q "github.ref == 'refs/heads/main'" .github/workflows/firebase-hosting.yml
           grep -q "channelId: live" .github/workflows/firebase-hosting.yml
           echo "Firebase Hosting workflow is guarded to live deployment from main."
+
+  report:
+    if: ${{ always() }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Publish preflight commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.preflight.result }}
+        run: |
+          set -euo pipefail
+          case "$RESULT" in
+            success) state=success ;;
+            *) state=failure ;;
+          esac
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$state" \
+            -f context="firebase-production-preflight" \
+            -f description="Firebase production environment preflight: $RESULT" \
+            >/dev/null
