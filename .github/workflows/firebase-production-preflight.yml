@@ -81,6 +81,16 @@ jobs:
           console.log('Hosting site(s) provisioned:', sites.map(s => s.name || s.siteId).join(', '));
           NODE
 
+      - name: Verify production frontend secret
+        env:
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        run: |
+          test -n "$VITE_GOOGLE_MAPS_API_KEY" || {
+            echo "VITE_GOOGLE_MAPS_API_KEY GitHub production secret is missing."
+            exit 1
+          }
+          echo "Production frontend Maps configuration is present."
+
       - name: Verify production/demo gate
         run: |
           test "$(node -e "const fs=require('fs'); const c=fs.readFileSync('.env.example','utf8'); const m=c.match(/VITE_ENABLE_DEMO_SANDBOX="([^"]*)"/); console.log(m?.[1] || '')")" = "false"
