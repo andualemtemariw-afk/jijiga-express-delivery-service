@@ -28,6 +28,7 @@ interface Props {
   mamilas: Mamila[];
   inventory: Batch[];
   customerProfile: {
+    uid: string;
     name: string;
     phone: string;
     city: string;
@@ -114,7 +115,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
       status: 'PENDING',
       paymentMethod,
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-      customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || 'c1',
+      customerId: customerProfile.uid,
       customerName: customerProfile.name,
       customerPhone: customerProfile.phone,
       customerCity: customerProfile.city || 'Jijiga',

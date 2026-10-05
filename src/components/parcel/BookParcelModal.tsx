@@ -102,7 +102,7 @@ export function BookParcelModal({
       status: 'PENDING',
       paymentMethod,
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-      customerId: (senderProfile as any)?.uid || (senderProfile as any)?.id || 'c1',
+      customerId: (senderProfile as any)?.uid,
       customerName: senderName,
       customerPhone: senderPhone,
       customerCity: receiverCity,

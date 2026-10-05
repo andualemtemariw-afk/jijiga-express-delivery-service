@@ -97,7 +97,7 @@ export function BookRideModal({
           status: 'PENDING',
           paymentMethod,
           paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-          customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || 'c1',
+          customerId: (customerProfile as any)?.uid,
           customerName: customerProfile.name,
           customerPhone: customerProfile.phone,
           customerCity: selectedCity,
