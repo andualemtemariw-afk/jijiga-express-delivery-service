@@ -105,7 +105,7 @@ export function getNextEeuPhase(currentPhase: EeuCustodyPhase): EeuCustodyPhase 
 
 /**
  * Enforce strict transition rules:
- * - Rider CANNOT advance to 'RETURNED' without capturing the mandatory EEU terminal paper receipt.
+ * - Rider CANNOT advance to 'RETURNED' without capturing the mandatory EEU paper receipt.
  */
 export function validateEeuTransition(
   currentDetails: EeuRechargeDetails,
@@ -124,11 +124,9 @@ export function validateEeuTransition(
   if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && !currentDetails.receiptImageUrl) {
     return {
       allowed: false,
-      reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU terminal paper receipt before advancing custody.'
+      reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
     };
   }
-
-  return { allowed: true };
 }
 
 /**
