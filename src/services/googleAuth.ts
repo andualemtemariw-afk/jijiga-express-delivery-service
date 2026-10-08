@@ -3,6 +3,9 @@ import {
   getAuth, 
   connectAuthEmulator,
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   GoogleAuthProvider, 
   onAuthStateChanged, 
@@ -95,6 +98,27 @@ export const appSignInWithGoogle = async (): Promise<User> => {
   } finally {
     isSigningIn = false;
   }
+};
+
+/**
+ * Android-safe email/password authentication. This avoids OAuth popup/sessionStorage
+ * state handling inside the Capacitor WebView.
+ */
+export const signInWithEmail = async (email: string, password: string): Promise<User> => {
+  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+  return result.user;
+};
+
+export const registerWithEmail = async (
+  email: string,
+  password: string,
+  displayName?: string
+): Promise<User> => {
+  const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  if (displayName?.trim()) {
+    await updateProfile(result.user, { displayName: displayName.trim() });
+  }
+  return result.user;
 };
 
 /**
