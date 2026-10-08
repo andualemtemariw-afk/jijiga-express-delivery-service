@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
@@ -15,7 +16,14 @@ import { MapPreviewModal } from './components/map/MapPreviewModal';
 import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
 import { GoogleDriveSyncModal } from './components/drive/GoogleDriveSyncModal';
 import { GmailNotificationModal } from './components/gmail/GmailNotificationModal';
-import { auth, appSignInWithGoogle, logout, subscribeToNetworkStatus } from './services/googleAuth';
+import {
+  auth,
+  appSignInWithGoogle,
+  signInWithEmail,
+  registerWithEmail,
+  logout,
+  subscribeToNetworkStatus
+} from './services/googleAuth';
 import { syncUserProfile, updateUserProfile } from './services/userService';
 import { 
   claimOrderAsRunner, 
@@ -82,6 +90,12 @@ export default function App() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+
 
   // Network Connectivity & Offline Resilience State
   const [isOnline, setIsOnline] = useState<boolean>(() => {
@@ -186,17 +200,71 @@ export default function App() {
   };
 
   const handleSignIn = async () => {
+    if (Capacitor.isNativePlatform()) {
+      setAuthMode('signin');
+      setShowAuthModal(true);
+      return;
+    }
+
     try {
       setAuthLoading(true);
       await appSignInWithGoogle();
       showAlert('Signed in successfully with Google account.', 'success');
     } catch (err: any) {
-      console.error('Sign in failed:', err);
-      const isNetworkErr = err?.code === 'auth/network-request-failed' || err?.message?.includes('network-request-failed');
+      console.error('Google sign in failed:', err);
+      const isNetworkErr =
+        err?.code === 'auth/network-request-failed' ||
+        err?.message?.includes('network-request-failed');
       const msg = isNetworkErr
-        ? 'Sign-in handshake was interrupted. Please ensure popups are allowed in your browser and click Sign In again.'
-        : `Authentication error: ${err.message || 'Popup closed or restricted.'}`;
+        ? 'Google sign-in was interrupted. Please try again from Chrome.'
+        : `Google authentication error: ${err.message || 'Popup closed or restricted.'}`;
       showAlert(msg, 'error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleEmailAuth = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const email = authEmail.trim();
+
+    if (!email || !authPassword) {
+      showAlert('Enter your email address and password.', 'error');
+      return;
+    }
+
+    if (authPassword.length < 6) {
+      showAlert('Password must be at least 6 characters.', 'error');
+      return;
+    }
+
+    try {
+      setAuthLoading(true);
+
+      if (authMode === 'signup') {
+        await registerWithEmail(email, authPassword, authName);
+        showAlert('Account created successfully.', 'success');
+      } else {
+        await signInWithEmail(email, authPassword);
+        showAlert('Signed in successfully.', 'success');
+      }
+
+      setShowAuthModal(false);
+      setAuthPassword('');
+    } catch (err: any) {
+      console.error('Email authentication failed:', err);
+      const code = err?.code || '';
+      const messages: Record<string, string> = {
+        'auth/email-already-in-use': 'That email already has an account. Choose Sign In.',
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/invalid-credential': 'Email or password is incorrect.',
+        'auth/user-not-found': 'No account was found for that email.',
+        'auth/wrong-password': 'Email or password is incorrect.',
+        'auth/weak-password': 'Choose a stronger password (6+ characters).',
+        'auth/too-many-requests': 'Too many attempts. Please try again later.',
+        'auth/network-request-failed': 'Network connection failed. Check your internet and try again.'
+      };
+      showAlert(messages[code] || `Authentication error: ${err?.message || 'Please try again.'}`, 'error');
     } finally {
       setAuthLoading(false);
     }
@@ -1044,7 +1112,7 @@ export default function App() {
                 <div>
                   <h4 className="font-bold text-sm text-blue-950">Customer Sign In Required for Orders</h4>
                   <p className="text-xs text-blue-800 mt-0.5">
-                    Sign in with your Google account to place verified orders, book express parcels, and track live deliveries.
+                    On Android, use a free email/password account to avoid WebView Google OAuth issues. Google sign-in remains available on the web app.
                   </p>
                 </div>
               </div>
@@ -1054,7 +1122,7 @@ export default function App() {
                   className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" />
-                  Sign In with Google
+                  Sign In to Continue
                 </button>
               </div>
             </div>
@@ -1129,6 +1197,108 @@ export default function App() {
             />
           )}
         </main>
+
+        {showAuthModal && !currentUser && (
+          <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-950">
+                    {authMode === 'signin' ? 'Sign in to Jijiga Express' : 'Create your Jijiga Express account'}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Free email/password login works directly inside the Android app.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(false)}
+                  className="text-slate-400 hover:text-slate-700 text-xl leading-none"
+                  aria-label="Close authentication dialog"
+                >
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={handleEmailAuth} className="space-y-3">
+                {authMode === 'signup' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Name</label>
+                    <input
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      placeholder="Your name"
+                      autoComplete="name"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    minLength={6}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm"
+                >
+                  {authLoading ? 'Please wait…' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
+                </button>
+              </form>
+
+              <div className="mt-4 flex items-center justify-between gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                  className="text-blue-700 font-semibold hover:underline"
+                >
+                  {authMode === 'signin' ? 'Create a new account' : 'I already have an account'}
+                </button>
+
+                {!Capacitor.isNativePlatform() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAuthModal(false);
+                      handleSignIn();
+                    }}
+                    className="text-slate-700 font-semibold hover:underline"
+                  >
+                    Use Google instead
+                  </button>
+                )}
+              </div>
+
+              <p className="mt-4 text-[11px] leading-4 text-slate-500">
+                Your account uses the existing Firebase project. No new Firebase project or database is created.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Global Map Preview Modal */}
         <MapPreviewModal
