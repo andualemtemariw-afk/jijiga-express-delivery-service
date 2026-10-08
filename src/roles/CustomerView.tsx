@@ -557,7 +557,7 @@ export function CustomerView({
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900">Book Express Parcel</div>
-              <div className="text-[11px] text-slate-500">Jijiga • Hargeisa • Dire Dawa</div>
+              <div className="text-[11px] text-slate-500">Local delivery within Jijiga</div>
             </div>
           </div>
           <span className="text-blue-700 font-bold text-xs">Dispatch →</span>
