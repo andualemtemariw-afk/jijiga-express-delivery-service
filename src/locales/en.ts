@@ -13,7 +13,7 @@ export const enLocale: AppLocale = {
   },
   services: {
     parcelTitle: 'Express Parcel Dispatch',
-    parcelSubtitle: 'Point-to-point courier across Jijiga, Hargeisa & Dire Dawa',
+    parcelSubtitle: 'Local parcel and document delivery within Jijiga',
     rideTitle: 'Jijiga Express Taxi & Moto',
     rideSubtitle: 'Instant passenger ride dispatch & airport transfer',
     eeuTitle: 'EEU Prepaid Electricity Recharge',

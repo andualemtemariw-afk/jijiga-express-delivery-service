@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { CITIES } from '../../data';
 import { PaymentMethod, ParcelDetails, Order } from '../../types';
 import { 
   X, 
@@ -35,15 +34,15 @@ export function BookParcelModal({
   onBookParcel,
   senderProfile,
 }: BookParcelModalProps) {
-  const [senderCity, setSenderCity] = useState(senderProfile.city || 'Jijiga');
+  const senderCity = 'Jijiga';
   const [senderName, setSenderName] = useState(senderProfile.name);
   const [senderPhone, setSenderPhone] = useState(senderProfile.phone);
   const [senderAddress, setSenderAddress] = useState(senderProfile.address);
 
-  const [receiverCity, setReceiverCity] = useState('Hargeisa');
+  const receiverCity = 'Jijiga';
   const [receiverName, setReceiverName] = useState('Mustafa Farah Omer');
-  const [receiverPhone, setReceiverPhone] = useState('+252 63 445 6789');
-  const [receiverAddress, setReceiverAddress] = useState('Near Dahabshiil Tower, Independence Ave');
+  const [receiverPhone, setReceiverPhone] = useState('');
+  const [receiverAddress, setReceiverAddress] = useState('');
 
   const [category, setCategory] = useState<ParcelDetails['parcelCategory']>('DOCUMENTS');
   const [weight, setWeight] = useState<ParcelDetails['weightCategory']>('< 1 kg');
@@ -55,9 +54,9 @@ export function BookParcelModal({
 
   if (!isOpen) return null;
 
-  // Inter-city fee calculation
-  const isIntercity = senderCity !== receiverCity;
-  const baseRate = isIntercity ? 200 : 120; // 200 ETB inter-city matching walkthrough video
+  // Jijiga-only parcel delivery: local dispatch rate.
+  const isIntercity = false;
+  const baseRate = 120;
   const weightAddon = weight === '< 1 kg' ? 50 : weight === '1 - 3 kg' ? 100 : weight === '3 - 5 kg' ? 180 : 250;
   const sealAddon = tamperSeal ? 30 : 0;
   const deliveryFee = baseRate;
@@ -66,7 +65,7 @@ export function BookParcelModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trackingTag = 'PARCEL-' + (senderCity.slice(0, 2) + receiverCity.slice(0, 2)).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
+    const trackingTag = 'PARCEL-JJ-' + Math.floor(1000 + Math.random() * 9000);
 
     const parcelDetails: ParcelDetails = {
       senderName,
@@ -105,13 +104,13 @@ export function BookParcelModal({
       customerId: (senderProfile as any)?.uid,
       customerName: senderName,
       customerPhone: senderPhone,
-      customerCity: receiverCity,
-      customerPlusCode: receiverCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga',
+      customerCity: 'Jijiga',
+      customerPlusCode: senderProfile.plusCode || '',
       customerAddress: receiverAddress,
       specialInstructions: specialNote || '',
       parcelDetails,
-      distanceKm: isIntercity ? 145 : 6.5,
-      etaMinutes: isIntercity ? 180 : 35,
+      distanceKm: 6.5,
+      etaMinutes: 35,
       createdAt: new Date(),
     };
 
@@ -132,7 +131,7 @@ export function BookParcelModal({
             </div>
             <div>
               <h3 className="font-bold text-lg">Book Express Parcel Service</h3>
-              <p className="text-xs text-slate-400">Inter-city & Express Courier • Jijiga • Hargeisa • Dire Dawa</p>
+              <p className="text-xs text-slate-400">Local parcels & documents within Jijiga</p>
             </div>
           </div>
           <button
@@ -155,15 +154,9 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Origin City</label>
-                <select
-                  value={senderCity}
-                  onChange={(e) => setSenderCity(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white font-medium"
-                >
-                  {CITIES.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
-                  ))}
-                </select>
+                <div className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-slate-100 font-medium text-slate-700">
+                  Jijiga (local delivery area)
+                </div>
               </div>
 
               <div>
@@ -209,15 +202,9 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Destination City</label>
-                <select
-                  value={receiverCity}
-                  onChange={(e) => setReceiverCity(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-white font-medium"
-                >
-                  {CITIES.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
-                  ))}
-                </select>
+                <div className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-blue-50 font-medium text-slate-700">
+                  Jijiga (local delivery area)
+                </div>
               </div>
 
               <div>
@@ -366,7 +353,7 @@ export function BookParcelModal({
                 <span>{senderCity}</span>
                 <ArrowRight className="w-3 h-3 text-emerald-400" />
                 <span>{receiverCity}</span>
-                <span>• ~{isIntercity ? '145 km express corridor' : '6 km intra-city'}</span>
+                <span>• ~6 km intra-city</span>
               </div>
             </div>
 

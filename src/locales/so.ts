@@ -13,7 +13,7 @@ export const soLocale: AppLocale = {
   },
   services: {
     parcelTitle: 'Dirista Baakidhka Degdegga ah',
-    parcelSubtitle: 'Adeegga baakidhka ee Jijiga, Hargeysa & Diridhaba',
+    parcelSubtitle: 'Gaarsiinta baakidhada iyo dukumentiyada gudaha Jijiga',
     rideTitle: 'Jijiga Express Tagsi & Mooto',
     rideSubtitle: 'Dalbashada gaadiidka degdegga ah & adeegga garoonka',
     eeuTitle: 'Buuxinta Kaarka Korontada EEU',

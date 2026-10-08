@@ -13,7 +13,7 @@ export const amLocale: AppLocale = {
   },
   services: {
     parcelTitle: 'ፈጣን የዕቃ ማድረሻ',
-    parcelSubtitle: 'በጅጅጋ፣ ሃርጌሳ እና ድሬዳዋ መካከል የሚደረግ የፖስታ እና የዕቃ ማጓጓዝ',
+    parcelSubtitle: 'በጅጅጋ ውስጥ የፖስታ፣ ሰነዶች እና ዕቃዎች ፈጣን ማድረሻ',
     rideTitle: 'ጅጅጋ ኤክስፕረስ ታክሲ እና ሞተር',
     rideSubtitle: 'ፈጣን የከተማ ትራንስፖርት እና የኤርፖርት ጉዞ',
     eeuTitle: 'የኢትዮጵያ ኤሌክትሪክ ቅድመ-ክፍያ ካርድ መሙያ',

@@ -1243,7 +1243,7 @@ export default function App() {
           <div>
             <p className="font-semibold text-slate-800">Jijiga Express Delivery Service</p>
             <p className="text-[11px] text-slate-500">
-              Verified local batch deliveries, regional parcels & prepaid utilities across Eastern Ethiopia & Somaliland.
+              Jijiga Express handles local parcels, documents, food, groceries, and shop orders within Jijiga.
             </p>
           </div>
           <div className="flex items-center gap-3 text-[11px]">
