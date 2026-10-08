@@ -42,7 +42,7 @@ export function BookRideModal({
     selectedCity === 'Hargeisa' ? 'Mansoor Hotel & Conference Hall' : 'Taiwan Commercial Market'
   );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
-    selectedCity === 'Hargeisa' ? 'ZAAD' : 'TELEBIRR'
+    'TELEBIRR'
   );
   const [isSearching, setIsSearching] = useState(false);
   const [searchStep, setSearchStep] = useState(0);
@@ -97,7 +97,7 @@ export function BookRideModal({
           status: 'PENDING',
           paymentMethod,
           paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-          customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || 'c1',
+          customerId: (customerProfile as any)?.uid,
           customerName: customerProfile.name,
           customerPhone: customerProfile.phone,
           customerCity: selectedCity,
@@ -174,7 +174,7 @@ export function BookRideModal({
                   if (city === 'Hargeisa') {
                     setPickup('Egal International Airport Terminal 1');
                     setDropoff('Mansoor Hotel & Conference Hall');
-                    setPaymentMethod('ZAAD');
+                    setPaymentMethod('COD');
                   } else {
                     setPickup('Kebele 04, Central Plaza');
                     setDropoff('Taiwan Commercial Market');
@@ -276,11 +276,7 @@ export function BookRideModal({
               <label className="text-xs font-bold text-slate-700 block mb-1">Payment Method</label>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: 'ZAAD', label: 'Zaad' },
                   { id: 'TELEBIRR', label: 'Telebirr' },
-                  { id: 'SAHAL', label: 'Sahal' },
-                  { id: 'EBIRR', label: 'eBIRR' },
-                  { id: 'COOP_PAY', label: 'Coop Pay' },
                   { id: 'COD', label: 'Cash' },
                 ].map((m) => (
                   <button

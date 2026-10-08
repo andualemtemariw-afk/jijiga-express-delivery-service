@@ -1,49 +1,34 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db } from './googleAuth';
-import { AppUserProfile, UserRole } from '../types';
+import { AppUserProfile } from '../types';
 import { removeUndefinedFields } from './firestoreSync';
-
-export const ADMIN_BOOTSTRAP_EMAILS = [
-  'andualemawraris4@gmail.com',
-  'andualemawraris104@gmail.com',
-  'andualemawraris3@gmail.com'
-];
 
 const USERS_COLLECTION = 'users';
 
 /**
- * Synchronizes user authentication with the Firestore `/users/{uid}` document.
- * Bootstraps the platform owner email as 'admin'.
+ * Synchronizes an authenticated Firebase user with the users/{uid} document.
+ * First-time accounts always begin as customer. Staff/admin roles are provisioned
+ * by the trusted backend workflow, never by a client-side email allowlist.
  */
 export async function syncUserProfile(user: User): Promise<AppUserProfile> {
   const userRef = doc(db, USERS_COLLECTION, user.uid);
   const snap = await getDoc(userRef);
 
-  const isAdminEmail = user.email && ADMIN_BOOTSTRAP_EMAILS.includes(user.email.toLowerCase());
-
   if (snap.exists()) {
-    const existing = snap.data() as AppUserProfile;
-    // If user is designated bootstrap admin, ensure role is 'admin'
-    if (isAdminEmail && existing.role !== 'admin') {
-      await updateDoc(userRef, { role: 'admin', updatedAt: new Date().toISOString() });
-      return { ...existing, role: 'admin' };
-    }
-    return existing;
+    return snap.data() as AppUserProfile;
   }
 
-  // First-time login: create user record
-  const initialRole: UserRole = isAdminEmail ? 'admin' : 'customer';
   const newProfile: AppUserProfile = {
     uid: user.uid,
     displayName: user.displayName || user.email?.split('@')[0] || 'Jijiga Express Customer',
     email: user.email || '',
     photoURL: user.photoURL || '',
-    phone: user.phoneNumber || '+251 91 123 4567',
+    phone: user.phoneNumber || '',
     city: 'Jijiga',
-    address: 'Kebele 04, Central Sector, Jijiga',
-    plusCode: '8F2P+5H Jijiga',
-    role: initialRole,
+    address: '',
+    plusCode: '',
+    role: 'customer',
     createdAt: new Date().toISOString(),
   };
 
@@ -52,16 +37,14 @@ export async function syncUserProfile(user: User): Promise<AppUserProfile> {
   return cleanProfile;
 }
 
-/**
- * Updates user profile information (phone, city, address, plusCode).
- */
 export async function updateUserProfile(uid: string, updates: Partial<AppUserProfile>): Promise<void> {
   const userRef = doc(db, USERS_COLLECTION, uid);
-  // Strip immutable security fields
   const safeUpdates = { ...updates };
   delete (safeUpdates as any).uid;
   delete (safeUpdates as any).role;
   delete (safeUpdates as any).createdAt;
+  delete (safeUpdates as any).active;
+  delete (safeUpdates as any).mamilaId;
 
   const cleanUpdates = removeUndefinedFields({
     ...safeUpdates,
@@ -71,9 +54,6 @@ export async function updateUserProfile(uid: string, updates: Partial<AppUserPro
   await updateDoc(userRef, cleanUpdates);
 }
 
-/**
- * Fetches user profile by UID.
- */
 export async function getUserProfile(uid: string): Promise<AppUserProfile | null> {
   const userRef = doc(db, USERS_COLLECTION, uid);
   const snap = await getDoc(userRef);

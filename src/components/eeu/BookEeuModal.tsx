@@ -40,7 +40,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
-  const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '+251 91 234 5678');
+  const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
   const [specialNote, setSpecialNote] = useState<string>('');
 
@@ -295,7 +295,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
           <div>
             <label className="font-bold text-slate-800 block mb-1">Payment Method for Float & Errand Fee</label>
             <div className="grid grid-cols-3 gap-2">
-              {(['TELEBIRR', 'CBE_BIRR', 'COD'] as PaymentMethod[]).map(pm => (
+              {(['TELEBIRR', 'COD'] as PaymentMethod[]).map(pm => (
                 <button
                   key={pm}
                   type="button"
@@ -307,7 +307,6 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                   }`}
                 >
                   {pm === 'TELEBIRR' && 'Telebirr Wallet'}
-                  {pm === 'CBE_BIRR' && 'CBE Birr'}
                   {pm === 'COD' && 'Cash Handover'}
                 </button>
               ))}

@@ -40,7 +40,8 @@ export function DeliveryRouteMapBanner({
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [telemetrySpeed, setTelemetrySpeed] = useState(24);
-  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(true);
+  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(false);
+  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
 
   // Dynamic simulated speed telemetry jitter for ultra-realistic courier tracking
   useEffect(() => {
@@ -54,8 +55,8 @@ export function DeliveryRouteMapBanner({
     return () => clearInterval(interval);
   }, [isSimulatingTraffic]);
 
-  // Fallback synthetic active order if customer doesn't currently have an in-flight delivery
-  const displayOrder: Order = activeOrder || {
+  // Synthetic route data is available only in an explicit development/demo sandbox.
+  const displayOrder: Order = activeOrder || (demoSandboxEnabled ? {
     id: 'DEMO-ROUTE-01',
     serviceType: 'PARCEL',
     batchId: 'demo-batch',
@@ -82,7 +83,9 @@ export function DeliveryRouteMapBanner({
     etaMinutes: 7,
     runnerTagId: 'TAG-SEAL-99820',
     createdAt: new Date(),
-  };
+  } : null as unknown as Order);
+
+  if (!activeOrder && !demoSandboxEnabled) return null;
 
   const isRealOrder = !!activeOrder;
 
@@ -218,7 +221,7 @@ export function DeliveryRouteMapBanner({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => onCallCourier?.(displayOrder.customerPhone || '+251 91 123 4567')}
+                onClick={() => onCallCourier?.(displayOrder.customerPhone || '')}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
               >
                 <Phone className="w-3.5 h-3.5 text-emerald-600" />

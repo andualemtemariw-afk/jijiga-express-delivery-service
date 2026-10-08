@@ -28,6 +28,7 @@ interface Props {
   mamilas: Mamila[];
   inventory: Batch[];
   customerProfile: {
+    uid: string;
     name: string;
     phone: string;
     city: string;
@@ -114,7 +115,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
       status: 'PENDING',
       paymentMethod,
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-      customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || 'c1',
+      customerId: customerProfile.uid,
       customerName: customerProfile.name,
       customerPhone: customerProfile.phone,
       customerCity: customerProfile.city || 'Jijiga',
@@ -636,10 +637,8 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Popular' },
-                      { id: 'CBE_BIRR', label: 'CBE Birr', badge: 'Direct' },
-                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' },
-                      { id: 'SAHAL', label: 'Sahal / Zaad', badge: 'Cross-border' }
+                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Online' },
+                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' }
                     ].map((m) => (
                       <button
                         key={m.id}

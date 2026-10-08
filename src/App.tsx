@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
+const DEMO_SANDBOX_ENABLED = import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
@@ -42,6 +43,8 @@ import {
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
+import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
+import { createServiceOrder, createTelebirrCheckout } from './services/serviceOrderFunctions';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -69,7 +72,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<AppUserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    return localStorage.getItem('jijiga_mode') === 'demo';
+    return DEMO_SANDBOX_ENABLED && localStorage.getItem('jijiga_mode') === 'demo';
   });
 
   const [activeRole, setActiveRole] = useState<Role>('CUSTOMER');
@@ -194,6 +197,10 @@ export default function App() {
 
   const toggleMode = (mode: 'demo' | 'prod') => {
     const isDemo = mode === 'demo';
+    if (isDemo && !DEMO_SANDBOX_ENABLED) {
+      showAlert('Demo Sandbox is disabled in this production build.', 'error');
+      return;
+    }
     setIsDemoMode(isDemo);
     localStorage.setItem('jijiga_mode', isDemo ? 'demo' : 'prod');
     showAlert(`Switched to ${isDemo ? 'DEMO Mode (bundled data)' : 'PRODUCTION Mode (live Cloud Firestore)'}`, 'info');
@@ -338,11 +345,6 @@ export default function App() {
     const subtotal = batch.price * quantity;
     const totalPrice = subtotal + deliveryFee;
 
-    // Decrease inventory atomically
-    setInventory(prev => prev.map(b => 
-      b.id === batch.id ? { ...b, available: Math.max(0, b.available - quantity) } : b
-    ));
-
     const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId] || MAMILA_COORDINATES.m1;
     const destCoords = options?.customerCoordinates || DEFAULT_CUSTOMER_COORDINATES;
 
@@ -376,7 +378,6 @@ export default function App() {
       customerAddress: effectiveAddress,
       customerCoordinates: destCoords,
       mamilaCoordinates: originCoords,
-      riderCoordinates: originCoords,
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
       distanceKm: 3.2,
@@ -388,7 +389,7 @@ export default function App() {
 
     if (!isDemoMode && currentUser) {
       try {
-        await saveOrderToFirestore(newOrder);
+        await createOrderWithInventoryReservation(newOrder);
         await logDeliveryEventToFirestore({
           orderId: orderDocId,
           status: 'PENDING',
@@ -398,14 +399,16 @@ export default function App() {
           actorName: effectiveCustomerName,
           note: `Order placed for ${batch.name} (${paymentMethod}) and entered unassigned runner pool.`
         });
+        if (paymentMethod === 'TELEBIRR') {
+          const checkout = await createTelebirrCheckout(orderDocId);
+          window.location.assign(checkout.checkoutUrl);
+          return;
+        }
         showAlert(`Order #${orderDocId.slice(-6)} securely saved to Cloud Firestore!`, 'success');
       } catch (err: any) {
         console.error('Failed to save order to Firestore:', err);
         // Data integrity rollback: undo optimistic additions so React state strictly matches database truth
         setOrders(prev => prev.filter(o => o.id !== orderDocId));
-        setInventory(prev => prev.map(b => 
-          b.id === batch.id ? { ...b, available: b.available + quantity } : b
-        ));
         showAlert(`Could not sync order to database: ${err.message}`, 'error');
       }
     }
@@ -433,8 +436,13 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -444,6 +452,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express parcel booked: ${fullOrder.batchName}.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Parcel Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -472,8 +485,13 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -483,6 +501,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express Bajaj ride requested.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Ride #${fullOrder.id.slice(-6)} recorded in Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -513,8 +536,13 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
+      return;
+    }
+
     try {
-      await saveOrderToFirestore(fullOrder);
+      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -524,6 +552,11 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `EEU Prepaid electricity recharge booked.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`EEU Recharge Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -554,8 +587,14 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
+    if (isDemoMode) {
+      showAlert('Demo Mode: Khat order kept local; no inventory was reserved in production.', 'info');
+      return;
+    }
+
     try {
-      await saveOrderToFirestore(fullOrder);
+      // Khat consumes the same inventory as FOOD and must reserve stock atomically.
+      await createOrderWithInventoryReservation(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -563,8 +602,13 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'}.`
+        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'} with atomic inventory reservation.`
       });
+      if (fullOrder.paymentMethod === 'TELEBIRR') {
+        const checkout = await createTelebirrCheckout(fullOrder.id);
+        window.location.assign(checkout.checkoutUrl);
+        return;
+      }
       showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -615,6 +659,12 @@ export default function App() {
           });
         }
       } catch (err: any) {
+        // Persistence failed: restore the previous in-memory order so UI cannot
+        // advertise a state that Firestore rejected.
+        const fresh = orders.find(o => o.id === orderId);
+        if (fresh) {
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...fresh } : o));
+        }
         showAlert(`Status update failed: ${err.message}`, 'error');
       }
     }
@@ -646,18 +696,43 @@ export default function App() {
 
     if (targetOrder.status === 'RUNNER_ASSIGNED' || targetOrder.status === 'PENDING' || targetOrder.status === 'TRANSACTION_PENDING') {
       const qty = targetOrder.quantity || 1;
-      setInventory(prev => prev.map(b => 
-        b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b
-      ));
+      if (targetOrder.paymentStatus === 'PAID_CONFIRMED') {
+        showAlert('Paid orders cannot be cancelled from the customer portal. Please contact support for a refund.', 'error');
+        return;
+      }
 
-      handleUpdateOrder(orderId, { status: 'CANCELLED' });
+      if (!isDemoMode && currentUser) {
+        try {
+          if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
+            await cancelOrderAndRestoreInventory(orderId, currentUser.uid);
+          } else {
+            await updateOrderInFirestore(orderId, { status: 'CANCELLED' });
+          }
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+          await logDeliveryEventToFirestore({
+            orderId, status: 'CANCELLED', timestamp: new Date().toISOString(),
+            actorRole: 'CUSTOMER', actorId: currentUser.uid,
+            actorName: userProfile?.displayName || 'Customer',
+            note: targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT'
+              ? 'Order cancelled and reserved stock restored atomically.'
+              : 'Service order cancelled before dispatch.'
+          });
+        } catch (err: any) {
+          showAlert(`Cancellation failed: ${err.message}`, 'error');
+        }
+      } else {
+        if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
+          setInventory(prev => prev.map(b => b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b));
+        }
+        handleUpdateOrder(orderId, { status: 'CANCELLED' });
+      }
     }
   };
 
-  // Step-through simulation helper (Available exclusively in Demo Sandbox or for Admin diagnostics)
+  // Step-through simulation helper — never advances live production orders.
   const handleSimulateNextStep = (orderId: string) => {
-    if (!isDemoMode && userProfile?.role !== 'admin') {
-      showAlert('Dispatch progression in production is managed exclusively by verified couriers.', 'error');
+    if (!isDemoMode) {
+      showAlert('Simulation is disabled for live production orders.', 'error');
       return;
     }
     const target = orders.find(o => o.id === orderId);
@@ -717,7 +792,7 @@ export default function App() {
     } else if (target.status === 'PICKED_UP' || target.status === 'IN_TRANSIT') {
       handleUpdateOrder(orderId, { 
         status: 'DELIVERED',
-        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : 'PAID_CONFIRMED'
+        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : target.paymentStatus
       });
     }
   };
@@ -1338,7 +1413,7 @@ export default function App() {
           <div>
             <p className="font-semibold text-slate-800">Jijiga Express Delivery Service</p>
             <p className="text-[11px] text-slate-500">
-              Verified local batch deliveries, regional parcels & prepaid utilities across Eastern Ethiopia & Somaliland.
+              Jijiga Express handles local parcels, documents, food, groceries, and shop orders within Jijiga.
             </p>
           </div>
           <div className="flex items-center gap-3 text-[11px]">
@@ -1350,7 +1425,7 @@ export default function App() {
                 <Flame className="w-3.5 h-3.5" />
                 Return to Live Production
               </button>
-            ) : (
+            ) : DEMO_SANDBOX_ENABLED ? (
               <button
                 onClick={() => toggleMode('demo')}
                 className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer flex items-center gap-1"
@@ -1359,7 +1434,7 @@ export default function App() {
                 <Database className="w-3 h-3" />
                 Developer Demo Sandbox
               </button>
-            )}
+            ) : null}
             <span aria-hidden="true" className="text-slate-300">·</span>
             <button
               onClick={() => setShowKeyModal(true)}

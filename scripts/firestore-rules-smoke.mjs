@@ -1,0 +1,420 @@
+import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
+import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
+import { createRequire } from 'node:module';
+const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
+const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = requireFromFunctions('firebase-admin/app');
+const { getAuth: getAdminAuth } = requireFromFunctions('firebase-admin/auth');
+const { getFirestore: getAdminFirestore } = requireFromFunctions('firebase-admin/firestore');
+
+const projectId = 'sunny-discipline-hvd6f';
+const databaseId = '(default)';
+const bucket = `${projectId}.firebasestorage.app`;
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
+
+const adminApp = initializeAdminApp({ projectId, storageBucket: bucket });
+const adminDb = getAdminFirestore(adminApp);
+const adminAuth = getAdminAuth(adminApp);
+
+const firebaseConfig = {
+  apiKey: 'demo-api-key',
+  authDomain: `${projectId}.firebaseapp.com`,
+  projectId,
+  storageBucket: bucket,
+};
+
+const users = {};
+async function createUser(key, role, active = true) {
+  const email = `${key}@example.test`;
+  const password = 'TestPassword-123!';
+  const user = await adminAuth.createUser({ email, password, displayName: `${key} User` });
+  if (role === 'rider' || role === 'admin' || role === 'runner' || role === 'mamila') {
+    await adminAuth.setCustomUserClaims(user.uid, { role, active });
+  }
+  await adminDb.doc(`users/${user.uid}`).set({
+    uid: user.uid, displayName: `${key} User`, email, role, active, createdAt: new Date().toISOString()
+  });
+  users[key] = { uid: user.uid, email, password, role };
+  return user.uid;
+}
+
+async function clientFor(key) {
+  const app = initializeApp(firebaseConfig, `test-${key}-${Date.now()}`);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
+  await signInWithEmailAndPassword(auth, users[key].email, users[key].password);
+  return { app, auth, db, storage };
+}
+
+async function expectDenied(label, action) {
+  try {
+    await action();
+    throw new Error(`${label}: expected denial but operation succeeded`);
+  } catch (error) {
+    const code = error?.code || '';
+    if (!String(code).includes('permission-denied') && !String(code).includes('storage/unauthorized')) {
+      throw error;
+    }
+    console.log(`PASS ${label}`);
+  }
+}
+
+async function main() {
+  const customerUid = await createUser('customer', 'customer');
+  await createUser('admin', 'admin');
+  const riderUid = await createUser('rider', 'rider');
+  const otherRiderUid = await createUser('other-rider', 'rider');
+  const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
+  const strangerUid = await createUser('stranger', 'customer');
+
+  const validOrder = {
+    id: 'test-paid-order', serviceType: 'RIDE', batchId: 'ride-taxi', batchName: 'Test ride',
+    mamilaId: 'm4', mamilaName: 'Test', mamilaLocation: 'Jijiga', price: 100, quantity: 1,
+    deliveryFee: 0, totalPrice: 100, status: 'PICKED_UP', paymentMethod: 'TELEBIRR',
+    paymentStatus: 'PAID_CONFIRMED', customerId: customerUid, customerName: 'Customer User',
+    customerPhone: '', customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test address',
+    createdAt: new Date().toISOString(), riderId: riderUid, riderName: 'rider User'
+  };
+  await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
+
+  const customer = await clientFor('customer');
+
+  const validCustomerOrder = {
+    id: 'customer-create-invalid-service',
+    serviceType: 'RIDE',
+    batchId: 'ride-taxi',
+    batchName: 'Test ride',
+    mamilaId: 'm4',
+    mamilaName: 'Test',
+    mamilaLocation: 'Jijiga',
+    price: 100,
+    quantity: 1,
+    deliveryFee: 0,
+    totalPrice: 100,
+    status: 'PENDING',
+    paymentMethod: 'TELEBIRR',
+    paymentStatus: 'PAYMENT_PENDING',
+    customerId: customerUid,
+    customerName: 'Customer User',
+    customerPhone: '',
+    customerCity: 'Jijiga',
+    customerPlusCode: '',
+    customerAddress: 'Test',
+    createdAt: new Date().toISOString()
+  };
+
+  await expectDenied('customer cannot directly create a RIDE order', async () => {
+    await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
+  });
+
+  await expectDenied('customer cannot create an already-paid service order directly', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
+      ...validCustomerOrder,
+      id: 'malicious-paid-create',
+      paymentStatus: 'PAID_CONFIRMED'
+    });
+  });
+
+  await expectDenied('customer cannot add payment verification fields on direct create', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-payment-fields'), {
+      ...validCustomerOrder,
+      id: 'malicious-payment-fields',
+      paymentReference: 'FAKE-REF'
+    });
+  });
+
+  await adminDb.doc('batches/test-food').set({
+    id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
+    price: 100, available: 5, expiry: 'test', imageUrl: '/test.jpg'
+  });
+
+  const validFoodId = 'valid-food-order';
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', validFoodId);
+    const reservationRef = doc(customer.db, 'inventoryReservations', validFoodId);
+    const batchSnap = await tx.get(batchRef);
+    if (!batchSnap.exists()) throw new Error('test batch missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available - 1,
+      lastReservationId: validFoodId,
+      updatedAt: new Date().toISOString()
+    });
+    tx.set(orderRef, {
+      id: validFoodId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+      mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+      price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+      status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+      customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+      createdAt: new Date().toISOString()
+    });
+    tx.set(reservationRef, {
+      orderId: validFoodId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+    });
+  });
+  console.log('PASS valid FOOD order creation with inventory reservation');
+  // Seed a privileged fixture for the customer's release-quantity attack test.
+  const releaseOrderId = 'food-release-' + Date.now();
+  const releaseBatchId = 'batch-release-' + Date.now();
+  const releaseReservationRef = adminDb.collection('inventoryReservations').doc(releaseOrderId);
+  const releaseBatchRef = adminDb.collection('batches').doc(releaseBatchId);
+  const releaseOrderRef = adminDb.collection('orders').doc(releaseOrderId);
+  await releaseOrderRef.set({
+    id: releaseOrderId, customerId: customerUid, serviceType: 'FOOD', status: 'CANCELLED',
+    price: 10, quantity: 2, deliveryFee: 0, totalPrice: 20, paymentMethod: 'COD', paymentStatus: 'UNPAID'
+  });
+  await releaseReservationRef.set({
+    orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId,
+    quantity: 2, action: 'RESERVE', createdAt: new Date().toISOString()
+  });
+  await releaseBatchRef.set({
+    id: releaseBatchId, mamilaId: 'mamila-release', price: 10, available: 8,
+    lastReservationId: releaseOrderId
+  });
+  const badReleaseRef = doc(customer.db, 'inventoryReservations', releaseOrderId + '-release');
+  await expectDenied('customer cannot release more than originally reserved quantity', async () => {
+    await setDoc(badReleaseRef, {
+      orderId: releaseOrderId, customerId: customerUid, batchId: releaseBatchId,
+      quantity: 3, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await expectDenied('customer cannot create an order with mismatched total', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-total'), {
+      ...validCustomerOrder,
+      id: 'malicious-total',
+      serviceType: 'RIDE',
+      totalPrice: 1
+    });
+  });
+
+  await expectDenied('customer cannot reserve stock while underpricing FOOD order', async () => {
+    const orderId = 'malicious-underpriced-food';
+    const orderRef = doc(customer.db, 'orders', orderId);
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const reservationRef = doc(customer.db, 'inventoryReservations', orderId);
+    await runTransaction(customer.db, async (tx) => {
+      const batchSnap = await tx.get(batchRef);
+      if (!batchSnap.exists()) throw new Error('test batch missing');
+      tx.update(batchRef, {
+        available: batchSnap.data().available - 1,
+        lastReservationId: orderId,
+        updatedAt: new Date().toISOString()
+      });
+      tx.set(orderRef, {
+        id: orderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+        mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+        price: 1, quantity: 1, deliveryFee: 20, totalPrice: 21,
+        status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+        customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+        customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+        createdAt: new Date().toISOString()
+      });
+      tx.set(reservationRef, {
+        orderId, batchId: 'test-food', customerId: customerUid,
+        quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+      });
+    });
+  });
+
+
+
+  const cancelOrderId = 'cancelable-food-order';
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', cancelOrderId);
+    const reservationRef = doc(customer.db, 'inventoryReservations', cancelOrderId);
+    const batchSnap = await tx.get(batchRef);
+    if (!batchSnap.exists()) throw new Error('test batch missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available - 1,
+      lastReservationId: cancelOrderId,
+      updatedAt: new Date().toISOString()
+    });
+    tx.set(orderRef, {
+      id: cancelOrderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+      mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+      price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+      status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+      customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+      createdAt: new Date().toISOString()
+    });
+    tx.set(reservationRef, {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await runTransaction(customer.db, async (tx) => {
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const orderRef = doc(customer.db, 'orders', cancelOrderId);
+    const releaseRef = doc(customer.db, 'inventoryReservations', `${cancelOrderId}-release`);
+    const orderSnap = await tx.get(orderRef);
+    const batchSnap = await tx.get(batchRef);
+    if (!orderSnap.exists || !batchSnap.exists) throw new Error('cancellation fixtures missing');
+    tx.update(batchRef, {
+      available: batchSnap.data().available + 1,
+      lastReservationId: `${cancelOrderId}-release`,
+      updatedAt: new Date().toISOString()
+    });
+    tx.update(orderRef, { status: 'CANCELLED' });
+    tx.set(releaseRef, {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+  const missingReleaseOrderId = 'missing-release-cancel-order';
+  await adminDb.doc(`orders/${missingReleaseOrderId}`).set({
+    id: missingReleaseOrderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+    mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+    price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+    status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+    customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+    customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+    createdAt: new Date().toISOString()
+  });
+  await adminDb.doc(`inventoryReservations/${missingReleaseOrderId}`).set({
+    orderId: missingReleaseOrderId, batchId: 'test-food', customerId: customerUid,
+    quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+  });
+  await expectDenied('customer cannot cancel inventory-backed order without release transaction', async () => {
+    await updateDoc(doc(customer.db, 'orders', missingReleaseOrderId), { status: 'CANCELLED' });
+  });
+
+  console.log('PASS customer can atomically cancel and release the exact reserved quantity');
+
+  await expectDenied('customer cannot release more inventory than reserved', async () => {
+    await setDoc(doc(customer.db, 'inventoryReservations', 'cancelable-food-order-bad-quantity'), {
+      orderId: cancelOrderId, batchId: 'test-food', customerId: customerUid,
+      quantity: 999, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await expectDenied('customer cannot release inventory from a different batch', async () => {
+    await setDoc(doc(customer.db, 'inventoryReservations', 'cancelable-food-order-bad-batch'), {
+      orderId: cancelOrderId, batchId: 'another-batch', customerId: customerUid,
+      quantity: 1, action: 'RELEASE', createdAt: new Date().toISOString()
+    });
+  });
+
+  await expectDenied('customer cannot use an unintegrated payment provider', async () => {
+    const orderId = 'unsupported-provider-food';
+    const orderRef = doc(customer.db, 'orders', orderId);
+    const batchRef = doc(customer.db, 'batches', 'test-food');
+    const reservationRef = doc(customer.db, 'inventoryReservations', orderId);
+    await runTransaction(customer.db, async (tx) => {
+      const batchSnap = await tx.get(batchRef);
+      if (!batchSnap.exists()) throw new Error('test batch missing');
+      tx.update(batchRef, {
+        available: batchSnap.data().available - 1,
+        lastReservationId: orderId,
+        updatedAt: new Date().toISOString()
+      });
+      tx.set(orderRef, {
+        id: orderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+        mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+        price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+        status: 'PENDING', paymentMethod: 'CBE_BIRR', paymentStatus: 'PAYMENT_PENDING',
+        customerId: customerUid, customerName: 'Customer User', customerPhone: '',
+        customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+        createdAt: new Date().toISOString()
+      });
+      tx.set(reservationRef, {
+        orderId, batchId: 'test-food', customerId: customerUid,
+        quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+      });
+    });
+  });
+
+  const paidPendingOrderId = 'paid-pending-cancel-order';
+  const paidPendingFixture = { ...validOrder };
+  delete paidPendingFixture.riderId;
+  delete paidPendingFixture.riderName;
+  await adminDb.doc(`orders/${paidPendingOrderId}`).set({
+    ...paidPendingFixture,
+    id: paidPendingOrderId,
+    status: 'PENDING',
+    paymentStatus: 'PAID_CONFIRMED'
+  });
+  await expectDenied('customer cannot cancel a paid order', async () => {
+    await updateDoc(doc(customer.db, 'orders', paidPendingOrderId), { status: 'CANCELLED' });
+  });
+
+  const inactive = await clientFor('inactive-rider');
+  await expectDenied('inactive rider cannot read assigned order', async () => {
+    await getDoc(doc(inactive.db, 'orders', validOrder.id));
+  });
+  await expectDenied('inactive rider cannot read staff profiles', async () => {
+    await getDoc(doc(inactive.db, 'users', riderUid));
+  });
+
+  const admin = await clientFor('admin');
+  await expectDenied('admin cannot directly modify Telebirr checkout mapping', async () => {
+    await updateDoc(doc(admin.db, 'orders', validOrder.id), { paymentMerchantOrderId: 'FORGED-MERCHANT-ID' });
+  });
+
+  const rider = await clientFor('rider');
+  const otherRider = await clientFor('other-rider');
+  await expectDenied('other active rider cannot read another rider assigned order', async () => {
+    await getDoc(doc(otherRider.db, 'orders', validOrder.id));
+  });
+  const unpaidOrder = { ...validOrder, id: 'test-unpaid-order', paymentStatus: 'PAYMENT_PENDING' };
+  await adminDb.doc(`orders/${unpaidOrder.id}`).set(unpaidOrder);
+  await expectDenied('rider cannot deliver non-COD unpaid order', async () => {
+    await updateDoc(doc(rider.db, 'orders', unpaidOrder.id), { status: 'DELIVERED' });
+  });
+  await updateDoc(doc(rider.db, 'orders', validOrder.id), { status: 'DELIVERED' });
+  console.log('PASS rider can deliver PAID_CONFIRMED non-COD order');
+
+  const codOrder = { ...validOrder, id: 'test-cod-order', paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'PICKED_UP' };
+  await adminDb.doc(`orders/${codOrder.id}`).set(codOrder);
+  await expectDenied('rider cannot deliver COD order before collecting payment', async () => {
+    await updateDoc(doc(rider.db, 'orders', codOrder.id), { status: 'DELIVERED' });
+  });
+  await updateDoc(doc(rider.db, 'orders', codOrder.id), { status: 'DELIVERED', paymentStatus: 'COLLECTED_BY_RIDER' });
+  console.log('PASS rider can deliver COD order after collecting payment');
+
+  const receiptPath = `eeuReceipts/${validOrder.id}/${riderUid}/rider.jpg`;
+  await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([1, 2, 3]), {
+    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid, customerId: customerUid }
+  });
+  console.log('PASS rider can create correctly scoped receipt');
+  await expectDenied('rider cannot overwrite receipt', async () => {
+    await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([4, 5, 6]), {
+      contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid }
+    });
+  });
+  await expectDenied('inactive rider cannot read EEU receipt', async () => {
+    await getBytes(ref(inactive.storage, receiptPath));
+  });
+
+  const stranger = await clientFor('stranger');
+  await expectDenied('unrelated customer cannot read receipt', async () => {
+    await getBytes(ref(stranger.storage, receiptPath));
+  });
+  const customerBytes = await getBytes(ref(customer.storage, receiptPath));
+  if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
+  console.log('PASS order customer can read receipt');
+
+  await Promise.all([signOut(customer.auth), signOut(admin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, admin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await deleteAdminApp(adminApp);
+  console.log('All rules smoke tests passed.');
+}
+
+main().catch(async (error) => {
+  console.error(error);
+  try { await deleteAdminApp(adminApp); } catch {}
+  process.exit(1);
+});

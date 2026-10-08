@@ -48,6 +48,7 @@ export function VectorRouteMapFallback({
 }: VectorRouteMapFallbackProps) {
   const [mapTheme, setMapTheme] = useState<'dark' | 'light'>('dark');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
   const [simulatedFrac, setSimulatedFrac] = useState(0.48);
 
   useEffect(() => {
@@ -78,8 +79,9 @@ export function VectorRouteMapFallback({
 
   const riderPos: LatLng = useMemo(() => {
     if (order.riderCoordinates) return order.riderCoordinates;
-    return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedFrac);
-  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedFrac]);
+    if (demoSandboxEnabled) return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedFrac);
+    return customerPos;
+  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedFrac, demoSandboxEnabled]);
 
   const distanceKm = useMemo(() => calculateDistanceKm(mamilaPos, customerPos), [mamilaPos, customerPos]);
 
@@ -283,8 +285,8 @@ export function VectorRouteMapFallback({
               </text>
             </g>
 
-            {/* Animated Courier Marker */}
-            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
+            {/* Live Courier Marker — only when real rider GPS exists */}
+            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && order.riderCoordinates && (
               <g transform={`translate(${svgCoords.courier.x}, ${svgCoords.courier.y})`}>
                 <circle r="28" fill="#3b82f6" fillOpacity="0.25" className="animate-ping" />
                 <circle r="16" fill="#1d4ed8" stroke="#ffffff" strokeWidth="2.5" />
@@ -295,6 +297,7 @@ export function VectorRouteMapFallback({
                 </text>
               </g>
             )}
+
           </svg>
         </div>
       </div>
