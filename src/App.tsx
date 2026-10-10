@@ -606,7 +606,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
+  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>, persistToFirestore = true) => {
     // Prevent customer from modifying protected pricing or courier assignment fields
     if (activeRole === 'CUSTOMER' && userProfile?.role !== 'admin') {
       const protectedKeys = ['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl'];
@@ -619,7 +619,7 @@ export default function App() {
 
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
 
-    if (!isDemoMode && currentUser) {
+    if (!isDemoMode && currentUser && persistToFirestore) {
       try {
         await updateOrderInFirestore(orderId, updates);
         if (updates.status) {
@@ -1228,6 +1228,7 @@ export default function App() {
           {activeRole === 'RIDER' && (
             <RiderView 
               orders={riderOrders} 
+              isDemoMode={isDemoMode}
               orderMessages={orderMessages}
               onSendMessage={handleSendMessage}
               currentRiderId={currentUser?.uid || ''} 
