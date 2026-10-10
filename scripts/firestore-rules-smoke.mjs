@@ -107,6 +107,7 @@ async function main() {
   const customerUid = await createUser('customer', 'customer');
   await createUser('admin', 'admin', true, true, 'andualemawraris4@gmail.com');
   await createUser('unverified-admin', 'admin', true, false, 'andualemawraris104@gmail.com');
+  await createUser('nonallowlisted-admin', 'admin', true, true, 'outside-admin@example.test');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
@@ -521,8 +522,12 @@ async function main() {
 
   const admin = await clientFor('admin');
   const unverifiedAdmin = await clientFor('unverified-admin');
+  const nonallowlistedAdmin = await clientFor('nonallowlisted-admin');
   await expectDenied('admin account with unverified email cannot read another customer order', async () => {
     await getDoc(doc(unverifiedAdmin.db, 'orders', validOrder.id));
+  });
+  await expectDenied('verified admin outside the allow-list cannot read another customer order', async () => {
+    await getDoc(doc(nonallowlistedAdmin.db, 'orders', validOrder.id));
   });
   await expectDenied('admin cannot directly modify Telebirr checkout mapping', async () => {
     await updateDoc(doc(admin.db, 'orders', validOrder.id), { paymentMerchantOrderId: 'FORGED-MERCHANT-ID' });
@@ -682,8 +687,8 @@ async function main() {
   if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
