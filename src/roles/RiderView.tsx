@@ -31,13 +31,13 @@ import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispa
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
+import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
 
-
-const MAX_EEU_RECEIPT_DATA_URL_LENGTH = 400000;
+ 
 
 /**
- * Compress an EEU receipt locally and keep it small enough for the existing Firestore order document.
- * This avoids requiring Cloud Storage (which needs Firebase Blaze) for this no-cost release.
+ * Compress an EEU receipt locally before saving it in the order-scoped receipts subcollection.
+ * This avoids Cloud Storage while keeping large image data out of order list snapshots.
  */
 async function compressReceiptForFirestore(file: File): Promise<string> {
   const objectUrl = URL.createObjectURL(file);
@@ -75,7 +75,8 @@ interface Props {
   orders: Order[];
   orderMessages?: Record<string, ChatMessage[]>;
   onSendMessage?: (orderId: string, message: Omit<ChatMessage, 'id' | 'orderId'>) => void;
-  onUpdateOrder: (orderId: string, updates: Partial<Order>) => void;
+  onUpdateOrder: (orderId: string, updates: Partial<Order>, persistToFirestore?: boolean) => void;
+  isDemoMode?: boolean;
   currentRiderId: string;
   currentRiderName?: string;
   onClaimOrder?: (orderId: string) => Promise<void>;
@@ -87,6 +88,7 @@ export function RiderView({
   orderMessages,
   onSendMessage,
   onUpdateOrder, 
+  isDemoMode = false,
   currentRiderId, 
   currentRiderName,
   onClaimOrder,
@@ -191,18 +193,27 @@ export function RiderView({
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const updatedEeu: EeuRechargeDetails = {
         ...cameraOrder.eeuDetails,
-        receiptImageUrl,
+        receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
         tokenCode: cameraTokenInput.trim(),
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
           timestamp: nowTime,
-          note: 'Actual EEU terminal receipt image compressed on-device and saved with the protected order record.',
+          note: 'Actual EEU terminal receipt image compressed on-device and saved in the protected order receipts subcollection.',
           actor: `Rider ${currentRiderId}`
         }]
       };
-      onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu });
+      if (isDemoMode) {
+        // Demo-only local previews may use the legacy inline field; it is never persisted to Firestore.
+        onUpdateOrder(cameraOrder.id, {
+          eeuDetails: { ...updatedEeu, receiptImageUrl }
+        }, false);
+      } else {
+        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
+        // The service committed order metadata and photo atomically; update app state without a duplicate write.
+        onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
+      }
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);
@@ -502,7 +513,7 @@ export function RiderView({
 
                         {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
                           <div className="space-y-2">
-                            {!order.eeuDetails.receiptImageUrl ? (
+                            {!(order.eeuDetails.receiptCaptured || order.eeuDetails.receiptImageUrl) ? (
                               <button
                                 onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
