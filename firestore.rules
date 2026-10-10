@@ -20,8 +20,27 @@ service cloud.firestore {
         : 'customer';
     }
 
+    function isAllowlistedAdminEmail() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'andualemawraris4@gmail.com',
+          'andualemawraris104@gmail.com',
+          'andualemawraris3@gmail.com'
+        ];
+    }
+
     function isAdmin() {
-      return isActiveUser() && getUserRole() == 'admin';
+      return isActiveUser()
+        && getUserRole() == 'admin'
+        && isAllowlistedAdminEmail();
+    }
+
+    function isCustomer() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getUserRole() == 'customer'
+        && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
 
     function isActiveUser() {
@@ -46,8 +65,29 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/orders/$(orderId));
     }
 
+    // Prefer the protected subcollection receipt; recognize existing legacy inline receipts during rollout.
+    function hasEeuReceipt(orderId) {
+      return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
+        || (
+          orderDoc(orderId).data.eeuDetails is map
+          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
+          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
+          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+        );
+    }
+
+    function hasEeuReceiptAfter(orderId) {
+      return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
+        || (
+          orderDoc(orderId).data.eeuDetails is map
+          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
+          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
+          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+        );
+    }
+
     function isOrderCustomer(orderId) {
-      return isActiveUser() && orderDoc(orderId).data.customerId == request.auth.uid;
+      return isCustomer() && orderDoc(orderId).data.customerId == request.auth.uid;
     }
 
     function isOrderRunner(orderId) {
@@ -87,6 +127,131 @@ service cloud.firestore {
       );
     }
 
+    function parcelWeightAddon(weightCategory) {
+      return weightCategory == '< 1 kg' ? 50
+        : weightCategory == '1 - 3 kg' ? 100
+        : weightCategory == '3 - 5 kg' ? 180
+        : weightCategory == '5 - 10 kg' ? 250
+        : -1;
+    }
+
+    function validParcelOrder() {
+      return request.resource.data.parcelDetails is map
+        && request.resource.data.parcelDetails.senderCity == 'Jijiga'
+        && request.resource.data.parcelDetails.receiverCity == 'Jijiga'
+        && request.resource.data.parcelDetails.weightCategory in ['< 1 kg', '1 - 3 kg', '3 - 5 kg', '5 - 10 kg']
+        && request.resource.data.parcelDetails.tamperSealRequested is bool
+        && request.resource.data.quantity == 1
+        && request.resource.data.price == parcelWeightAddon(request.resource.data.parcelDetails.weightCategory)
+          + (request.resource.data.parcelDetails.tamperSealRequested ? 30 : 0)
+        && request.resource.data.deliveryFee == 120
+        && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee;
+    }
+
+    function validRideOrder() {
+      return request.resource.data.rideDetails is map
+        && request.resource.data.rideDetails.vehicleType in ['MARHABA_TAXI', 'MARHABA_MOTO']
+        && request.resource.data.quantity == 1
+        && request.resource.data.deliveryFee == 0
+        && request.resource.data.price == (request.resource.data.rideDetails.vehicleType == 'MARHABA_TAXI' ? 283 : 136)
+        && request.resource.data.totalPrice == request.resource.data.price;
+    }
+
+    function validEeuOrder() {
+      return request.resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails.meterNumber is string
+        && request.resource.data.eeuDetails.meterNumber.matches('^[0-9-]{13,16}$')
+        && request.resource.data.eeuDetails.rechargeAmount is number
+        && request.resource.data.eeuDetails.rechargeAmount >= 100
+        && request.resource.data.eeuDetails.rechargeAmount <= 15000
+        && request.resource.data.eeuDetails.rechargeAmount % 50 == 0
+        && request.resource.data.eeuDetails.serviceFee == 75
+        && request.resource.data.price == request.resource.data.eeuDetails.rechargeAmount
+        && request.resource.data.deliveryFee == 75
+        && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+        && request.resource.data.quantity == 1
+        && request.resource.data.eeuDetails.customerAuthorized == true
+        && request.resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+        && request.resource.data.eeuDetails.custodyLabel == 'WITH_CUSTOMER'
+        && request.resource.data.eeuDetails.custodyTimeline is list
+        && request.resource.data.eeuDetails.custodyTimeline.size() == 1
+        && request.resource.data.eeuDetails.custodyTimeline[0].phase == 'WITH_CUSTOMER'
+        && !('receiptImageUrl' in request.resource.data.eeuDetails)
+        && !('receiptCaptured' in request.resource.data.eeuDetails)
+        && !('receiptTimestamp' in request.resource.data.eeuDetails)
+        && !('tokenCode' in request.resource.data.eeuDetails);
+    }
+
+    function validEeuDetailsUpdate(orderId) {
+      return resource.data.serviceType == 'EEU_RECHARGE'
+        && resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
+          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode'
+        ])
+        && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
+        && request.resource.data.eeuDetails.customerAuthorized == resource.data.eeuDetails.customerAuthorized
+        && request.resource.data.eeuDetails.rechargeAmount == resource.data.eeuDetails.rechargeAmount
+        && request.resource.data.eeuDetails.serviceFee == resource.data.eeuDetails.serviceFee
+        && request.resource.data.eeuDetails.eeuHubName == resource.data.eeuDetails.eeuHubName
+        && request.resource.data.eeuDetails.kwhUnits == resource.data.eeuDetails.kwhUnits
+        && request.resource.data.eeuDetails.custodyTimeline is list
+        && resource.data.eeuDetails.custodyTimeline is list
+        && request.resource.data.eeuDetails.custodyTimeline.size() == resource.data.eeuDetails.custodyTimeline.size() + 1
+        && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].actor == 'Rider ' + request.auth.uid
+        // Image data lives under /orders/{orderId}/receipts/terminal, outside the order list document.
+        // Metadata is attached once while at the hub, and only when a bounded receipt document exists.
+        && (
+          !request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasAny([
+            'receiptCaptured', 'receiptTimestamp', 'tokenCode'
+          ])
+          || (
+            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && (!('receiptCaptured' in resource.data.eeuDetails) || resource.data.eeuDetails.receiptCaptured != true)
+            && request.resource.data.eeuDetails.receiptCaptured == true
+            && hasEeuReceiptAfter(orderId)
+            && request.resource.data.eeuDetails.receiptTimestamp is string
+            && request.resource.data.eeuDetails.tokenCode is string
+          )
+        )
+        && (
+          (
+            request.resource.data.eeuDetails.custodyPhase == resource.data.eeuDetails.custodyPhase
+            && resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.receiptCaptured == true
+            && hasEeuReceiptAfter(orderId)
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyLabel == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
+            && hasEeuReceipt(orderId)
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_RETURN'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            && request.resource.data.eeuDetails.custodyLabel == 'RETURNED'
+            && hasEeuReceipt(orderId)
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'RETURNED'
+          )
+        );
+    }
+
     function validCustomerOrderCreate() {
       return request.resource.data.keys().hasOnly([
         'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
@@ -95,17 +260,14 @@ service cloud.firestore {
         'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
         'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
         'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
-        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt'
+        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt', 'updatedAt'
       ])
+      && isCustomer()
       && request.resource.data.customerId == request.auth.uid
       && request.resource.data.status == 'PENDING'
-      && request.resource.data.serviceType in ['FOOD', 'KHAT']
-      && request.resource.data.paymentMethod in [
-        'TELEBIRR', 'COD'
-      ]
-      && request.resource.data.paymentStatus == (
-        request.resource.data.paymentMethod == 'COD' ? 'UNPAID' : 'PAYMENT_PENDING'
-      )
+      && request.resource.data.serviceType in ['FOOD', 'KHAT', 'PARCEL', 'RIDE', 'EEU_RECHARGE']
+      && request.resource.data.paymentMethod == 'COD'
+      && request.resource.data.paymentStatus == 'UNPAID'
       && request.resource.data.price is number
       && request.resource.data.price >= 0
       && request.resource.data.quantity is number
@@ -138,11 +300,9 @@ service cloud.firestore {
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
           && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
         )
-        || (
-          request.resource.data.serviceType in ['PARCEL', 'RIDE', 'EEU_RECHARGE']
-          && request.resource.data.quantity == 1
-          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
-        )
+        || (request.resource.data.serviceType == 'PARCEL' && validParcelOrder())
+        || (request.resource.data.serviceType == 'RIDE' && validRideOrder())
+        || (request.resource.data.serviceType == 'EEU_RECHARGE' && validEeuOrder())
       )
       && (!('distanceKm' in request.resource.data) || (
         request.resource.data.distanceKm is number
@@ -155,7 +315,6 @@ service cloud.firestore {
         && request.resource.data.etaMinutes <= 100000
       ));
     }
-
     // Connection probe only. Do not store sensitive data here.
     match /test/connection {
       allow read: if true;
@@ -165,9 +324,8 @@ service cloud.firestore {
     // Staff/admin roles are provisioned by trusted backend functions.
     match /users/{uid} {
       allow read: if signedIn() && (
-        isAdmin()
-        || (isActiveUser() && request.auth.uid == uid)
-        || (isActiveUser() && getUserRole() in ['runner', 'rider'])
+        request.auth.uid == uid
+        || isAdmin()
       );
 
       allow create: if signedIn()
@@ -330,31 +488,55 @@ service cloud.firestore {
         )
         || (
           isRunner()
-          && ((('runnerId' in resource.data) && resource.data.runnerId == request.auth.uid) || (!('runnerId' in resource.data) && request.resource.data.runnerId == request.auth.uid))
+          && (
+            (resource.data.runnerId == request.auth.uid && validRunnerTransition())
+            || (
+              (!('runnerId' in resource.data) || resource.data.runnerId == null)
+              && request.resource.data.runnerId == request.auth.uid
+              && resource.data.status in ['PENDING', 'TRANSACTION_PENDING']
+              && request.resource.data.status == 'RUNNER_ASSIGNED'
+            )
+          )
           && request.resource.data.runnerName == currentUser().data.displayName
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
-          && validRunnerTransition()
         )
         || (
           isRider()
-          && ((('riderId' in resource.data) && resource.data.riderId == request.auth.uid) || (!('riderId' in resource.data) && request.resource.data.riderId == request.auth.uid))
+          && (
+            (resource.data.riderId == request.auth.uid && validRiderTransition())
+            || (
+              (!('riderId' in resource.data) || resource.data.riderId == null)
+              && request.resource.data.riderId == request.auth.uid
+              && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY']
+              && request.resource.data.status == 'RIDER_ACCEPTED'
+            )
+          )
           && request.resource.data.riderName == currentUser().data.displayName
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
-          && validRiderTransition()
           && (
             request.resource.data.status == 'DELIVERED'
             ? (
               resource.data.paymentMethod == 'COD'
                 ? request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
-                : request.resource.data.paymentStatus == 'PAID_CONFIRMED'
+                : resource.data.paymentStatus == 'PAID_CONFIRMED'
+                  && request.resource.data.paymentStatus == 'PAID_CONFIRMED'
             )
             : request.resource.data.paymentStatus == resource.data.paymentStatus
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eeuDetails'])
+            || validEeuDetailsUpdate(orderId)
+          )
+          && (
+            request.resource.data.status != 'DELIVERED'
+            || resource.data.serviceType != 'EEU_RECHARGE'
+            || request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
           )
           && (
             !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
@@ -365,7 +547,24 @@ service cloud.firestore {
 
       allow delete: if isAdmin();
 
-      // Only participants in the order can see/write its chat.
+      match /receipts/{receiptId} {
+        // Load the image only when an authorized participant opens the receipt.
+        allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
+        allow create: if receiptId == 'terminal'
+          && isOrderRider(orderId)
+          && orderDoc(orderId).data.serviceType == 'EEU_RECHARGE'
+          && orderDoc(orderId).data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+          && (!('receiptCaptured' in orderDoc(orderId).data.eeuDetails) || orderDoc(orderId).data.eeuDetails.receiptCaptured != true)
+          && request.resource.data.keys().hasOnly(['receiptImageUrl', 'capturedBy', 'capturedAt'])
+          && request.resource.data.capturedBy == request.auth.uid
+          && request.resource.data.capturedAt is timestamp
+          && request.resource.data.receiptImageUrl is string
+          && request.resource.data.receiptImageUrl.size() <= 300000
+          && request.resource.data.receiptImageUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$');
+        // Receipt evidence is immutable after creation.
+        allow update, delete: if false;
+      }
+
       match /messages/{messageId} {
         allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
         allow create: if (isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId))
@@ -393,12 +592,18 @@ service cloud.firestore {
         ));
 
       allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'orderId', 'status', 'timestamp', 'actorRole', 'actorId', 'actorName', 'note', 'createdAt'
+        ])
+        && request.resource.data.orderId is string
+        && request.resource.data.status == orderDoc(request.resource.data.orderId).data.status
+        && request.resource.data.timestamp is string
         && request.resource.data.actorId == request.auth.uid
         && (
           (getUserRole() == 'customer' && request.resource.data.actorRole == 'CUSTOMER' && isOrderCustomer(request.resource.data.orderId))
           || (getUserRole() == 'runner' && request.resource.data.actorRole == 'RUNNER' && isOrderRunner(request.resource.data.orderId))
           || (getUserRole() == 'rider' && request.resource.data.actorRole == 'RIDER' && isOrderRider(request.resource.data.orderId))
-          || (getUserRole() == 'admin' && request.resource.data.actorRole == 'ADMIN')
+          || (isAdmin() && request.resource.data.actorRole == 'ADMIN')
         );
 
       allow update, delete: if isAdmin();

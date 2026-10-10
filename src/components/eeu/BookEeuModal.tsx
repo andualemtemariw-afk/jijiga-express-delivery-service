@@ -41,7 +41,8 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
+  const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
 
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
@@ -72,6 +73,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       meterNumber: meterValidation.formatted,
       cardSerialNumber: cardSerial.trim() || undefined,
       rechargeAmount: Number(rechargeAmount),
+      customerAuthorized: true,
       serviceFee: serviceFee,
       eeuHubName: hub.name,
       custodyPhase: 'WITH_CUSTOMER',
@@ -291,11 +293,27 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
             </div>
           </div>
 
+          {/* Explicit customer authorization is stored in the order before physical-card collection. */}
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-950">
+            <input
+              type="checkbox"
+              required
+              checked={customerAuthorized}
+              onChange={(e) => setCustomerAuthorized(e.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span className="text-xs leading-relaxed">
+              I authorize Jijiga Express to collect my physical prepaid card, take it to the selected EEU service point,
+              request the stated recharge amount, and return my card with the terminal receipt. I understand that the
+              recharge amount and the ETB 75 service fee are separate.
+            </span>
+          </label>
+
           {/* Payment Method Selector */}
           <div>
             <label className="font-bold text-slate-800 block mb-1">Payment Method for Float & Errand Fee</label>
             <div className="grid grid-cols-3 gap-2">
-              {(['TELEBIRR', 'COD'] as PaymentMethod[]).map(pm => (
+              {(['COD'] as PaymentMethod[]).map(pm => (
                 <button
                   key={pm}
                   type="button"

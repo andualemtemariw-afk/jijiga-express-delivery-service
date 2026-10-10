@@ -1,57 +1,50 @@
-# Jijiga Express — Production Smoke Tests
+# Jijiga Express — Security Smoke-Test Matrix
 
-Run these tests against the Firebase Emulator before deployment, then repeat the operational subset against production with controlled test accounts.
+GitHub Actions runs the Auth and Firestore Emulator tests automatically for this PR. These tests do not publish production rules and do not prove a physical phone flow.
 
-## Authentication and roles
-1. Anonymous users cannot read or write protected Firestore collections.
-2. A first-time authenticated user can create only a customer profile under their own UID.
-3. A customer cannot create or update a profile to admin, runner, rider, or mamila.
-4. A customer cannot modify active or mamilaId.
-5. An inactive staff account cannot access staff-scoped order data or mutate orders.
+## Authentication and profiles
+1. Anonymous users cannot read/write protected Firestore documents.
+2. A new customer can read their own profile before it exists, create only a customer profile at their own UID, sign out/re-authenticate, and read their own profile again.
+3. Customer cannot promote their own profile, self-activate, or read a different customer profile.
+4. An admin must have role `admin`, `active: true`, a verified Auth email and a match in the existing allow-list.
+5. Unverified and verified-but-not-allow-listed admin accounts are denied admin access.
 
-## Orders and payments
-6. Customer order creation is rejected when it includes runnerId, riderId, payment verification fields, or other fields outside the allowlist.
-7. Customer order creation is rejected when paymentStatus does not match the selected payment method.
-8. Customer order creation is rejected when totalPrice does not match subtotal plus delivery fee.
-9. Customer cannot change price, total price, delivery fee, payment status, or courier assignment after creation.
-10. Runner cannot claim an order for another runner or bypass the allowed status transition.
-11. Rider cannot deliver a non-COD order while payment is not PAID_CONFIRMED.
-12. Rider can mark a COD order DELIVERED only with COLLECTED_BY_RIDER.
-13. A non-COD rider cannot self-change PAID_CONFIRMED, provider, reference, or verification timestamp.
+## Orders and payment state
+6. Customer-created orders are COD-only and start `UNPAID`; a customer cannot inject a paid status or payment verification field.
+7. FOOD/KHAT order writes must atomically link the order, stock delta and inventory reservation.
+8. Parcel/Ride/EEU order creation validates required service data and fixed tariff constraints. Tests deny zero-priced Parcel/Ride orders and an EEU order whose price differs from its recharge amount.
+9. Customer can read only their own orders.
+10. Runner cannot self-assign a PENDING order without the `RUNNER_ASSIGNED` transition.
+11. Rider cannot self-assign a PENDING order; claims start from the dispatch-ready state.
+12. Rider cannot set a digital order to `PAID_CONFIRMED`. For COD, `COLLECTED_BY_RIDER` is allowed only in the delivery transition.
+13. Customer cannot cancel a paid order before a refund flow exists.
 
 ## Inventory
-14. FOOD and KHAT order creation reserves stock atomically.
-15. A reservation exceeding available stock fails without creating the order.
-16. Customer cancellation restores the reserved quantity exactly once; inventory-backed cancellation must include the release transaction.
-17. A paid non-COD order cannot be customer-cancelled before a refund workflow exists.
-18. A direct inventory-backed cancellation without its release/batch transaction is rejected.
-19. A customer cannot directly change inventory outside a valid reservation transaction.
+14. An ordinary customer cannot arbitrarily change batch stock.
+15. A reservation exceeding the available quantity is denied.
+16. Customer cancellation must restore exactly the originally reserved quantity once, through the linked release transaction.
+17. A release with the wrong order/batch/quantity is denied.
 
-## Storage
-20. A rider can upload an EEU receipt only for an order assigned to that rider.
-21. Receipt upload must be an image and no larger than 10 MiB.
-22. Receipt metadata must contain the matching orderId and rider UID.
-23. Existing receipt objects cannot be overwritten by a rider.
-24. Customer, assigned rider, and active admin can read the receipt; unrelated users cannot.
+## Messages and delivery events
+18. A non-participant cannot read an order's messages or forge a message as another sender.
+19. Delivery-event creation requires the authenticated actor UID, role/order participation, an allow-listed payload and status equal to the order's current persisted status.
+20. An outsider cannot forge an event for another order.
+21. A customer cannot create a future `DELIVERED` event while the persisted order remains `PENDING`.
+22. Test also proves a legitimate order participant may add an event matching current status. This is a scoped client-authored event, not proof of a physical delivery; authoritative transition events would require trusted server-side code.
 
-## Payment webhook
-25. Missing or incorrect webhook authentication is rejected.
-26. Unknown order, non-ETB currency, amount mismatch, or invalid payment status is rejected.
-27. Replaying the same eventId with the same payload is idempotent.
-28. Reusing an eventId with a different payload is rejected.
-29. A different payment reference cannot replace an already confirmed payment.
-30. A refund cannot be applied to an order that was never confirmed paid.
+## EEU custody/receipt
+23. EEU order create requires customer authorization, a valid meter number, allowed recharge amount, separate service fee and initial `WITH_CUSTOMER` phase.
+24. Rider cannot change meter number, recharge amount, service fee, hub or customer authorization.
+25. Rider cannot skip custody phases or mark an order returned before receipt evidence exists.
+26. The assigned rider can atomically create `/orders/{orderId}/receipts/terminal` and set order receipt metadata at `AT_EEU_HUB`.
+27. Receipt JPEG data URLs are capped at 300,000 characters; oversized and non-JPEG data are denied.
+28. Receipt documents cannot be replaced or deleted by the rider.
+29. Order-list documents contain only receipt metadata, not the photo data.
+30. The order customer and assigned participants can load the photo on demand; unrelated customers cannot read it.
 
-## Demo separation
-31. Synthetic courier/GPS simulation is available only in development or when VITE_ENABLE_DEMO_SANDBOX=true.
-32. Production order creation does not initialize rider GPS with merchant coordinates.
-33. Production simulation controls do not advance live orders.
+## Build/release
+31. GitHub Actions runs root dependencies install, TypeScript check, production build, and emulator tests without local user scripts.
+32. The PR's test workflows do not publish production rules.
+33. The PR has no Cloud Functions source/deployment workflow. New orders are COD-only.
 
-## Build and release
-34. npm ci succeeds at repository root.
-35. npm run lint succeeds.
-36. npm run build succeeds.
-37. npm --prefix functions ci, npm --prefix functions run lint, and npm --prefix functions run build succeed.
-38. npm audit --audit-level=high and the Functions audit are reviewed and recorded before merge.
-
-Do not mark a test passed merely because the code path exists. Record the actual command, environment, date, and observed result.
+Do not mark production Console publishing or physical-phone verification passed just because CI passes.

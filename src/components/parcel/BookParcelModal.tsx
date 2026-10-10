@@ -50,7 +50,7 @@ export function BookParcelModal({
   const [isFragile, setIsFragile] = useState(false);
   const [tamperSeal, setTamperSeal] = useState(true);
   const [specialNote, setSpecialNote] = useState('Handle with care, expedited courier delivery.');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
 
   if (!isOpen) return null;
 
@@ -319,8 +319,7 @@ export function BookParcelModal({
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: 'TELEBIRR', label: 'Telebirr', sub: 'Online payment' },
-                { id: 'COD', label: 'Cash (COD)', sub: 'Pay Courier' },
+                { id: 'COD', label: 'Cash (COD)', sub: 'Pay courier at handover' },
               ].map((m) => (
                 <button
                   key={m.id}

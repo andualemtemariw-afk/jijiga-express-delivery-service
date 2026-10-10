@@ -1,5 +1,5 @@
 {
-  "name": "jijiga-express-functions",
+  "name": "firebase-emulator-test-support",
   "private": true,
   "packageManager": "npm@10.9.2",
   "engines": {
@@ -11,13 +11,13 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "firebase-admin": "^13.10.0",
-    "firebase-functions": "^6.4.0"
+    "firebase-admin": "^13.10.0"
   },
   "devDependencies": {
     "typescript": "~5.8.2"
   },
   "overrides": {
     "uuid": "11.1.1"
-  }
+  },
+  "description": "Emulator-only Firebase Admin dependency package for rule smoke tests; no Cloud Functions source is deployed."
 }

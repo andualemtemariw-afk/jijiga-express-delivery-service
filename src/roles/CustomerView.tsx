@@ -123,7 +123,7 @@ export function CustomerView({
   const [showCheckoutMap, setShowCheckoutMap] = useState(true);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [cookingInstruction, setCookingInstruction] = useState('Please cook it well done, no pink inside.');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   
   // Profile edit form state
   const [editPhone, setEditPhone] = useState(customerProfile?.phone || '');
@@ -352,14 +352,7 @@ export function CustomerView({
   };
 
   const PAYMENT_PROVIDERS = [
-    { id: 'TELEBIRR', label: 'Telebirr', sub: 'Ethio Telecom *127#', icon: Smartphone, color: 'text-amber-600' },
-    { id: 'ZAAD', label: 'Zaad', sub: 'Telesom Mobile Money', icon: Smartphone, color: 'text-emerald-600' },
-    { id: 'EBIRR', label: 'eBIRR', sub: 'Mobile Wallet *841#', icon: Smartphone, color: 'text-blue-600' },
-    { id: 'SAHAL', label: 'Sahal', sub: 'Golis Mobile Money', icon: Smartphone, color: 'text-indigo-600' },
-    { id: 'COOP_PAY', label: 'Coop Pay', sub: 'Cooperative Bank of Oromia', icon: CreditCard, color: 'text-purple-600' },
-    { id: 'CBE_BIRR', label: 'CBE Birr', sub: 'Commercial Bank of Ethiopia', icon: CreditCard, color: 'text-rose-600' },
-    { id: 'E_DAHAB', label: 'e-Dahab', sub: 'Dahabshiil Mobile Pay', icon: Smartphone, color: 'text-teal-600' },
-    { id: 'COD', label: 'Cash on Delivery', sub: 'Doorstep Cash Handover', icon: CreditCard, color: 'text-slate-700' },
+    { id: 'COD', label: 'Cash on Delivery', sub: 'Pay the courier at handover', icon: CreditCard, color: 'text-slate-700' },
   ];
 
   // Filtered batches

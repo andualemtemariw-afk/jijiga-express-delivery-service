@@ -43,6 +43,7 @@ export interface EeuRechargeDetails {
   meterNumber: string; // 13-digit meter number string
   cardSerialNumber?: string; // Physical card identifier
   rechargeAmount: number; // Cash float amount in ETB
+  customerAuthorized?: boolean; // Explicit customer authorization for physical-card pickup/top-up
   serviceFee: number; // Delivery & errand service fee
   eeuHubName: string; // e.g. "EEU Jijiga Main District Office"
   custodyPhase: EeuCustodyPhase;
@@ -55,7 +56,8 @@ export interface EeuRechargeDetails {
     actor: string;
   }>;
   tokenCode?: string; // 20-digit STS prepaid code
-  receiptImageUrl?: string; // Mandatory camera snapshot of EEU terminal paper receipt
+  receiptCaptured?: boolean; // Immutable photo exists under orders/{orderId}/receipts/terminal
+  receiptImageUrl?: string; // Demo-only legacy preview; production writes use the protected receipts subcollection
   receiptTimestamp?: string;
   kwhUnits?: number;
 }

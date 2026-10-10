@@ -31,14 +31,52 @@ import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispa
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../services/googleAuth';
+import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
+
+ 
+
+/**
+ * Compress an EEU receipt locally before saving it in the order-scoped receipts subcollection.
+ * This avoids Cloud Storage while keeping large image data out of order list snapshots.
+ */
+async function compressReceiptForFirestore(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Could not open the receipt image. Please capture it again.'));
+      image.src = objectUrl;
+    });
+
+    const maxDimension = 960;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Image compression is unavailable on this device.');
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of [0.72, 0.62, 0.52, 0.42, 0.32]) {
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (dataUrl.length <= MAX_EEU_RECEIPT_DATA_URL_LENGTH) return dataUrl;
+    }
+    throw new Error('Receipt image is too large for the free Firestore evidence limit. Please capture the receipt closer with less background.');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 interface Props {
   orders: Order[];
   orderMessages?: Record<string, ChatMessage[]>;
   onSendMessage?: (orderId: string, message: Omit<ChatMessage, 'id' | 'orderId'>) => void;
-  onUpdateOrder: (orderId: string, updates: Partial<Order>) => void;
+  onUpdateOrder: (orderId: string, updates: Partial<Order>, persistToFirestore?: boolean) => void;
+  isDemoMode?: boolean;
   currentRiderId: string;
   currentRiderName?: string;
   onClaimOrder?: (orderId: string) => Promise<void>;
@@ -50,6 +88,7 @@ export function RiderView({
   orderMessages,
   onSendMessage,
   onUpdateOrder, 
+  isDemoMode = false,
   currentRiderId, 
   currentRiderName,
   onClaimOrder,
@@ -150,25 +189,31 @@ export function RiderView({
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
     setIsCapturingReceipt(true);
     try {
-      const extension = (receiptFile?.type.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '');
-      const objectRef = storageRef(storage, `eeuReceipts/${cameraOrder.id}/${currentRiderId}/receipt-${Date.now()}.${extension}`);
-      await uploadBytes(objectRef, receiptFile, { contentType: receiptFile.type, customMetadata: { orderId: cameraOrder.id, riderId: currentRiderId, customerId: cameraOrder.customerId } });
-      const receiptImageUrl = await getDownloadURL(objectRef);
+      const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const updatedEeu: EeuRechargeDetails = {
         ...cameraOrder.eeuDetails,
-        receiptImageUrl,
+        receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
         tokenCode: cameraTokenInput.trim(),
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
           timestamp: nowTime,
-          note: 'Actual EEU terminal receipt image uploaded from rider device.',
+          note: 'Actual EEU terminal receipt image compressed on-device and saved in the protected order receipts subcollection.',
           actor: `Rider ${currentRiderId}`
         }]
       };
-      onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu });
+      if (isDemoMode) {
+        // Demo-only local previews may use the legacy inline field; it is never persisted to Firestore.
+        onUpdateOrder(cameraOrder.id, {
+          eeuDetails: { ...updatedEeu, receiptImageUrl }
+        }, false);
+      } else {
+        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
+        // The service committed order metadata and photo atomically; update app state without a duplicate write.
+        onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
+      }
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);
@@ -468,7 +513,7 @@ export function RiderView({
 
                         {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
                           <div className="space-y-2">
-                            {!order.eeuDetails.receiptImageUrl ? (
+                            {!(order.eeuDetails.receiptCaptured || order.eeuDetails.receiptImageUrl) ? (
                               <button
                                 onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"

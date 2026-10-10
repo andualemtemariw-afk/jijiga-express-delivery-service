@@ -44,7 +44,7 @@ import {
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
 import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
-import { createServiceOrder, createTelebirrCheckout } from './services/serviceOrderFunctions';
+import { createServiceOrder } from './services/firestoreServiceOrders';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -399,11 +399,6 @@ export default function App() {
           actorName: effectiveCustomerName,
           note: `Order placed for ${batch.name} (${paymentMethod}) and entered unassigned runner pool.`
         });
-        if (paymentMethod === 'TELEBIRR') {
-          const checkout = await createTelebirrCheckout(orderDocId);
-          window.location.assign(checkout.checkoutUrl);
-          return;
-        }
         showAlert(`Order #${orderDocId.slice(-6)} securely saved to Cloud Firestore!`, 'success');
       } catch (err: any) {
         console.error('Failed to save order to Firestore:', err);
@@ -452,11 +447,6 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express parcel booked: ${fullOrder.batchName}.`
       });
-      if (fullOrder.paymentMethod === 'TELEBIRR') {
-        const checkout = await createTelebirrCheckout(fullOrder.id);
-        window.location.assign(checkout.checkoutUrl);
-        return;
-      }
       showAlert(`Parcel Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -501,11 +491,6 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Express Bajaj ride requested.`
       });
-      if (fullOrder.paymentMethod === 'TELEBIRR') {
-        const checkout = await createTelebirrCheckout(fullOrder.id);
-        window.location.assign(checkout.checkoutUrl);
-        return;
-      }
       showAlert(`Ride #${fullOrder.id.slice(-6)} recorded in Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -552,11 +537,6 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `EEU Prepaid electricity recharge booked.`
       });
-      if (fullOrder.paymentMethod === 'TELEBIRR') {
-        const checkout = await createTelebirrCheckout(fullOrder.id);
-        window.location.assign(checkout.checkoutUrl);
-        return;
-      }
       showAlert(`EEU Recharge Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -604,11 +584,6 @@ export default function App() {
         actorName: fullOrder.customerName,
         note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'} with atomic inventory reservation.`
       });
-      if (fullOrder.paymentMethod === 'TELEBIRR') {
-        const checkout = await createTelebirrCheckout(fullOrder.id);
-        window.location.assign(checkout.checkoutUrl);
-        return;
-      }
       showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
       // Rollback state on persistence failure
@@ -631,7 +606,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
+  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>, persistToFirestore = true) => {
     // Prevent customer from modifying protected pricing or courier assignment fields
     if (activeRole === 'CUSTOMER' && userProfile?.role !== 'admin') {
       const protectedKeys = ['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl'];
@@ -644,7 +619,7 @@ export default function App() {
 
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
 
-    if (!isDemoMode && currentUser) {
+    if (!isDemoMode && currentUser && persistToFirestore) {
       try {
         await updateOrderInFirestore(orderId, updates);
         if (updates.status) {
@@ -1253,6 +1228,7 @@ export default function App() {
           {activeRole === 'RIDER' && (
             <RiderView 
               orders={riderOrders} 
+              isDemoMode={isDemoMode}
               orderMessages={orderMessages}
               onSendMessage={handleSendMessage}
               currentRiderId={currentUser?.uid || ''} 

@@ -1,62 +1,46 @@
-# Jijiga Express — Release Candidate
+# Jijiga Express — Release Candidate #2
 
 ## Candidate
 
 - Repository: `andualemtemariw-afk/jijiga-express-delivery-service`
-- Branch: `feat/stage2-operational-remediations`
-- Pull request: #1 — Apply Stage 3 production hardening
-- Target: `main`
-- Verified CI head: `9e1ddcf313ac83f4ab4eb16a994c1b25c6d794c9`
+- PR: [#2 — Harden customer profiles and verified admin access](https://github.com/andualemtemariw-afk/jijiga-express-delivery-service/pull/2)
+- Branch: `fix/customer-profile-self-read`
+- Firebase project: `sunny-discipline-hvd6f`
+- Existing Firestore database: `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`
 
-## Current gate
+## Gate
 
-**NOT READY FOR MERGE**
+**NOT READY FOR PRODUCTION PUBLISH** until latest-head CI is green and the owner completes the Firebase Console publish plus a phone smoke test.
 
-The current release branch is CI-green for the pull-request validation workflows. Production readiness remains blocked by real Telebirr credential provisioning, production Firebase deployment, Hosting provisioning, controlled post-deploy verification, and dependency-risk disposition.
+## Changes in this candidate
 
-## Verified automated evidence — 2026-10-04 UTC
+- First-time customers can read their own profile before the `active` field exists and can persist/re-read their customer profile.
+- Admin access uses an active Firestore admin profile, verified Auth email and the existing allow-list; no custom claims or bootstrap script.
+- Customer profile/order reads and order messages are scoped to the right account/participants.
+- Runner/rider assignment follows the dispatch state machine.
+- Rider payment and EEU fields are strictly constrained. Online payment cannot be self-confirmed; new orders are COD-only.
+- Delivery events require a valid authenticated actor/participant, a small allow-listed payload and the order's current persisted status.
+- Batch stock updates require authorized management or an exact reservation/release transaction.
+- EEU receipt photos are compressed on-device and stored in immutable `/orders/{orderId}/receipts/terminal` documents, separately from order metadata. Photo reads are participant-restricted and lazy-loaded; 300,000-character cap; no Cloud Storage dependency.
+- Cloud Functions source, the command-line admin bootstrap script and Functions deployment/preflight workflows have been removed from this PR branch. The remaining Firebase Admin dependency package is used only by Emulator tests and does not deploy functions.
 
-- Production Validation run **37155588106** — **PASSED** on head `9e1ddcf313ac83f4ab4eb16a994c1b25c6d794c9`.
-- Firestore rules tests run **37155588100** — **PASSED** on the same head.
-- Root typecheck and frontend production build passed.
-- Functions install, typecheck, and production build passed.
-- Root and Functions dependency audits passed at the configured **high-severity** gate.
-- Telebirr signature adapter smoke tests passed.
-- Firestore/Storage emulator security tests passed, including the inventory-release customer attack test.
+## Exactly how production rules were deployed before this PR
 
-## Implemented
+On `main`, the GitHub workflow `.github/workflows/firebase-production-backend-deploy.yml` is manual-only (`workflow_dispatch`) and runs `firebase deploy --only firestore:rules,storage,functions`. It is not automatically triggered by an ordinary push or pull request. The separate Firestore rule workflow tests in an emulator; it does not publish rules. The Hosting workflow deploys web files only.
 
-- Firestore authorization and service-specific order validation.
-- Atomic FOOD and KHAT inventory reservation.
-- Immutable scoped EEU receipt storage.
-- Production/demo GPS separation.
-- Strict rider delivery/payment state.
-- Trusted staff provisioning.
-- Reproducible npm lockfiles and CI workflows.
-- Telebirr provider-specific signature verification, merchant identity validation, server-side H5 checkout creation, merchant-order binding, idempotent callback settlement, and client redirect.
-- New customer payment methods are restricted to **TELEBIRR** and **COD**.
-- Generic normalized payment webhooks explicitly reject Telebirr and unintegrated providers.
-- Guarded Firebase Hosting live deployment workflow.
-- Guarded Firebase production preflight workflow.
-- Guarded Firebase backend deployment workflow.
+This PR removes the manual backend deployment workflow. After merge, publish by Firebase Console copy/paste as below. PR/CI jobs do not touch production data/rules.
 
-## Firebase deployment controls
+## Phone-only publish procedure
 
-The release branch now contains:
-- `.github/workflows/firebase-production-preflight.yml` — manually verifies the Firebase service-account secret, target project, required Firebase/Telebirr secrets, Hosting provisioning, demo-sandbox gate, and live-deployment guard without printing secret values.
-- `.github/workflows/firebase-production-backend-deploy.yml` — manually deploys Firestore rules, Storage rules, and Functions to `sunny-discipline-hvd6f` only after the production environment is selected and the required secrets are present.
-- `.github/workflows/firebase-hosting.yml` — deploys the Vite `dist/` output to the Firebase Hosting live channel only from `main`.
+1. In Firebase Console, back up the currently published Firestore rules.
+2. Choose the named database above → **Rules**.
+3. Copy the full `firestore.rules` file from this PR branch's Files changed view, paste it into the Console Rules editor and press **Publish**.
+4. Confirm the allow-listed admin's Auth email is verified and `/users/{uid}` in that same database has `role: "admin"` and `active: true`.
+5. Check Console → **Functions** for formerly deployed function names. Source deletion from GitHub does not delete a running cloud function; remove only confirmed-obsolete functions in Console.
 
-## Remaining production blockers
+## Known limitations
 
-1. **Telebirr production credentials.** Provision the real Fabric app ID/secret, merchant app ID/code, signing keys, callback URL, and redirect URL through Firebase Secret Manager.
-2. **Firebase production environment.** Confirm the production Firebase project, named Firestore database, Storage bucket, backups, monitoring, alerting, and rollback controls.
-3. **Run production preflight.** Execute the manual Firebase production preflight workflow and require a successful result.
-4. **Deploy backend.** Execute the guarded Firebase backend deployment workflow and record its deployment result.
-5. **Deploy frontend.** Merge only after the release candidate is approved, then use the guarded `main` Hosting deployment and record the live URL.
-6. **Post-deploy verification.** Execute controlled Auth/Firestore/Storage/Functions/Telebirr lifecycle smoke tests using non-destructive test data and rollback procedures.
-7. **Moderate dependency advisories.** The high-severity CI gates pass; remaining moderate findings require owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
-
-## Merge rule
-
-Do not merge PR #1 until the production blockers above have recorded evidence or an explicit, documented production-risk acceptance is made by the owner.
+- Online Telebirr/wallet checkout is disabled; only COD is enabled.
+- Existing deployed Cloud Functions, if any, require separate Console deletion.
+- No Firestore rules have been published to production by PR automation.
+- Emulator CI does not substitute for testing sign-in/order flow on the physical phone.
