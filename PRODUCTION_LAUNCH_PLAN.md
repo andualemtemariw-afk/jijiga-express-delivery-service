@@ -1,43 +1,38 @@
-# Jijiga Express — Production Launch Plan
+# Jijiga Express — Spark-Compatible Launch Plan
 
-## Implemented in Stage 3
+## Scope of this release
 
-- Firebase Storage import/type fix.
-- Rider and diagnostic delivery flows no longer mark non-COD orders as paid from the client.
-- Admin Firestore updates are blocked from changing payment verification fields directly.
-- Staff access honors the `active` flag so deactivated staff lose role access.
-- Removed demo/default EEU token from the Rider receipt workflow.
-- Added a trusted Firebase Functions layer for staff provisioning/deactivation.
-- Added a provider-neutral payment settlement path with strict order, amount, currency, provider, and payment-state validation.
-- Added a trusted `createServiceOrder` callable for PARCEL, RIDE, and EEU_RECHARGE pricing and order creation; direct customer Firestore creation is limited to inventory-backed FOOD/KHAT.
-- Added an npm root override for `@grpc/grpc-js` 1.14.5 and locked its transitive dependency tree.
-- Added a provider-specific Telebirr adapter with RSA-PSS verification, merchant identity checks, H5 checkout creation, merchant-order binding, and idempotent settlement.
+This branch preserves the existing Firebase project `sunny-discipline-hvd6f` and named Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project, migrate data, or deploy server-side Functions.
 
-## Payment integration rule
+To avoid requiring a billing upgrade, the app no longer calls Cloud Functions. Service orders are written directly to Firestore and accepted only when the security rules validate customer identity, service data, price fields, and initial state. New orders are COD-only. Telebirr/online checkout is hidden/disabled until a trusted payment verification service is funded and explicitly reintroduced.
 
-Do not connect a payment provider directly to React to set `PAID_CONFIRMED`.
+## Security gates
 
-For Telebirr, the production flow is:
+- New accounts are customer-only and cannot self-assign staff/admin roles.
+- Admin access requires an active Firestore admin profile plus verified email in the existing allow-list. No custom claims, bootstrap script, or CLI are required.
+- Customer read access is scoped to their own profile/order.
+- Order message and delivery-event writes are tied to order participants and current state.
+- Rider payment updates cannot claim a digital payment was paid by a button press.
+- The EEU create rule requires a 13-digit/formatted meter number, permitted recharge amount, separate service fee, customer authorization, and initial `WITH_CUSTOMER` custody state. Later custody changes are strictly scoped and require receipt evidence before return.
+- Batch stock changes are restricted to authorized Mamila/admin edits or exact inventory reservation transactions.
 
-1. Customer creates an order with `paymentMethod=TELEBIRR`.
-2. React calls `createTelebirrCheckout`.
-3. The trusted Function creates the Telebirr H5 pre-order and signs it server-side.
-4. Telebirr calls `telebirrWebhook`.
-5. The Function verifies Telebirr's signature and merchant identity before settling the order transactionally.
-6. Duplicate callbacks are idempotent through `paymentEvents`.
+## Phone-only publish steps
 
-The generic `paymentWebhook` is not an adapter for Telebirr and explicitly rejects Telebirr traffic. New customer payment methods are restricted to Telebirr and COD.
+1. Back up the live Firestore rules from Console.
+2. In Firebase Console, select the existing named database above, open Rules, paste the complete `firestore.rules` file from PR #2, and publish.
+3. In Storage → Rules, back up existing rules and paste the PR's complete `storage.rules` file if the existing Storage bucket is available under the current plan.
+4. Check Authentication → Users to confirm the allow-listed admin account has verified email and check Firestore `/users/{uid}` for `role: "admin"` and `active: true`.
+5. Test registration, restart persistence, a COD order, cross-customer access denial, and message/event permissions in a controlled test account.
 
-## Staff provisioning
+No local computer, Firebase CLI, or script is needed for those publishing steps.
 
-Create or deactivate staff through `provisionStaff` and `setStaffActive` callable functions. The client must not create a Firestore user profile with a staff role.
+## Paid backend functions
 
-## Remaining deployment work
+Firebase documents Cloud Functions as available on the Blaze plan. This branch removes the Functions source and manual backend-deployment workflow instead of asking the owner to upgrade. Older deployed functions, if present in Console → Functions, remain deployed until explicitly deleted there. Verify and delete only confirmed obsolete endpoints; do not assume source deletion removes production deployments.
 
-1. No Firestore migration is required solely because the project uses a named database; migrate only after an explicit architecture decision.
-2. Configure Telebirr production secrets in Firebase Secret Manager.
-3. Keep non-Telebirr payment methods disabled until their provider-specific adapters are implemented and tested.
-4. Deploy Firestore/Storage rules and Functions from the release commit after environment and secret checks.
-5. Run controlled production smoke tests for authentication, order creation, inventory reservation, delivery-state transitions, receipt upload, and the Telebirr payment lifecycle.
-6. Review and disposition remaining moderate dependency advisories.
+## Not yet production-proven
 
+- Physical-phone sign-in and order persistence have not been tested by the owner.
+- Console publishing of Firestore/Storage rules has not been performed by this PR.
+- Existing Storage bucket availability on the current billing plan must be confirmed in Console.
+- Hosting is separate; its previous run failed because the Hosting service-account secret was unavailable.
