@@ -63,8 +63,8 @@ async function registerCustomerClient() {
   const db = getFirestore(app);
   const storage = getStorage(app);
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(db, '127.0.0.1:8080');
-  connectStorageEmulator(storage, '127.0.0.1:9199');
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
 
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const uid = credential.user.uid;
