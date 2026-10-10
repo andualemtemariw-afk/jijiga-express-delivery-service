@@ -505,6 +505,12 @@ async function main() {
   });
 
   const admin = await clientFor('admin');
+  const allowedAdminOrder = await getDoc(doc(admin.db, 'orders', validOrder.id));
+  if (!allowedAdminOrder.exists()) {
+    throw new Error('FAIL verified allow-listed admin profile could not read another customer order without custom claims');
+  }
+  console.log('PASS verified allow-listed admin profile can read order without custom claims');
+
   const unverifiedAdmin = await clientFor('unverified-admin');
   const nonallowlistedAdmin = await clientFor('nonallowlisted-admin');
   await expectDenied('admin account with unverified email cannot read another customer order', async () => {
