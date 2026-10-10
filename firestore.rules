@@ -38,6 +38,7 @@ service cloud.firestore {
 
     function isCustomer() {
       return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && getUserRole() == 'customer'
         && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
