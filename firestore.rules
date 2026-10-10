@@ -20,12 +20,26 @@ service cloud.firestore {
         : 'customer';
     }
 
+    function isAllowlistedAdminEmail() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'andualemawraris4@gmail.com',
+          'andualemawraris104@gmail.com',
+          'andualemawraris3@gmail.com'
+        ];
+    }
+
     function isAdmin() {
       return isActiveUser()
         && getUserRole() == 'admin'
-        && request.auth.token.email_verified == true
-        && request.auth.token.role == 'admin'
-        && request.auth.token.active == true;
+        && isAllowlistedAdminEmail();
+    }
+
+    function isCustomer() {
+      return signedIn()
+        && getUserRole() == 'customer'
+        && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
 
     function isActiveUser() {
@@ -51,7 +65,7 @@ service cloud.firestore {
     }
 
     function isOrderCustomer(orderId) {
-      return isActiveUser() && orderDoc(orderId).data.customerId == request.auth.uid;
+      return isCustomer() && orderDoc(orderId).data.customerId == request.auth.uid;
     }
 
     function isOrderRunner(orderId) {
@@ -89,6 +103,776 @@ service cloud.firestore {
       ) || (
         resource.data.status == request.resource.data.status
       );
+    }
+
+    function parcelWeightAddon(weightCategory) {
+      return weightCategory == '< 1 kg' ? 50
+        : weightCategory == '1 - 3 kg' ? 100
+        : weightCategory == '3 - 5 kg' ? 180
+        : weightCategory == '5 - 10 kg' ? 250
+        : -1;
+    }
+
+    function validParcelOrder() {
+      return request.resource.data.parcelDetails is map
+        && request.resource.data.parcelDetails.senderCity == 'Jijiga'
+        && request.resource.data.parcelDetails.receiverCity == 'Jijiga'
+        && request.resource.data.parcelDetails.weightCategory in ['< 1 kg', '1 - 3 kg', '3 - 5 kg', '5 - 10 kg']
+        && request.resource.data.parcelDetails.tamperSealRequested is bool
+        && request.resource.data.quantity == 1
+        && request.resource.data.price == parcelWeightAddon(request.resource.data.parcelDetails.weightCategory)
+          + (request.resource.data.parcelDetails.tamperSealRequested ? 30 : 0)
+        && request.resource.data.deliveryFee == 120
+        && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee;
+    }
+
+    function validRideOrder() {
+      return request.resource.data.rideDetails is map
+        && request.resource.data.rideDetails.vehicleType in ['MARHABA_TAXI', 'MARHABA_MOTO']
+        && request.resource.data.quantity == 1
+        && request.resource.data.deliveryFee == 0
+        && request.resource.data.price == (request.resource.data.rideDetails.vehicleType == 'MARHABA_TAXI' ? 283 : 136)
+        && request.resource.data.totalPrice == request.resource.data.price;
+    }
+
+    function validEeuOrder() {
+      return request.resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails.meterNumber is string
+        && (
+          request.resource.data.eeuDetails.meterNumber.matches('^[0-9]{13}
+      return request.resource.data.keys().hasOnly([
+        'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
+        'mamilaLocation', 'price', 'quantity', 'deliveryFee', 'totalPrice',
+        'status', 'paymentMethod', 'paymentStatus', 'customerId', 'customerName',
+        'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
+        'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
+        'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
+        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt'
+      ])
+      && isCustomer()
+      && request.resource.data.customerId == request.auth.uid
+      && request.resource.data.status == 'PENDING'
+      && request.resource.data.serviceType in ['FOOD', 'KHAT', 'PARCEL', 'RIDE', 'EEU_RECHARGE']
+      && request.resource.data.paymentMethod == 'COD'
+      && request.resource.data.paymentStatus == 'UNPAID'
+      && request.resource.data.price is number
+      && request.resource.data.price >= 0
+      && request.resource.data.quantity is number
+      && request.resource.data.quantity > 0
+      && request.resource.data.deliveryFee is number
+      && request.resource.data.deliveryFee >= 0
+      && request.resource.data.totalPrice is number
+      && (
+        (
+          request.resource.data.serviceType == 'FOOD'
+          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price * request.resource.data.quantity
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (
+          request.resource.data.serviceType == 'KHAT'
+          && request.resource.data.totalPrice == request.resource.data.price * request.resource.data.quantity + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (request.resource.data.serviceType == 'PARCEL' && validParcelOrder())
+        || (request.resource.data.serviceType == 'RIDE' && validRideOrder())
+        || (request.resource.data.serviceType == 'EEU_RECHARGE' && validEeuOrder())
+      )
+      && (!('distanceKm' in request.resource.data) || (
+        request.resource.data.distanceKm is number
+        && request.resource.data.distanceKm >= 0
+        && request.resource.data.distanceKm <= 10000
+      ))
+      && (!('etaMinutes' in request.resource.data) || (
+        request.resource.data.etaMinutes is number
+        && request.resource.data.etaMinutes >= 0
+        && request.resource.data.etaMinutes <= 100000
+      ));
+    }
+
+    // Connection probe only. Do not store sensitive data here.
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // User profiles. Self-registration can ONLY create a customer profile.
+    // Staff/admin roles are provisioned by trusted backend functions.
+    match /users/{uid} {
+      // Users may always read their own profile, including newly registered or deactivated accounts.
+      // This does not grant inactive accounts access to orders or staff-only resources.
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || isAdmin()
+      );
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'customer'
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
+          'address', 'plusCode', 'role', 'createdAt'
+        ]);
+
+      allow update: if signedIn() && (
+        isAdmin()
+        || (
+          request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Public merchant catalog. Administrative writes only until merchant ownership is provisioned.
+    match /mamilas/{mamilaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Public inventory catalog. A Mamila may only create/update batches assigned to their own mamilaId.
+    match /batches/{batchId} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isMamila()
+        && request.resource.data.mamilaId == currentUser().data.mamilaId
+        && request.resource.data.price is number
+        && request.resource.data.available is number
+        && request.resource.data.available >= 0
+      );
+      allow update: if isAdmin() || (
+        isMamila()
+        && resource.data.mamilaId == currentUser().data.mamilaId
+        && request.resource.data.mamilaId == resource.data.mamilaId
+        && request.resource.data.price is number
+        && request.resource.data.available is number
+        && request.resource.data.available >= 0
+      ) || (
+        signedIn()
+        && request.resource.data.mamilaId == resource.data.mamilaId
+        && request.resource.data.price == resource.data.price
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available', 'updatedAt', 'lastReservationId'])
+        && request.resource.data.available >= 0
+        && (!('lastReservationId' in resource.data) || request.resource.data.lastReservationId != resource.data.lastReservationId)
+        && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId))
+        && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.customerId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.batchId == batchId
+        && (
+          (
+            getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.action == 'RESERVE'
+            && !exists(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId))
+            && request.resource.data.available == resource.data.available - getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.quantity
+          )
+          ||
+          (
+            getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.action == 'RELEASE'
+            && request.resource.data.available == resource.data.available + getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.quantity
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+
+    // Inventory reservations are written in the same transaction as the order.
+    // The reservation links the customer, order and batch so stock changes cannot
+    // be made arbitrarily by a customer.
+    match /inventoryReservations/{reservationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.customerId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.quantity is number
+        && request.resource.data.quantity > 0
+        && (
+          (
+            request.resource.data.action == 'RESERVE'
+            && request.resource.data.orderId == reservationId
+            && getAfter(/databases/$(database)/documents/orders/$(reservationId)).data.customerId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/orders/$(reservationId)).data.status == 'PENDING'
+          )
+          ||
+          (
+            request.resource.data.action == 'RELEASE'
+            && reservationId == request.resource.data.orderId + '-release'
+            && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status == 'CANCELLED'
+            && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.action == 'RESERVE'
+            && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.customerId == request.auth.uid
+            && request.resource.data.batchId == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.batchId
+            && request.resource.data.quantity == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.quantity
+          )
+        );
+      allow update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
+      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
+      allow read: if signedIn() && (
+        isAdmin()
+        || resource.data.customerId == request.auth.uid
+        || (isRunner() && (
+          resource.data.runnerId == request.auth.uid
+          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+        ))
+        || (isRider() && (
+          resource.data.riderId == request.auth.uid
+          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+        ))
+      );
+
+      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
+      allow create: if signedIn() && validCustomerOrderCreate();
+
+      allow update: if signedIn() && (
+        (isAdmin()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt', 'paymentMerchantOrderId', 'paymentCheckoutPrepayId', 'paymentCheckoutCreatedAt'
+          ])
+        )
+        || (
+          // Customer may cancel eligible orders, rate delivered orders, and file/update a dispute.
+          resource.data.customerId == request.auth.uid
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.deliveryFee == resource.data.deliveryFee
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
+          && (
+            request.resource.data.status == resource.data.status
+            || (
+              resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED']
+              && request.resource.data.status == 'CANCELLED'
+              && resource.data.paymentStatus != 'PAID_CONFIRMED'
+              && (
+                resource.data.serviceType in ['FOOD', 'KHAT']
+                ? (
+                  existsAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release'))
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.action == 'RELEASE'
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.orderId == orderId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.customerId == request.auth.uid
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.batchId == resource.data.batchId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.quantity == resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available == get(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available + resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.lastReservationId == orderId + '-release'
+                )
+                : true
+              )
+            )
+            || (resource.data.status in ['DELIVERED', 'RATED'] && request.resource.data.status in ['DELIVERED', 'RATED'])
+          )
+        )
+        || (
+          isRunner()
+          && ((('runnerId' in resource.data) && resource.data.runnerId == request.auth.uid) || (!('runnerId' in resource.data) && request.resource.data.runnerId == request.auth.uid))
+          && request.resource.data.runnerName == currentUser().data.displayName
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && validRunnerTransition()
+        )
+        || (
+          isRider()
+          && ((('riderId' in resource.data) && resource.data.riderId == request.auth.uid) || (!('riderId' in resource.data) && request.resource.data.riderId == request.auth.uid))
+          && request.resource.data.riderName == currentUser().data.displayName
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && validRiderTransition()
+          && (
+            request.resource.data.status == 'DELIVERED'
+            ? (
+              resource.data.paymentMethod == 'COD'
+                ? request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
+                : resource.data.paymentStatus == 'PAID_CONFIRMED'
+                  && request.resource.data.paymentStatus == 'PAID_CONFIRMED'
+            )
+            : request.resource.data.paymentStatus == resource.data.paymentStatus
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eeuDetails'])
+            || validEeuDetailsUpdate()
+          )
+          && (
+            request.resource.data.status != 'DELIVERED'
+            || resource.data.serviceType != 'EEU_RECHARGE'
+            || request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
+            || request.resource.data.riderLocationUpdatedAt is string
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+
+      // Only participants in the order can see/write its chat.
+      match /messages/{messageId} {
+        allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
+        allow create: if (isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId))
+          && request.resource.data.orderId == orderId
+          && request.resource.data.senderId == request.auth.uid
+          && roleMatchesSender()
+          && request.resource.data.senderName == currentUser().data.displayName;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Deprecated standalone chat collection is intentionally closed. The application uses order-scoped chats.
+    match /orderChats/{chatId} {
+      allow read, write: if false;
+    }
+
+    // Immutable delivery events: actor identity must match the authenticated account and the order role.
+    match /deliveryEvents/{eventId} {
+      allow read: if isAdmin()
+        || (signedIn() && (
+          resource.data.actorId == request.auth.uid
+          || (resource.data.orderId is string && isOrderCustomer(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRunner(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRider(resource.data.orderId))
+        ));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'orderId', 'status', 'timestamp', 'actorRole', 'actorId', 'actorName', 'note', 'createdAt'
+        ])
+        && request.resource.data.orderId is string
+        && request.resource.data.status == orderDoc(request.resource.data.orderId).data.status
+        && request.resource.data.timestamp is string
+        && request.resource.data.actorId == request.auth.uid
+        && (
+          (getUserRole() == 'customer' && request.resource.data.actorRole == 'CUSTOMER' && isOrderCustomer(request.resource.data.orderId))
+          || (getUserRole() == 'runner' && request.resource.data.actorRole == 'RUNNER' && isOrderRunner(request.resource.data.orderId))
+          || (getUserRole() == 'rider' && request.resource.data.actorRole == 'RIDER' && isOrderRider(request.resource.data.orderId))
+          || (isAdmin() && request.resource.data.actorRole == 'ADMIN')
+        );
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+)
+          || request.resource.data.eeuDetails.meterNumber.matches('^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]
+      return request.resource.data.keys().hasOnly([
+        'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
+        'mamilaLocation', 'price', 'quantity', 'deliveryFee', 'totalPrice',
+        'status', 'paymentMethod', 'paymentStatus', 'customerId', 'customerName',
+        'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
+        'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
+        'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
+        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt'
+      ])
+      && request.resource.data.customerId == request.auth.uid
+      && request.resource.data.status == 'PENDING'
+      && request.resource.data.serviceType in ['FOOD', 'KHAT']
+      && request.resource.data.paymentMethod in [
+        'TELEBIRR', 'COD'
+      ]
+      && request.resource.data.paymentStatus == (
+        request.resource.data.paymentMethod == 'COD' ? 'UNPAID' : 'PAYMENT_PENDING'
+      )
+      && request.resource.data.price is number
+      && request.resource.data.price >= 0
+      && request.resource.data.quantity is number
+      && request.resource.data.quantity > 0
+      && request.resource.data.deliveryFee is number
+      && request.resource.data.deliveryFee >= 0
+      && request.resource.data.totalPrice is number
+      && (
+        (
+          request.resource.data.serviceType == 'FOOD'
+          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price * request.resource.data.quantity
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (
+          request.resource.data.serviceType == 'KHAT'
+          && request.resource.data.totalPrice == request.resource.data.price * request.resource.data.quantity + request.resource.data.deliveryFee
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price
+          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+        )
+        || (
+          request.resource.data.serviceType in ['PARCEL', 'RIDE', 'EEU_RECHARGE']
+          && request.resource.data.quantity == 1
+          && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+        )
+      )
+      && (!('distanceKm' in request.resource.data) || (
+        request.resource.data.distanceKm is number
+        && request.resource.data.distanceKm >= 0
+        && request.resource.data.distanceKm <= 10000
+      ))
+      && (!('etaMinutes' in request.resource.data) || (
+        request.resource.data.etaMinutes is number
+        && request.resource.data.etaMinutes >= 0
+        && request.resource.data.etaMinutes <= 100000
+      ));
+    }
+
+    // Connection probe only. Do not store sensitive data here.
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // User profiles. Self-registration can ONLY create a customer profile.
+    // Staff/admin roles are provisioned by trusted backend functions.
+    match /users/{uid} {
+      // Users may always read their own profile, including newly registered or deactivated accounts.
+      // This does not grant inactive accounts access to orders or staff-only resources.
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || isAdmin()
+      );
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.role == 'customer'
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
+          'address', 'plusCode', 'role', 'createdAt'
+        ]);
+
+      allow update: if signedIn() && (
+        isAdmin()
+        || (
+          request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Public merchant catalog. Administrative writes only until merchant ownership is provisioned.
+    match /mamilas/{mamilaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Public inventory catalog. A Mamila may only create/update batches assigned to their own mamilaId.
+    match /batches/{batchId} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        isMamila()
+        && request.resource.data.mamilaId == currentUser().data.mamilaId
+        && request.resource.data.price is number
+        && request.resource.data.available is number
+        && request.resource.data.available >= 0
+      );
+      allow update: if isAdmin() || (
+        isMamila()
+        && resource.data.mamilaId == currentUser().data.mamilaId
+        && request.resource.data.mamilaId == resource.data.mamilaId
+        && request.resource.data.price is number
+        && request.resource.data.available is number
+        && request.resource.data.available >= 0
+      ) || (
+        signedIn()
+        && request.resource.data.mamilaId == resource.data.mamilaId
+        && request.resource.data.price == resource.data.price
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available', 'updatedAt', 'lastReservationId'])
+        && request.resource.data.available >= 0
+        && (!('lastReservationId' in resource.data) || request.resource.data.lastReservationId != resource.data.lastReservationId)
+        && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId))
+        && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.customerId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.batchId == batchId
+        && (
+          (
+            getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.action == 'RESERVE'
+            && !exists(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId))
+            && request.resource.data.available == resource.data.available - getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.quantity
+          )
+          ||
+          (
+            getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.action == 'RELEASE'
+            && request.resource.data.available == resource.data.available + getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.lastReservationId)).data.quantity
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+
+    // Inventory reservations are written in the same transaction as the order.
+    // The reservation links the customer, order and batch so stock changes cannot
+    // be made arbitrarily by a customer.
+    match /inventoryReservations/{reservationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.customerId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.quantity is number
+        && request.resource.data.quantity > 0
+        && (
+          (
+            request.resource.data.action == 'RESERVE'
+            && request.resource.data.orderId == reservationId
+            && getAfter(/databases/$(database)/documents/orders/$(reservationId)).data.customerId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/orders/$(reservationId)).data.status == 'PENDING'
+          )
+          ||
+          (
+            request.resource.data.action == 'RELEASE'
+            && reservationId == request.resource.data.orderId + '-release'
+            && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status == 'CANCELLED'
+            && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.action == 'RESERVE'
+            && get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.customerId == request.auth.uid
+            && request.resource.data.batchId == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.batchId
+            && request.resource.data.quantity == get(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.orderId)).data.quantity
+          )
+        );
+      allow update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
+      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
+      allow read: if signedIn() && (
+        isAdmin()
+        || resource.data.customerId == request.auth.uid
+        || (isRunner() && (
+          resource.data.runnerId == request.auth.uid
+          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+        ))
+        || (isRider() && (
+          resource.data.riderId == request.auth.uid
+          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+        ))
+      );
+
+      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
+      allow create: if signedIn() && validCustomerOrderCreate();
+
+      allow update: if signedIn() && (
+        (isAdmin()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt', 'paymentMerchantOrderId', 'paymentCheckoutPrepayId', 'paymentCheckoutCreatedAt'
+          ])
+        )
+        || (
+          // Customer may cancel eligible orders, rate delivered orders, and file/update a dispute.
+          resource.data.customerId == request.auth.uid
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.deliveryFee == resource.data.deliveryFee
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
+          && (
+            request.resource.data.status == resource.data.status
+            || (
+              resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED']
+              && request.resource.data.status == 'CANCELLED'
+              && resource.data.paymentStatus != 'PAID_CONFIRMED'
+              && (
+                resource.data.serviceType in ['FOOD', 'KHAT']
+                ? (
+                  existsAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release'))
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.action == 'RELEASE'
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.orderId == orderId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.customerId == request.auth.uid
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.batchId == resource.data.batchId
+                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.quantity == resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available == get(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available + resource.data.quantity
+                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.lastReservationId == orderId + '-release'
+                )
+                : true
+              )
+            )
+            || (resource.data.status in ['DELIVERED', 'RATED'] && request.resource.data.status in ['DELIVERED', 'RATED'])
+          )
+        )
+        || (
+          isRunner()
+          && ((('runnerId' in resource.data) && resource.data.runnerId == request.auth.uid) || (!('runnerId' in resource.data) && request.resource.data.runnerId == request.auth.uid))
+          && request.resource.data.runnerName == currentUser().data.displayName
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && validRunnerTransition()
+        )
+        || (
+          isRider()
+          && ((('riderId' in resource.data) && resource.data.riderId == request.auth.uid) || (!('riderId' in resource.data) && request.resource.data.riderId == request.auth.uid))
+          && request.resource.data.riderName == currentUser().data.displayName
+          && request.resource.data.price == resource.data.price
+          && request.resource.data.totalPrice == resource.data.totalPrice
+          && request.resource.data.customerId == resource.data.customerId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && validRiderTransition()
+          && (
+            request.resource.data.status == 'DELIVERED'
+            ? (
+              resource.data.paymentMethod == 'COD'
+                ? request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
+                : request.resource.data.paymentStatus == 'PAID_CONFIRMED'
+            )
+            : request.resource.data.paymentStatus == resource.data.paymentStatus
+          )
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
+            || request.resource.data.riderLocationUpdatedAt is string
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+
+      // Only participants in the order can see/write its chat.
+      match /messages/{messageId} {
+        allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
+        allow create: if (isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId))
+          && request.resource.data.orderId == orderId
+          && request.resource.data.senderId == request.auth.uid
+          && roleMatchesSender()
+          && request.resource.data.senderName == currentUser().data.displayName;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Deprecated standalone chat collection is intentionally closed. The application uses order-scoped chats.
+    match /orderChats/{chatId} {
+      allow read, write: if false;
+    }
+
+    // Immutable delivery events: actor identity must match the authenticated account and the order role.
+    match /deliveryEvents/{eventId} {
+      allow read: if isAdmin()
+        || (signedIn() && (
+          resource.data.actorId == request.auth.uid
+          || (resource.data.orderId is string && isOrderCustomer(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRunner(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRider(resource.data.orderId))
+        ));
+
+      allow create: if signedIn()
+        && request.resource.data.actorId == request.auth.uid
+        && (
+          (getUserRole() == 'customer' && request.resource.data.actorRole == 'CUSTOMER' && isOrderCustomer(request.resource.data.orderId))
+          || (getUserRole() == 'runner' && request.resource.data.actorRole == 'RUNNER' && isOrderRunner(request.resource.data.orderId))
+          || (getUserRole() == 'rider' && request.resource.data.actorRole == 'RIDER' && isOrderRider(request.resource.data.orderId))
+          || (getUserRole() == 'admin' && request.resource.data.actorRole == 'ADMIN')
+        );
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+)
+        )
+        && request.resource.data.eeuDetails.rechargeAmount is number
+        && request.resource.data.eeuDetails.rechargeAmount >= 100
+        && request.resource.data.eeuDetails.rechargeAmount <= 15000
+        && request.resource.data.eeuDetails.rechargeAmount % 50 == 0
+        && request.resource.data.eeuDetails.serviceFee == 75
+        && request.resource.data.price == request.resource.data.eeuDetails.rechargeAmount
+        && request.resource.data.deliveryFee == 75
+        && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
+        && request.resource.data.quantity == 1
+        && request.resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+        && request.resource.data.eeuDetails.custodyLabel == 'WITH_CUSTOMER'
+        && request.resource.data.eeuDetails.customerAuthorized == true
+        && request.resource.data.eeuDetails.custodyTimeline is list
+        && request.resource.data.eeuDetails.custodyTimeline.size() == 1
+        && request.resource.data.eeuDetails.custodyTimeline[0].phase == 'WITH_CUSTOMER';
+    }
+
+    // Only an assigned rider can append one valid EEU custody milestone or receipt.
+    // Meter, recharge value, service fee, hub, and unit estimate are immutable after order creation.
+    function validEeuDetailsUpdate() {
+      return resource.data.serviceType == 'EEU_RECHARGE'
+        && resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails is map
+        && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
+          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptImageUrl', 'receiptTimestamp', 'tokenCode'
+        ])
+        && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
+        && request.resource.data.eeuDetails.rechargeAmount == resource.data.eeuDetails.rechargeAmount
+        && request.resource.data.eeuDetails.serviceFee == resource.data.eeuDetails.serviceFee
+        && request.resource.data.eeuDetails.eeuHubName == resource.data.eeuDetails.eeuHubName
+        && request.resource.data.eeuDetails.kwhUnits == resource.data.eeuDetails.kwhUnits
+        && request.resource.data.eeuDetails.custodyTimeline is list
+        && resource.data.eeuDetails.custodyTimeline is list
+        && request.resource.data.eeuDetails.custodyTimeline.size() == resource.data.eeuDetails.custodyTimeline.size() + 1
+        && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].actor == 'Rider ' + request.auth.uid
+        && (
+          (
+            request.resource.data.eeuDetails.custodyPhase == resource.data.eeuDetails.custodyPhase
+            && resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && !('receiptImageUrl' in resource.data.eeuDetails)
+            && request.resource.data.eeuDetails.receiptImageUrl is string
+            && request.resource.data.eeuDetails.receiptImageUrl != ''
+            && request.resource.data.eeuDetails.receiptTimestamp is string
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == resource.data.eeuDetails.custodyPhase
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyLabel == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
+            && resource.data.eeuDetails.receiptImageUrl is string
+            && resource.data.eeuDetails.receiptImageUrl != ''
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_RETURN'
+          )
+          || (
+            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            && request.resource.data.eeuDetails.custodyLabel == 'RETURNED'
+            && resource.data.eeuDetails.receiptImageUrl is string
+            && resource.data.eeuDetails.receiptImageUrl != ''
+            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'RETURNED'
+          )
+        );
     }
 
     function validCustomerOrderCreate() {
