@@ -1,36 +1,37 @@
 # Jijiga Express — Security and Operations Status
 
-## Current release approach
+## Current release model
 
-This PR removes the paid Cloud Functions code/deployment workflow and keeps the app compatible with the existing Firebase project and named Firestore database. Direct customer writes are guarded by Firestore rules. New orders use COD only; online payment verification is disabled rather than simulated.
+PR #2 is being changed for a phone-only, Console-published release. The existing project and Firestore database remain unchanged. There is no Cloud Functions source/deploy workflow in this PR branch; new orders are COD-only. Online payment verification is disabled rather than simulated.
 
-## Security behavior targeted by this PR
+## Security behavior implemented in the PR
 
-- Customers can read their own profile and orders, but not another customer's private profile/order.
-- Customer self-registration creates only a customer role; users cannot set their own role or `active` flag.
-- Admin Firestore access requires an active `admin` profile, a verified email, and an existing allow-listed email. No custom claims or bootstrap CLI are required.
-- Rider order updates are limited to allowed status transitions. A rider cannot self-confirm a digital payment; COD collection is the only client-side payment-state transition.
-- EEU meter number, recharge amount, service fee, and hub are immutable after request creation. Custody updates must follow the ordered steps and receipt rules.
-- Order messages are restricted to order participants and admin.
-- Delivery events require the authenticated actor, participant role, and the order's current persisted status.
-- Customers cannot arbitrarily change batch stock; stock reservations/restorations must be linked to the order in the same transaction. Admin/Mamila inventory management remains separate.
-- EEU receipt uploads are immutable, image-only, and confined to the authenticated uploader's UID path. Firestore rules decide whether an uploaded receipt may be attached to an order.
+- A customer can read their own Firestore profile during first login even before an `active` field exists. Customers can create only their own profile with `role: "customer"`.
+- Admin access requires the active Firestore profile role, verified Firebase Auth email, and the existing email allow-list. No custom claims or bootstrap script is needed.
+- Customer order reads are scoped to the customer. Order messages are scoped to order participants/admin.
+- Runner/rider assignment must follow the correct dispatch status transition.
+- Riders may perform only the allowed delivery/payment and EEU custody updates. A rider cannot mark digital payment as paid by setting `paymentStatus`; COD collection is allowed only in the valid delivery transition.
+- EEU meter number, recharge amount, service fee, hub and authorization are immutable after order creation. The custody timeline must advance through the allowed sequence. The receipt can be attached once while at `AT_EEU_HUB`, has a size cap, and cannot be changed afterward.
+- Delivery-event creation is restricted to an authenticated order participant with the matching actor UID/role; the submitted status must equal the order's currently persisted status and the payload is allow-listed.
+- Customer batch-stock tampering is denied. Admin/Mamila inventory changes are separate role-specific operations; the customer stock delta must match a valid inventory reservation/release transaction.
+- EEU receipt evidence is compressed on-device and stored inline in the Firestore order, not in Cloud Storage.
 
-## What is not claimed as verified
+## Test evidence and limitations
 
-Emulator tests exercise the rules and build. They do not prove that a production account has the right profile, that a live Console publish succeeded, or that the app was tested on a physical phone. The owner must still verify Authentication email/password settings and perform a real-device signup/restart/COD-order test.
+GitHub Actions runs the root typecheck/build plus Auth and Firestore Emulator security tests for the PR. Emulator success does not prove that production rules have been published or that the app works on a physical phone. Those two steps remain manual, through Firebase Console and phone UI.
 
 ## Console-only publishing
 
-- Back up the current published rules.
-- In Firebase Console, select the existing named database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`, open Rules, copy the full `firestore.rules` file from PR #2 and publish it.
-- If the existing Storage bucket works without upgrading the plan, publish `storage.rules` the same way in Storage → Rules.
-- Do not use a CLI, scripts, custom claims, or any deploy workflow to make this release live.
-- Check Firebase Console → Functions for old deployed functions. Removing their source from GitHub does not remove an already-deployed function; delete any confirmed obsolete ones through the Console.
+1. Back up the currently published rules.
+2. In Firebase Console, select the existing database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`, open Rules, paste the entire `firestore.rules` file from PR #2, and publish.
+3. Check Authentication → Users and the matching `/users/{uid}` profile for the three admin conditions.
+4. Open Console → Functions to check for former deployed function names listed in `DEPLOYMENT_RUNBOOK.md`. GitHub source deletion does not remove a previously deployed function. Delete only confirmed-obsolete functions using the Console.
+
+No CLI or script is part of this release path. No Storage rules publish is needed for the inline receipt feature.
 
 ## Remaining limitations
 
-- Online Telebirr and other wallet payment methods are disabled. Only COD is advertised until a trusted payment backend is available.
-- Cloud Functions require the Blaze billing plan. This PR removes their source and deployment workflow; it does not silently upgrade billing.
-- Hosting remains separately configured and previously failed on a missing `FIREBASE_SERVICE_ACCOUNT` secret. Hosting does not deploy database rules.
-- Real-device authentication/order tests and an actual Console rules publish remain unverified until performed by the owner.
+- Online Telebirr and other wallet checkout are disabled; COD only.
+- Any formerly deployed Cloud Functions need a separate Console deletion if they still exist.
+- Firebase Hosting and Android APK builds are separate from Firestore rules publishing.
+- Real-phone signup/restart/order tests and the production Console publish remain owner-side verification.
