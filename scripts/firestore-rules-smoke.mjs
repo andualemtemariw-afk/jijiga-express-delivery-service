@@ -73,6 +73,10 @@ async function registerCustomerClient() {
 
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const uid = credential.user.uid;
+  // syncUserProfile first reads the possibly-missing document before creating it.
+  // That initial self-read must be allowed, otherwise profile creation never runs.
+  const missingProfile = await getDoc(doc(db, 'users', uid));
+  if (missingProfile.exists()) throw new Error('Newly registered customer unexpectedly already has a profile');
   // Matches the profile shape written by syncUserProfile for a first-time customer.
   await setDoc(doc(db, 'users', uid), {
     uid,
