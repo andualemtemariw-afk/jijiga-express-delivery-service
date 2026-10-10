@@ -14,7 +14,7 @@ PR #2 is being changed for a phone-only, Console-published release. The existing
 - EEU meter number, recharge amount, service fee, hub and authorization are immutable after order creation. The custody timeline must advance through the allowed sequence. The receipt can be attached once while at `AT_EEU_HUB`, has a size cap, and cannot be changed afterward.
 - Delivery-event creation is restricted to an authenticated order participant with the matching actor UID/role; the submitted status must equal the order's currently persisted status and the payload is allow-listed.
 - Customer batch-stock tampering is denied. Admin/Mamila inventory changes are separate role-specific operations; the customer stock delta must match a valid inventory reservation/release transaction.
-- EEU receipt evidence is compressed on-device and stored inline in the Firestore order, not in Cloud Storage.
+- EEU receipt image data is stored separately at `/orders/{orderId}/receipts/terminal`, capped at 300,000 characters, readable only by order participants/admin, and immutable after creation. The order document carries only receipt metadata, so order-pool listeners do not download photos.
 
 ## Test evidence and limitations
 
@@ -27,7 +27,7 @@ GitHub Actions runs the root typecheck/build plus Auth and Firestore Emulator se
 3. Check Authentication → Users and the matching `/users/{uid}` profile for the three admin conditions.
 4. Open Console → Functions to check for former deployed function names listed in `DEPLOYMENT_RUNBOOK.md`. GitHub source deletion does not remove a previously deployed function. Delete only confirmed-obsolete functions using the Console.
 
-No CLI or script is part of this release path. No Storage rules publish is needed for the inline receipt feature.
+No CLI or script is part of this release path. No Storage rules publish is needed for the Firestore receipt subcollection.
 
 ## Remaining limitations
 
