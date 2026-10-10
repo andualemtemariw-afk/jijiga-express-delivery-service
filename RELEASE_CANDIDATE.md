@@ -4,38 +4,43 @@
 
 - Repository: `andualemtemariw-afk/jijiga-express-delivery-service`
 - PR: [#2 — Harden customer profiles and verified admin access](https://github.com/andualemtemariw-afk/jijiga-express-delivery-service/pull/2)
-- Release branch: `fix/customer-profile-self-read`
-- Production project: `sunny-discipline-hvd6f`
-- Production Firestore database: `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`
+- Branch: `fix/customer-profile-self-read`
+- Firebase project: `sunny-discipline-hvd6f`
+- Existing Firestore database: `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`
 
 ## Gate
 
-**NOT READY FOR PRODUCTION PUBLISH** until the latest PR-head checks are green and the owner has backed up/published the rules through Firebase Console and tested the app on a phone.
+**NOT READY FOR PRODUCTION PUBLISH** until latest-head CI is green and the owner completes the Firebase Console publish plus a phone smoke test.
 
 ## Changes in this candidate
 
-- Customer profile self-read works for newly registered profiles without an `active` field.
-- Firestore admin access uses the profile's active admin role, verified email, and the existing allow-list; it does not require custom claims or a bootstrap script.
-- Customer profiles/orders and order-scoped messages are access-restricted.
-- Rider payment transitions prevent self-confirmation of digital payments; EEU details are guarded by field allow-lists and custody transitions.
-- Delivery-event writes require the real actor and current order status.
-- Batch stock reservations/restorations are validated in the same transaction.
-- Parcel/Ride/EEU order creation is validated by Firestore rules for the selected COD-only flow.
-- Cloud Functions source, bootstrap CLI script, and Functions deployment/preflight workflows have been removed from this branch. The emulator test-support package remains only to run Firebase Admin-backed automated tests.
-- Root and rule tests run in GitHub Actions; the owner does not need to execute local scripts.
+- First-time customers can read their own profile before the `active` field exists and can persist/re-read their customer profile.
+- Admin access uses an active Firestore admin profile, verified Auth email and the existing allow-list; no custom claims or bootstrap script.
+- Customer profile/order reads and order messages are scoped to the right account/participants.
+- Runner/rider assignment follows the dispatch state machine.
+- Rider payment and EEU fields are strictly constrained. Online payment cannot be self-confirmed; new orders are COD-only.
+- Delivery events require a valid authenticated actor/participant, a small allow-listed payload and the order's current persisted status.
+- Batch stock updates require authorized management or an exact reservation/release transaction.
+- EEU receipt photos are compressed on-device and stored inline in the Firestore order document; this receipt flow does not use Cloud Storage.
+- Cloud Functions source, the command-line admin bootstrap script and Functions deployment/preflight workflows have been removed from this PR branch. The remaining Firebase Admin dependency package is used only by Emulator tests and does not deploy functions.
 
-## Manual Firebase Console procedure
+## Exactly how production rules were deployed before this PR
 
-1. Copy the currently published Firestore rules for rollback.
-2. Select the existing named Firestore database above → Rules.
-3. Copy all of `firestore.rules` from this PR branch's Files changed view, paste and publish.
-4. If the existing Storage bucket works on the current plan, back up and publish the full `storage.rules` file in Storage → Rules.
-5. Check Firebase Console → Functions for any old deployed Functions. GitHub source/workflow removal does not delete already-deployed functions.
-6. Verify the allow-listed admin's Auth email is verified and its Firestore profile has `role: "admin"` and `active: true`.
+On `main`, the GitHub workflow `.github/workflows/firebase-production-backend-deploy.yml` is manual-only (`workflow_dispatch`) and runs `firebase deploy --only firestore:rules,storage,functions`. It is not automatically triggered by an ordinary push or pull request. The separate Firestore rule workflow tests in an emulator; it does not publish rules. The Hosting workflow deploys web files only.
+
+This PR removes the manual backend deployment workflow. After merge, publish by Firebase Console copy/paste as below. PR/CI jobs do not touch production data/rules.
+
+## Phone-only publish procedure
+
+1. In Firebase Console, back up the currently published Firestore rules.
+2. Choose the named database above → **Rules**.
+3. Copy the full `firestore.rules` file from this PR branch's Files changed view, paste it into the Console Rules editor and press **Publish**.
+4. Confirm the allow-listed admin's Auth email is verified and `/users/{uid}` in that same database has `role: "admin"` and `active: true`.
+5. Check Console → **Functions** for formerly deployed function names. Source deletion from GitHub does not delete a running cloud function; remove only confirmed-obsolete functions in Console.
 
 ## Known limitations
 
-- Online Telebirr/wallet checkout is disabled. Only COD is offered until an approved trusted payment-verification backend is available.
-- Existing deployed Functions (if any) must be deleted manually in Firebase Console after confirming they are obsolete.
-- Firebase Hosting is separate from rules deployment; the previous Hosting workflow failed because the `FIREBASE_SERVICE_ACCOUNT` secret was missing.
-- Real-phone registration/restart/COD ordering and live Console publishing are not verified by build/CI alone.
+- Online Telebirr/wallet checkout is disabled; only COD is enabled.
+- Existing deployed Cloud Functions, if any, require separate Console deletion.
+- No Firestore rules have been published to production by PR automation.
+- Emulator CI does not substitute for testing sign-in/order flow on the physical phone.
