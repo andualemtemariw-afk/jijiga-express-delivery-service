@@ -43,6 +43,7 @@ async function requireAdmin(uid?: string): Promise<void> {
     !userSnap.exists
     || profile.role !== 'admin'
     || profile.active !== true
+    || token.emailVerified !== true
     || token.customClaims?.role !== 'admin'
     || token.customClaims?.active !== true
   ) {
