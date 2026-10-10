@@ -1,28 +1,26 @@
-# Jijiga Express — Production Security Remediation
+# Jijiga Express — Security Remediation Status
 
-## Implemented hardening
+## Changes in PR #2
 
-- New users can self-create only a customer profile; the legacy client-side admin bootstrap exception has been removed.
-- Staff and admin authorization fails closed unless the profile explicitly has `active=true`.
-- Customer order creation uses a strict field allowlist and cannot inject courier or payment-verification fields.
-- Customer order creation validates service type, initial payment state, numeric bounds, service-specific pricing, and required inventory reservation for FOOD/KHAT.
-- Customer order updates cannot modify protected pricing, payment-verification, or courier-assignment fields.
-- Runner/rider transitions are constrained by authenticated role, ownership, and status.
-- A rider cannot deliver a non-COD order unless `paymentStatus=PAID_CONFIRMED`; COD delivery requires `COLLECTED_BY_RIDER`.
-- EEU receipt objects are immutable after creation, image-only, size-limited, and scoped by order/rider/customer metadata.
-- Production code no longer invents rider GPS coordinates; synthetic telemetry is restricted to the explicit demo sandbox.
-- Payment webhook events require authenticated normalized input, amount/currency/provider checks, durable event IDs, idempotent replay handling, and conflicting-reference protection.
-- Root and Functions lockfiles are committed and installed with `npm ci`.
+- Customer self-registration can create only a customer profile at the authenticated UID. A signed-in account may read its own profile even when `active` is absent, allowing the first login to initialize the profile.
+- Customers can read only their own orders. Active runners/riders can read assigned work and the intended dispatch pool; ordinary staff cannot browse unrelated customer profiles.
+- Admin Firestore access requires the admin profile role, `active: true`, a verified Firebase Auth email, and membership in the existing email allow-list. Admin Firestore access no longer requires custom claims or an operator bootstrap script.
+- Only the authenticated order participants/admin can read order-scoped messages.
+- Delivery-event writes require a real actor UID, matching order participation, an allow-listed payload, and a status equal to the order's current status.
+- Runner/rider assignment must use the valid status transition; neither may claim an arbitrary PENDING order.
+- New orders are COD-only and begin `UNPAID`. A rider cannot self-confirm a digital payment. Telebirr checkout/webhook logic has been removed from the app/release branch until a trusted paid backend is explicitly approved.
+- Parcel/Ride/EEU direct order creation is covered by Firestore rules for fixed allowed pricing and required service fields. EEU requires explicit customer authorization and custody updates preserve meter and recharge values.
+- Customer stock mutation is denied except the exact inventory reservation/release transaction; authorized admin/Mamila updates remain role-specific.
+- Receipt objects are immutable, image-only, size-limited and UID-path scoped. Firestore rules still authorize whether a receipt may be attached to an order.
 
-## Dependency findings
+## Removed from this branch
 
-The current CI configuration runs high-severity audits for both the root project and Functions. The verified latest release validation passed both high-severity audit jobs. Moderate dependency advisories may remain in transitive dependencies and require documented owner acceptance, upstream remediation, or tested upgrades before making a stronger dependency-risk claim.
+- Cloud Functions source code and its manual deployment workflow.
+- The command-line administrator bootstrap script.
+- Telebirr adapter smoke-test script and payment checkout calls in the customer app.
 
-## Remaining release gates
+Firebase documents Cloud Functions as available on the Blaze plan. This branch does not ask the owner to upgrade. Note: removing source and deployment workflow does not delete a Cloud Function that was already deployed before this PR; inspect Firebase Console → Functions and delete confirmed obsolete functions there.
 
-- Successful latest-head Firebase Emulator Firestore/Storage/Auth smoke tests.
-- Successful latest-head root/Functions build and typecheck run.
-- Formal review/acceptance of the remaining dependency risk.
-- Provider-specific Telebirr signature verification adapter and production credentials.
-- Production deployment of rules/functions and controlled post-deploy testing.
-- Firestore database architecture review; named-database usage is supported and migration to `(default)` is optional.
+## Verification boundary
+
+GitHub Actions emulator tests cover the relevant authorization cases. They do not prove that production rules have been published or that a phone successfully registered and placed an order. Keep the PR unmerged until the current-head CI checks are green; after approval, publish rules through Firebase Console and test on a physical phone.
