@@ -28,8 +28,8 @@ const firebaseConfig = {
 };
 
 const users = {};
-async function createUser(key, role, active = true, emailVerified = role === 'admin') {
-  const email = `${key}@example.test`;
+async function createUser(key, role, active = true, emailVerified = role === 'admin', emailOverride) {
+  const email = emailOverride || `${key}@example.test`;
   const password = 'TestPassword-123!';
   const user = await adminAuth.createUser({
     email,
@@ -37,9 +37,6 @@ async function createUser(key, role, active = true, emailVerified = role === 'ad
     displayName: `${key} User`,
     emailVerified
   });
-  if (role === 'rider' || role === 'admin' || role === 'runner' || role === 'mamila') {
-    await adminAuth.setCustomUserClaims(user.uid, { role, active });
-  }
   await adminDb.doc(`users/${user.uid}`).set({
     uid: user.uid, displayName: `${key} User`, email, role, active, createdAt: new Date().toISOString()
   });
@@ -108,8 +105,8 @@ async function expectDenied(label, action) {
 
 async function main() {
   const customerUid = await createUser('customer', 'customer');
-  await createUser('admin', 'admin');
-  await createUser('unverified-admin', 'admin', true, false);
+  await createUser('admin', 'admin', true, true, 'andualemawraris4@gmail.com');
+  await createUser('unverified-admin', 'admin', true, false, 'andualemawraris104@gmail.com');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
@@ -171,8 +168,25 @@ async function main() {
     createdAt: new Date().toISOString()
   };
 
-  await expectDenied('customer cannot directly create a RIDE order', async () => {
+  await expectDenied('customer cannot create a RIDE order with online payment disabled', async () => {
     await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
+  });
+  await expectDenied('customer cannot create an already-paid service order directly', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
+      ...validCustomerOrder,
+      id: 'malicious-paid-create',
+      paymentMethod: 'COD',
+      paymentStatus: 'PAID_CONFIRMED'
+    });
+  });
+  await expectDenied('customer cannot add payment verification fields on direct create', async () => {
+    await setDoc(doc(customer.db, 'orders', 'malicious-payment-fields'), {
+      ...validCustomerOrder,
+      id: 'malicious-payment-fields',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      paymentReference: 'FAKE-REF'
+    });
   });
 
   await expectDenied('customer cannot create an already-paid service order directly', async () => {
@@ -194,6 +208,9 @@ async function main() {
   await adminDb.doc('batches/test-food').set({
     id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
     price: 100, available: 5, expiry: 'test', imageUrl: '/test.jpg'
+  });
+  await expectDenied('customer cannot arbitrarily change batch stock', async () => {
+    await updateDoc(doc(customer.db, 'batches', 'test-food'), { available: 999 });
   });
 
   const validFoodId = 'valid-food-order';
@@ -223,6 +240,59 @@ async function main() {
     });
   });
   console.log('PASS valid FOOD order creation with inventory reservation');
+
+  const directParcelId = 'valid-parcel-' + Date.now();
+  await setDoc(doc(profileWithoutActive.db, 'orders', directParcelId), {
+    id: directParcelId, serviceType: 'PARCEL', batchId: 'parcel-dispatch', batchName: 'Test parcel',
+    mamilaId: 'm1', mamilaName: 'Jijiga Express Delivery Service Hub', mamilaLocation: 'Jijiga',
+    price: 80, quantity: 1, deliveryFee: 120, totalPrice: 200, status: 'PENDING',
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerPlusCode: '', customerAddress: 'Kebele 04',
+    parcelDetails: {
+      senderName: 'Sender', senderPhone: '0911000000', senderCity: 'Jijiga', senderAddress: 'Origin',
+      receiverName: 'Receiver', receiverPhone: '0911000001', receiverCity: 'Jijiga', receiverAddress: 'Destination',
+      parcelCategory: 'DOCUMENTS', weightCategory: '< 1 kg', description: 'Test parcel',
+      isFragile: false, tamperSealRequested: true, trackingCode: 'PARCEL-TEST'
+    },
+    createdAt: new Date().toISOString()
+  });
+  console.log('PASS COD parcel order created directly with rules-validated pricing');
+
+  const directRideId = 'valid-ride-' + Date.now();
+  await setDoc(doc(profileWithoutActive.db, 'orders', directRideId), {
+    id: directRideId, serviceType: 'RIDE', batchId: 'ride-marhaba-taxi', batchName: 'Test taxi',
+    mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+    price: 283, quantity: 1, deliveryFee: 0, totalPrice: 283, status: 'PENDING',
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerPlusCode: '', customerAddress: 'Kebele 04',
+    rideDetails: {
+      vehicleType: 'MARHABA_TAXI', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+      city: 'Jijiga', tripDistanceKm: 6.8, tripDurationMins: 18, rideStatus: 'REQUESTED'
+    },
+    distanceKm: 6.8, etaMinutes: 18, createdAt: new Date().toISOString()
+  });
+  console.log('PASS COD ride order created directly with rules-validated fare');
+
+  const directEeuId = 'valid-eeu-' + Date.now();
+  await setDoc(doc(profileWithoutActive.db, 'orders', directEeuId), {
+    id: directEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga', batchName: 'EEU recharge test',
+    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+    price: 500, quantity: 1, deliveryFee: 75, totalPrice: 575, status: 'PENDING',
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerPlusCode: '', customerAddress: 'Kebele 04',
+    eeuDetails: {
+      meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-01',
+      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+      custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
+      custodyTimeline: [{ phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer authorized physical card service', actor: 'Customer' }],
+      kwhUnits: 232.6
+    },
+    createdAt: new Date().toISOString()
+  });
+  console.log('PASS COD EEU order created directly with meter, amount, and authorization validation');
 
   // Exercise the full protected customer-order path for a normal profile with no active field.
   const profileOrderId = 'profile-no-active-food-' + Date.now();
@@ -477,8 +547,61 @@ async function main() {
   await expectDenied('rider cannot deliver non-COD unpaid order', async () => {
     await updateDoc(doc(rider.db, 'orders', unpaidOrder.id), { status: 'DELIVERED' });
   });
+  await expectDenied('rider cannot confirm digital payment at delivery', async () => {
+    await updateDoc(doc(rider.db, 'orders', unpaidOrder.id), { status: 'DELIVERED', paymentStatus: 'PAID_CONFIRMED' });
+  });
+  await expectDenied('rider cannot set digital paymentStatus directly', async () => {
+    await updateDoc(doc(rider.db, 'orders', unpaidOrder.id), { paymentStatus: 'PAID_CONFIRMED' });
+  });
   await updateDoc(doc(rider.db, 'orders', validOrder.id), { status: 'DELIVERED' });
   console.log('PASS rider can deliver PAID_CONFIRMED non-COD order');
+
+  const eeuDetailsFixture = {
+    meterNumber: '0142-8839-1029-3',
+    cardSerialNumber: 'EEU-TEST-01',
+    rechargeAmount: 500,
+    serviceFee: 75,
+    eeuHubName: 'EEU Jijiga Test Hub',
+    custodyPhase: 'AT_EEU_HUB',
+    custodyLabel: 'AT_EEU_HUB',
+    customerAuthorized: true,
+    custodyTimeline: [{ phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Test', actor: 'Customer' }],
+    kwhUnits: 232.6
+  };
+  const eeuOrderId = 'test-eeu-custody-order';
+  await adminDb.doc(`orders/${eeuOrderId}`).set({
+    ...validOrder,
+    id: eeuOrderId,
+    serviceType: 'EEU_RECHARGE',
+    batchName: 'EEU recharge',
+    price: 500,
+    deliveryFee: 75,
+    totalPrice: 575,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    status: 'PICKED_UP',
+    eeuDetails: eeuDetailsFixture
+  });
+  await expectDenied('rider cannot alter EEU meter number or recharge amount', async () => {
+    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+      eeuDetails: { ...eeuDetailsFixture, meterNumber: '0000-0000-0000-0', rechargeAmount: 1000 }
+    });
+  });
+  await expectDenied('rider cannot skip EEU custody states or mark returned without receipt', async () => {
+    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+      status: 'DELIVERED',
+      paymentStatus: 'COLLECTED_BY_RIDER',
+      eeuDetails: {
+        ...eeuDetailsFixture,
+        custodyPhase: 'RETURNED',
+        custodyLabel: 'RETURNED',
+        custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
+          phase: 'RETURNED', label: 'RETURNED', timestamp: new Date().toISOString(),
+          note: 'forged', actor: `Rider ${riderUid}`
+        }]
+      }
+    });
+  });
 
   const codOrder = { ...validOrder, id: 'test-cod-order', paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'PICKED_UP' };
   await adminDb.doc(`orders/${codOrder.id}`).set(codOrder);
@@ -503,6 +626,61 @@ async function main() {
   });
 
   const stranger = await clientFor('stranger');
+  await adminDb.doc(`orders/${validFoodId}/messages/trusted-message`).set({
+    orderId: validFoodId,
+    senderId: customerUid,
+    senderRole: 'CUSTOMER',
+    senderName: 'customer User',
+    text: 'Test message',
+    timestamp: new Date().toISOString()
+  });
+  await expectDenied('outsider cannot read another order message', async () => {
+    await getDoc(doc(stranger.db, 'orders', validFoodId, 'messages', 'trusted-message'));
+  });
+  await expectDenied('outsider cannot forge an order message', async () => {
+    await setDoc(doc(stranger.db, 'orders', validFoodId, 'messages', 'forged-message'), {
+      orderId: validFoodId,
+      senderId: strangerUid,
+      senderRole: 'CUSTOMER',
+      senderName: 'stranger User',
+      text: 'forged',
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  await setDoc(doc(customer.db, 'deliveryEvents', 'valid-customer-event'), {
+    orderId: validFoodId,
+    status: 'PENDING',
+    timestamp: new Date().toISOString(),
+    actorRole: 'CUSTOMER',
+    actorId: customerUid,
+    actorName: 'customer User',
+    note: 'Customer-created event matching persisted order status'
+  });
+  console.log('PASS customer can add a scoped event matching current order status');
+  await expectDenied('outsider cannot forge a delivery event on another order', async () => {
+    await setDoc(doc(stranger.db, 'deliveryEvents', 'forged-outsider-event'), {
+      orderId: validFoodId,
+      status: 'PENDING',
+      timestamp: new Date().toISOString(),
+      actorRole: 'CUSTOMER',
+      actorId: strangerUid,
+      actorName: 'stranger User',
+      note: 'forged'
+    });
+  });
+  await expectDenied('customer cannot forge DELIVERED event for a PENDING order', async () => {
+    await setDoc(doc(customer.db, 'deliveryEvents', 'forged-future-event'), {
+      orderId: validFoodId,
+      status: 'DELIVERED',
+      timestamp: new Date().toISOString(),
+      actorRole: 'CUSTOMER',
+      actorId: customerUid,
+      actorName: 'customer User',
+      note: 'forged future delivery'
+    });
+  });
+
   await expectDenied('unrelated customer cannot read receipt', async () => {
     await getBytes(ref(stranger.storage, receiptPath));
   });
