@@ -4,7 +4,7 @@
 
 This PR is intended for the existing Firebase project `sunny-discipline-hvd6f` and existing Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project or database. New service orders are COD-only until a trusted payment backend can be used without requiring a billing upgrade.
 
-There is no Cloud Functions source or deployment workflow in this PR branch. EEU terminal receipt photos are compressed on the rider's phone and stored in the existing protected order document in Firestore, so this receipt flow does not need Cloud Storage.
+There is no Cloud Functions source or deployment workflow in this PR branch. EEU terminal receipt photos are compressed on the rider's phone and stored as a separate, immutable document at `/orders/{orderId}/receipts/terminal`. The image is fetched only when an authorized order participant opens it, so regular order-list reads do not download the photo. This uses Firestore only; no Cloud Storage is required.
 
 ## Exactly how rules deploy today
 
@@ -54,8 +54,9 @@ Firebase documents Cloud Functions as requiring the Blaze plan, so their source 
 
 - New customer service orders use **Cash on Delivery (COD)** with `paymentStatus: "UNPAID"`.
 - Online Telebirr/wallet checkout and webhook settlement are disabled in this branch. Do not use an old function endpoint to accept payment.
-- The rider's EEU receipt image is compressed on-device and stored as a bounded JPEG data URL in the protected order document. Firestore rules limit its size and allow it to be attached once at `AT_EEU_HUB`; receipt/token fields are immutable afterward.
+- The rider's EEU receipt image is compressed on-device and stored as a bounded JPEG data URL in `/orders/{orderId}/receipts/terminal`, with a 300,000-character cap. The photo document can be created once by the assigned rider at `AT_EEU_HUB`, cannot be read by outsiders, and cannot be changed/deleted afterward. The order document stores only `receiptCaptured`, timestamp and token metadata; the app downloads the photo only when opened.
 - Cloud Storage is not required for this receipt flow. This PR does not ask you to publish Storage rules or upgrade billing.
+- Parcel, Ride and EEU tariffs are validated server-side by Firestore Rules: the client proposes values, but a customer cannot choose a zero/mismatched price. The current tariffs are hard-coded in `firestore.rules`, not stored in an admin-editable tariff document.
 
 ## Manual phone smoke test
 
