@@ -1,36 +1,31 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function signedIn() { return request.auth != null; }
-    function isActiveAdmin() {
-      return signedIn()
-        && 'role' in request.auth.token
-        && 'active' in request.auth.token
-        && request.auth.token.role == 'admin'
-        && request.auth.token.active == true;
-    }
-    function isActiveRider() {
-      return signedIn()
-        && 'role' in request.auth.token
-        && 'active' in request.auth.token
-        && request.auth.token.role == 'rider'
-        && request.auth.token.active == true;
+    function signedIn() {
+      return request.auth != null;
     }
 
+    // Staff identity is enforced by Firestore rules when attaching receipt evidence
+    // to an order. This path is UID-scoped; immutable uploads can only be created
+    // under the uploader's own UID segment. No custom auth claims or Functions required.
     match /eeuReceipts/{orderId}/{riderId}/{fileName} {
-      allow read: if isActiveAdmin()
-        || (signedIn() && resource.metadata.customerId == request.auth.uid)
-        || (signedIn() && resource.metadata.riderId == request.auth.uid);
-      allow create: if isActiveRider()
+      allow read: if signedIn()
+        && (
+          resource.metadata.customerId == request.auth.uid
+          || resource.metadata.riderId == request.auth.uid
+        );
+
+      allow create: if signedIn()
         && riderId == request.auth.uid
         && resource == null
-        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.size <= 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*')
         && request.resource.metadata.orderId == orderId
         && request.resource.metadata.riderId == request.auth.uid
         && request.resource.metadata.customerId is string;
-      allow update: if false;
-      allow delete: if isActiveAdmin();
+
+      // Receipts are immutable. Replacements/deletions require a separate audited admin workflow.
+      allow update, delete: if false;
     }
 
     match /{allPaths=**} {
