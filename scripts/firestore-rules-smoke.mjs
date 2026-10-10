@@ -108,6 +108,7 @@ async function main() {
   await createUser('admin', 'admin', true, true, 'andualemawraris4@gmail.com');
   await createUser('unverified-admin', 'admin', true, false, 'andualemawraris104@gmail.com');
   await createUser('nonallowlisted-admin', 'admin', true, true, 'outside-admin@example.test');
+  const runnerUid = await createUser('runner', 'runner');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
@@ -533,8 +534,24 @@ async function main() {
     await updateDoc(doc(admin.db, 'orders', validOrder.id), { paymentMerchantOrderId: 'FORGED-MERCHANT-ID' });
   });
 
+  const runner = await clientFor('runner');
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
+
+  await expectDenied('runner cannot self-assign a PENDING order without RUNNER_ASSIGNED transition', async () => {
+    await updateDoc(doc(runner.db, 'orders', validFoodId), {
+      runnerId: runnerUid,
+      runnerName: 'runner User',
+      status: 'PENDING'
+    });
+  });
+  await expectDenied('rider cannot self-assign a PENDING order before dispatch-ready state', async () => {
+    await updateDoc(doc(rider.db, 'orders', validFoodId), {
+      riderId: riderUid,
+      riderName: 'rider User',
+      status: 'PENDING'
+    });
+  });
   await expectDenied('active rider cannot read unrelated customer profile', async () => {
     await getDoc(doc(rider.db, 'users', customerUid));
   });
@@ -687,8 +704,8 @@ async function main() {
   if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
