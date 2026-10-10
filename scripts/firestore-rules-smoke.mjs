@@ -462,6 +462,9 @@ async function main() {
 
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
+  await expectDenied('active rider cannot read unrelated customer profile', async () => {
+    await getDoc(doc(rider.db, 'users', customerUid));
+  });
   await expectDenied('other active rider cannot read another rider assigned order', async () => {
     await getDoc(doc(otherRider.db, 'orders', validOrder.id));
   });
