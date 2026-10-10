@@ -69,6 +69,20 @@ async function expectDenied(label, action) {
 
 async function main() {
   const customerUid = await createUser('customer', 'customer');
+  const profileWithoutActiveUid = await createUser('profile-without-active', 'customer', false);
+  // Mirror the production profile shape created by syncUserProfile: role=customer, no active field.
+  await adminDb.doc(`users/${profileWithoutActiveUid}`).set({
+    uid: profileWithoutActiveUid,
+    displayName: 'profile-without-active User',
+    email: 'profile-without-active@example.test',
+    photoURL: '',
+    phone: '',
+    city: 'Jijiga',
+    address: '',
+    plusCode: '',
+    role: 'customer',
+    createdAt: new Date().toISOString()
+  });
   await createUser('admin', 'admin');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
@@ -86,6 +100,13 @@ async function main() {
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
   const customer = await clientFor('customer');
+  const profileWithoutActive = await clientFor('profile-without-active');
+  const ownProfile = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
+  if (!ownProfile.exists()) throw new Error('FAIL customer can read own profile when active field is absent');
+  console.log('PASS customer can read own profile when active field is absent');
+  await expectDenied('customer cannot read another customer profile', async () => {
+    await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
+  });
 
   const validCustomerOrder = {
     id: 'customer-create-invalid-service',
