@@ -8,7 +8,7 @@
 - Runners and riders cannot claim arbitrary pending orders; assignment follows the dispatch-ready transition.
 - Riders can update payment/custody fields only through rules-validated transitions. A rider cannot self-confirm digital payment; COD collection requires the allowed delivery transition.
 - EEU meter number, recharge amount, service fee, hub and customer authorization are immutable after order creation.
-- The receipt image/token can be attached once at `AT_EEU_HUB`, as a size-bounded JPEG data URL stored inside the order document. Receipt/token fields cannot be replaced afterward.
+- The receipt image is kept out of the order document: an assigned rider can create one protected `/orders/{orderId}/receipts/terminal` JPEG data URL (maximum 300,000 characters) while at `AT_EEU_HUB`. Reads are restricted to order participants/admin; update/delete are denied. The order keeps only receipt metadata, and the image loads on demand.
 - Delivery-event creation requires a matching authenticated actor and order role, a fixed field allow-list and status equal to the current order status. An order participant can still add a same-status client-authored note, so it is not equivalent to server-originated delivery evidence.
 - Customer batch-stock changes are denied except the exact reservation/release transaction. Authorized admin/Mamila inventory edits remain allowed.
 - EEU receipt handling no longer requires Cloud Storage.
