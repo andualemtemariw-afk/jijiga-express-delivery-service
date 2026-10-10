@@ -21,7 +21,7 @@
 - Rider payment and EEU fields are strictly constrained. Online payment cannot be self-confirmed; new orders are COD-only.
 - Delivery events require a valid authenticated actor/participant, a small allow-listed payload and the order's current persisted status.
 - Batch stock updates require authorized management or an exact reservation/release transaction.
-- EEU receipt photos are compressed on-device and stored inline in the Firestore order document; this receipt flow does not use Cloud Storage.
+- EEU receipt photos are compressed on-device and stored in immutable `/orders/{orderId}/receipts/terminal` documents, separately from order metadata. Photo reads are participant-restricted and lazy-loaded; 300,000-character cap; no Cloud Storage dependency.
 - Cloud Functions source, the command-line admin bootstrap script and Functions deployment/preflight workflows have been removed from this PR branch. The remaining Firebase Admin dependency package is used only by Emulator tests and does not deploy functions.
 
 ## Exactly how production rules were deployed before this PR
