@@ -1,26 +1,27 @@
 # Jijiga Express — Security Remediation Status
 
-## Changes in PR #2
+## Implemented in PR #2
 
-- Customer self-registration can create only a customer profile at the authenticated UID. A signed-in account may read its own profile even when `active` is absent, allowing the first login to initialize the profile.
-- Customers can read only their own orders. Active runners/riders can read assigned work and the intended dispatch pool; ordinary staff cannot browse unrelated customer profiles.
-- Admin Firestore access requires the admin profile role, `active: true`, a verified Firebase Auth email, and membership in the existing email allow-list. Admin Firestore access no longer requires custom claims or an operator bootstrap script.
-- Only the authenticated order participants/admin can read order-scoped messages.
-- Delivery-event writes require a real actor UID, matching order participation, an allow-listed payload, and a status equal to the order's current status.
-- Runner/rider assignment must use the valid status transition; neither may claim an arbitrary PENDING order.
-- New orders are COD-only and begin `UNPAID`. A rider cannot self-confirm a digital payment. Telebirr checkout/webhook logic has been removed from the app/release branch until a trusted paid backend is explicitly approved.
-- Parcel/Ride/EEU direct order creation is covered by Firestore rules for fixed allowed pricing and required service fields. EEU requires explicit customer authorization and custody updates preserve meter and recharge values.
-- Customer stock mutation is denied except the exact inventory reservation/release transaction; authorized admin/Mamila updates remain role-specific.
-- Receipt objects are immutable, image-only, size-limited and UID-path scoped. Firestore rules still authorize whether a receipt may be attached to an order.
+- Customer self-registration is restricted to a customer profile at the authenticated UID; own-profile reads work before an `active` field exists.
+- Admin Firestore access requires the active admin profile, verified Firebase Auth email, and membership in the existing allow-list. No custom claims/bootstrap script is required.
+- Customers can read only their own orders; nested messages are restricted to order participants/admin.
+- Runners and riders cannot claim arbitrary pending orders; assignment follows the dispatch-ready transition.
+- Riders can update payment/custody fields only through rules-validated transitions. A rider cannot self-confirm digital payment; COD collection requires the allowed delivery transition.
+- EEU meter number, recharge amount, service fee, hub and customer authorization are immutable after order creation.
+- The receipt image/token can be attached once at `AT_EEU_HUB`, as a size-bounded JPEG data URL stored inside the order document. Receipt/token fields cannot be replaced afterward.
+- Delivery-event creation requires a matching authenticated actor and order role, a fixed field allow-list and status equal to the current order status. An order participant can still add a same-status client-authored note, so it is not equivalent to server-originated delivery evidence.
+- Customer batch-stock changes are denied except the exact reservation/release transaction. Authorized admin/Mamila inventory edits remain allowed.
+- EEU receipt handling no longer requires Cloud Storage.
 
 ## Removed from this branch
 
-- Cloud Functions source code and its manual deployment workflow.
-- The command-line administrator bootstrap script.
-- Telebirr adapter smoke-test script and payment checkout calls in the customer app.
+- Firebase Cloud Functions source and the manual Functions deployment/preflight workflows.
+- The CLI-only administrator bootstrap script.
+- Client calls to the Telebirr checkout callable and the Telebirr payment/webhook adapter.
+- Cloud Storage receipt upload code and Storage initialization from the app's receipt path.
 
-Firebase documents Cloud Functions as available on the Blaze plan. This branch does not ask the owner to upgrade. Note: removing source and deployment workflow does not delete a Cloud Function that was already deployed before this PR; inspect Firebase Console → Functions and delete confirmed obsolete functions there.
+Firebase documents Cloud Functions as available only on the Blaze plan; Cloud Storage for Firebase also requires Blaze under current Firebase policy. This PR does not ask the owner to upgrade. Removing source/workflows from GitHub does not delete functions already deployed in Firebase; inspect Console → Functions and delete only confirmed-obsolete functions there.
 
 ## Verification boundary
 
-GitHub Actions emulator tests cover the relevant authorization cases. They do not prove that production rules have been published or that a phone successfully registered and placed an order. Keep the PR unmerged until the current-head CI checks are green; after approval, publish rules through Firebase Console and test on a physical phone.
+Automated CI covers root typecheck/build plus Auth/Firestore Emulator tests. It does not prove production rules were published or the APK was tested. Do not merge/publish until latest-head checks are green; after publishing via Firebase Console, verify on the actual phone.
