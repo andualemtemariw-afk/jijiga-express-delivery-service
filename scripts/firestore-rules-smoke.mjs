@@ -828,7 +828,7 @@ async function main() {
   await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
   for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
-  console.log('All rules smoke tests passed.');
+  console.log('All rules smoke tests passed, including pricing and protected EEU receipt subcollection tests.');
 }
 
 main().catch(async (error) => {
