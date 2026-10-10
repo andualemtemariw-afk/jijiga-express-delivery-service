@@ -29,7 +29,12 @@ No CLI, computer, terminal, script, or deployment workflow is needed for these s
 
 The signed-in Firebase Auth email must be verified, and it must match one of the existing allow-listed email addresses in `firestore.rules`. The same account's Firestore document `/users/{uid}` in the selected database must contain `role: "admin"` and `active: true`. All three conditions are required. Admin authorization no longer reads custom claims.
 
-You can inspect the account in Firebase Console → **Authentication** → **Users**, then use that user's UID to inspect `users/{uid}` in Firestore Console. Do not create a second admin profile or change a different customer's role.
+Phone-only provisioning if the profile is missing or not yet admin:
+
+1. In Firebase Console → **Authentication** → **Users**, open the intended account and copy its UID. Confirm the email is verified and matches one of the three addresses listed in `firestore.rules`. If the email is not verified, complete normal email verification, then sign out/in so Firebase issues a refreshed token.
+2. Open the same named Firestore database → **Data**. Find `users/{UID}`. If it already exists, edit only the intended account's `role` to the string `admin` and `active` to the boolean `true`, preserving its other profile fields.
+3. If there is no profile document, create a document in collection `users` with document ID exactly equal to the Auth UID. Add fields: `uid` (string, UID), `email` (string, verified allow-listed email), `displayName` (string), `role` (string, `admin`), `active` (boolean, `true`), and `createdAt` (string timestamp). Do not change another person's profile.
+4. Sign out/in to Jijiga Express and verify the admin navigation appears. No custom claims are required, and no script/CLI is used.
 
 ## Former privileged backend functions
 
