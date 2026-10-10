@@ -18,7 +18,7 @@ service firebase.storage {
       allow create: if signedIn()
         && riderId == request.auth.uid
         && resource == null
-        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*')
         && request.resource.metadata.orderId == orderId
         && request.resource.metadata.riderId == request.auth.uid
