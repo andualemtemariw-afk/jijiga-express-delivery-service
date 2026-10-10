@@ -164,9 +164,11 @@ service cloud.firestore {
     // User profiles. Self-registration can ONLY create a customer profile.
     // Staff/admin roles are provisioned by trusted backend functions.
     match /users/{uid} {
+      // Users may always read their own profile, including newly registered or deactivated accounts.
+      // This does not grant inactive accounts access to orders or staff-only resources.
       allow read: if signedIn() && (
-        isAdmin()
-        || (isActiveUser() && request.auth.uid == uid)
+        request.auth.uid == uid
+        || isAdmin()
         || (isActiveUser() && getUserRole() in ['runner', 'rider'])
       );
 
