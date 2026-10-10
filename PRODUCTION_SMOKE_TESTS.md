@@ -12,7 +12,7 @@ GitHub Actions runs the Auth and Firestore Emulator tests automatically for this
 ## Orders and payment state
 6. Customer-created orders are COD-only and start `UNPAID`; a customer cannot inject a paid status or payment verification field.
 7. FOOD/KHAT order writes must atomically link the order, stock delta and inventory reservation.
-8. Parcel/Ride/EEU order creation validates required service data and configured pricing.
+8. Parcel/Ride/EEU order creation validates required service data and fixed tariff constraints. Tests deny zero-priced Parcel/Ride orders and an EEU order whose price differs from its recharge amount.
 9. Customer can read only their own orders.
 10. Runner cannot self-assign a PENDING order without the `RUNNER_ASSIGNED` transition.
 11. Rider cannot self-assign a PENDING order; claims start from the dispatch-ready state.
@@ -36,13 +36,15 @@ GitHub Actions runs the Auth and Firestore Emulator tests automatically for this
 23. EEU order create requires customer authorization, a valid meter number, allowed recharge amount, separate service fee and initial `WITH_CUSTOMER` phase.
 24. Rider cannot change meter number, recharge amount, service fee, hub or customer authorization.
 25. Rider cannot skip custody phases or mark an order returned before receipt evidence exists.
-26. Assigned rider can add one correctly formatted, bounded JPEG data URL at `AT_EEU_HUB`.
-27. Rider cannot replace receipt/token evidence after the first attach.
-28. Receipt evidence is readable through the customer's own order; unrelated customers cannot read that order.
+26. The assigned rider can atomically create `/orders/{orderId}/receipts/terminal` and set order receipt metadata at `AT_EEU_HUB`.
+27. Receipt JPEG data URLs are capped at 300,000 characters; oversized and non-JPEG data are denied.
+28. Receipt documents cannot be replaced or deleted by the rider.
+29. Order-list documents contain only receipt metadata, not the photo data.
+30. The order customer and assigned participants can load the photo on demand; unrelated customers cannot read it.
 
 ## Build/release
-29. GitHub Actions runs root dependencies install, TypeScript check, production build, and emulator tests without local user scripts.
-30. The PR's test workflows do not publish production rules.
-31. The PR has no Cloud Functions source/deployment workflow. New orders are COD-only.
+31. GitHub Actions runs root dependencies install, TypeScript check, production build, and emulator tests without local user scripts.
+32. The PR's test workflows do not publish production rules.
+33. The PR has no Cloud Functions source/deployment workflow. New orders are COD-only.
 
 Do not mark production Console publishing or physical-phone verification passed just because CI passes.
