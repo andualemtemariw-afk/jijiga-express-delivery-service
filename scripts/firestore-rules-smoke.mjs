@@ -1,7 +1,7 @@
 import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
-import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
+
 import { createRequire } from 'node:module';
 const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
 const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = requireFromFunctions('firebase-admin/app');
@@ -10,13 +10,10 @@ const { getFirestore: getAdminFirestore } = requireFromFunctions('firebase-admin
 
 const projectId = 'sunny-discipline-hvd6f';
 const databaseId = '(default)';
-const bucket = `${projectId}.firebasestorage.app`;
-
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
 
-const adminApp = initializeAdminApp({ projectId, storageBucket: bucket });
+const adminApp = initializeAdminApp({ projectId });
 const adminDb = getAdminFirestore(adminApp);
 const adminAuth = getAdminAuth(adminApp);
 
@@ -48,12 +45,10 @@ async function clientFor(key) {
   const app = initializeApp(firebaseConfig, `test-${key}-${Date.now()}`);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const storage = getStorage(app);
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectStorageEmulator(storage, '127.0.0.1', 9199);
   await signInWithEmailAndPassword(auth, users[key].email, users[key].password);
-  return { app, auth, db, storage };
+  return { app, auth, db };
 }
 
 async function registerCustomerClient() {
@@ -63,10 +58,8 @@ async function registerCustomerClient() {
   const app = initializeApp(firebaseConfig, `test-registered-customer-${suffix}`);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const storage = getStorage(app);
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectStorageEmulator(storage, '127.0.0.1', 9199);
 
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   const uid = credential.user.uid;
@@ -87,7 +80,7 @@ async function registerCustomerClient() {
     role: 'customer',
     createdAt: new Date().toISOString()
   });
-  return { app, auth, db, storage, uid, email, password };
+  return { app, auth, db, uid, email, password };
 }
 
 async function expectDenied(label, action) {
@@ -627,18 +620,35 @@ async function main() {
   await updateDoc(doc(rider.db, 'orders', codOrder.id), { status: 'DELIVERED', paymentStatus: 'COLLECTED_BY_RIDER' });
   console.log('PASS rider can deliver COD order after collecting payment');
 
-  const receiptPath = `eeuReceipts/${validOrder.id}/${riderUid}/rider.jpg`;
-  await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([1, 2, 3]), {
-    contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid, customerId: customerUid }
-  });
-  console.log('PASS rider can create correctly scoped receipt');
-  await expectDenied('rider cannot overwrite receipt', async () => {
-    await uploadBytes(ref(rider.storage, receiptPath), new Uint8Array([4, 5, 6]), {
-      contentType: 'image/jpeg', customMetadata: { orderId: validOrder.id, riderId: riderUid }
+  const receiptTimestamp = new Date().toISOString();
+  const receiptEeuDetails = {
+    ...eeuDetailsFixture,
+    receiptImageUrl: 'data:image/jpeg;base64,AAAA',
+    receiptTimestamp,
+    tokenCode: '',
+    custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
+      phase: 'AT_EEU_HUB',
+      label: 'AT_EEU_HUB',
+      timestamp: receiptTimestamp,
+      note: 'Test terminal receipt saved inline.',
+      actor: `Rider ${riderUid}`
+    }]
+  };
+  await updateDoc(doc(rider.db, 'orders', eeuOrderId), { eeuDetails: receiptEeuDetails });
+  console.log('PASS assigned rider can attach one bounded inline receipt at AT_EEU_HUB');
+  await expectDenied('rider cannot replace an attached EEU receipt', async () => {
+    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+      eeuDetails: {
+        ...receiptEeuDetails,
+        receiptImageUrl: 'data:image/jpeg;base64,BBBB',
+        receiptTimestamp: new Date().toISOString(),
+        tokenCode: 'TAMPERED',
+        custodyTimeline: [...receiptEeuDetails.custodyTimeline, {
+          phase: 'AT_EEU_HUB', label: 'AT_EEU_HUB', timestamp: new Date().toISOString(),
+          note: 'Attempted receipt replacement', actor: `Rider ${riderUid}`
+        }]
+      }
     });
-  });
-  await expectDenied('inactive rider cannot read EEU receipt', async () => {
-    await getBytes(ref(inactive.storage, receiptPath));
   });
 
   const stranger = await clientFor('stranger');
