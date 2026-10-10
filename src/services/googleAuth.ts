@@ -1,5 +1,4 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { 
   getAuth, 
   connectAuthEmulator,
@@ -30,7 +29,6 @@ export const WORKSPACE_SCOPES = [
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const storage: FirebaseStorage = getStorage(app);
 
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
 
