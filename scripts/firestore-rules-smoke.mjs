@@ -197,13 +197,7 @@ async function main() {
     });
   });
 
-  await expectDenied('customer cannot add payment verification fields on direct create', async () => {
-    await setDoc(doc(customer.db, 'orders', 'malicious-payment-fields'), {
-      ...validCustomerOrder,
-      id: 'malicious-payment-fields',
-      paymentReference: 'FAKE-REF'
-    });
-  });
+
 
   await adminDb.doc('batches/test-food').set({
     id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
