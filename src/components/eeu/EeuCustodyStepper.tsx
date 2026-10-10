@@ -193,7 +193,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
             {hasReceipt ? (
               <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
                 <CheckCircle2 className="w-3 h-3" />
-                Verified Snapshot
+                Photo Captured
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 text-[10px] font-bold">
