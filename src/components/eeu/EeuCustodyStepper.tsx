@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Zap, 
   User, 
@@ -17,6 +17,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Order, EeuCustodyPhase, EeuRechargeDetails } from '../../types';
 import { EEU_STATE_CHAIN, getNextEeuPhase } from '../../utils/eeuStateMachine';
+import { loadEeuReceiptImage } from '../../services/eeuReceipts';
 
 interface EeuCustodyStepperProps {
   order: Order;
@@ -32,7 +33,32 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   onRequestCameraReceipt
 }) => {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptLoadError, setReceiptLoadError] = useState<string | null>(null);
   const details = order.eeuDetails;
+  const hasReceipt = Boolean(details?.receiptCaptured || details?.receiptImageUrl);
+  const displayedReceiptImage = details?.receiptImageUrl || receiptImage;
+
+  useEffect(() => {
+    if (!showReceiptModal || !hasReceipt || details?.receiptImageUrl) return;
+    let cancelled = false;
+    setReceiptLoading(true);
+    setReceiptLoadError(null);
+    loadEeuReceiptImage(order.id)
+      .then((image) => {
+        if (cancelled) return;
+        setReceiptImage(image);
+        if (!image) setReceiptLoadError('The saved receipt photo was not found.');
+      })
+      .catch((error: any) => {
+        if (!cancelled) setReceiptLoadError(error?.message || 'Could not load receipt photo.');
+      })
+      .finally(() => {
+        if (!cancelled) setReceiptLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showReceiptModal, order.id, hasReceipt, details?.receiptImageUrl]);
 
   if (!details) return null;
 
@@ -155,7 +181,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
 
         {/* Mandatory Camera Paper Receipt Section */}
         <div className={`p-4 rounded-xl border text-xs space-y-2.5 ${
-          details.receiptImageUrl 
+          hasReceipt
             ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
             : 'bg-amber-50/60 border-amber-200 text-amber-950'
         }`}>
@@ -164,7 +190,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
               <Receipt className="w-4 h-4 text-amber-700" />
               <span>Official EEU Terminal Paper Receipt</span>
             </div>
-            {details.receiptImageUrl ? (
+            {hasReceipt ? (
               <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
                 <CheckCircle2 className="w-3 h-3" />
                 Verified Snapshot
@@ -176,21 +202,30 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
             )}
           </div>
 
-          {details.receiptImageUrl ? (
+          {hasReceipt ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-3">
-                <img
-                  src={details.receiptImageUrl}
-                  alt="EEU Receipt"
-                  className="w-14 h-14 rounded-lg object-cover border border-emerald-300 shadow-2xs cursor-pointer hover:opacity-90"
-                  onClick={() => setShowReceiptModal(true)}
-                />
+                {details.receiptImageUrl ? (
+                  <img
+                    src={details.receiptImageUrl}
+                    alt="EEU Receipt preview"
+                    className="w-14 h-14 rounded-lg object-cover border border-emerald-300 shadow-2xs cursor-pointer hover:opacity-90"
+                    onClick={() => setShowReceiptModal(true)}
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-lg border border-emerald-300 bg-white flex items-center justify-center">
+                    <Receipt className="w-6 h-6 text-emerald-700" />
+                  </div>
+                )}
                 <div className="space-y-0.5">
                   <div className="font-mono font-bold text-xs text-slate-900">
-                    STS Token: {details.tokenCode || '4920-1928-4820-9182-3849'}
+                    STS Token: {details.tokenCode || 'Not recorded'}
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Captured at {details.receiptTimestamp || 'EEU Kiosk Counter'}
+                  </div>
+                  <div className="text-[10px] text-emerald-700">
+                    Photo stored separately to keep order-list downloads small.
                   </div>
                 </div>
               </div>
@@ -262,7 +297,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
 
       {/* Modal: Paper Receipt Zoom Lightbox */}
       <AnimatePresence>
-        {showReceiptModal && details.receiptImageUrl && (
+        {showReceiptModal && hasReceipt && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -284,12 +319,18 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
               </div>
 
               <div className="p-5 space-y-4">
-                <div className="aspect-4/3 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
-                  <img
-                    src={details.receiptImageUrl}
-                    alt="Official EEU Terminal Receipt"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="aspect-4/3 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                  {receiptLoading ? (
+                    <span className="text-sm text-slate-500">Loading protected receipt photo…</span>
+                  ) : displayedReceiptImage ? (
+                    <img
+                      src={displayedReceiptImage}
+                      alt="Official EEU Terminal Receipt"
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <span className="p-4 text-sm text-red-700 text-center">{receiptLoadError || 'Receipt photo unavailable.'}</span>
+                  )}
                 </div>
 
                 <div className="bg-amber-50/80 p-3 rounded-xl border border-amber-200 space-y-2 text-xs">
@@ -298,7 +339,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
                     <span className="font-mono text-amber-800">{details.kwhUnits} kWh</span>
                   </div>
                   <div className="bg-white p-2.5 rounded-lg border border-amber-200 font-mono font-bold text-center text-sm tracking-wider text-slate-900 select-all">
-                    {details.tokenCode || '4920-1928-4820-9182-3849'}
+                    {details.tokenCode || 'Not recorded'}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1 font-mono">
                     <div>Meter: <strong>{details.meterNumber}</strong></div>
