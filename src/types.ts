@@ -43,6 +43,7 @@ export interface EeuRechargeDetails {
   meterNumber: string; // 13-digit meter number string
   cardSerialNumber?: string; // Physical card identifier
   rechargeAmount: number; // Cash float amount in ETB
+  customerAuthorized?: boolean; // Explicit customer authorization for physical-card pickup/top-up
   serviceFee: number; // Delivery & errand service fee
   eeuHubName: string; // e.g. "EEU Jijiga Main District Office"
   custodyPhase: EeuCustodyPhase;
