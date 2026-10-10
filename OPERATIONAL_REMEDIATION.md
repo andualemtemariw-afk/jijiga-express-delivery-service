@@ -1,39 +1,36 @@
-# Jijiga Express — Operational Remediation
+# Jijiga Express — Security and Operations Status
 
-## Implemented
+## Current release approach
 
-- Atomic order + inventory reservation and atomic cancellation/restoration for FOOD and KHAT.
-- Firestore reservations are linked to order, batch, customer, quantity, and action.
-- Rider payment-status mutation is limited; non-COD delivery requires a trusted confirmed payment state.
-- Real device GPS is persisted with `riderLocationUpdatedAt`.
-- Production maps do not simulate rider coordinates; demo/development simulation is explicitly gated.
-- EEU receipts are captured from the device and uploaded to protected immutable Storage paths.
-- Staff provisioning/deactivation uses trusted Functions and Auth custom claims.
-- One-time administrator bootstrap is operator-only and refuses to overwrite an existing unrelated administrator.
-- A reproducible production-validation workflow and focused Firebase rules workflow are present.
+This PR removes the paid Cloud Functions code/deployment workflow and keeps the app compatible with the existing Firebase project and named Firestore database. Direct customer writes are guarded by Firestore rules. New orders use COD only; online payment verification is disabled rather than simulated.
 
-## Validation evidence
+## Security behavior targeted by this PR
 
-Completed CI evidence:
-- Root `npm ci`: success.
-- Root `npm run lint`: success.
-- Root `npm run build`: success.
-- Functions `npm ci`: success.
-- Functions `npm run lint`: success.
-- Functions `npm run build`: success.
-- Functions high-severity audit gate: success.
-- Root high-severity audit gate: success.
-- Latest Firestore/Auth/Storage rules smoke tests: success.
-- Latest Production Validation: success.
+- Customers can read their own profile and orders, but not another customer's private profile/order.
+- Customer self-registration creates only a customer role; users cannot set their own role or `active` flag.
+- Admin Firestore access requires an active `admin` profile, a verified email, and an existing allow-listed email. No custom claims or bootstrap CLI are required.
+- Rider order updates are limited to allowed status transitions. A rider cannot self-confirm a digital payment; COD collection is the only client-side payment-state transition.
+- EEU meter number, recharge amount, service fee, and hub are immutable after request creation. Custody updates must follow the ordered steps and receipt rules.
+- Order messages are restricted to order participants and admin.
+- Delivery events require the authenticated actor, participant role, and the order's current persisted status.
+- Customers cannot arbitrarily change batch stock; stock reservations/restorations must be linked to the order in the same transaction. Admin/Mamila inventory management remains separate.
+- EEU receipt uploads are immutable, image-only, and confined to the authenticated uploader's UID path. Firestore rules decide whether an uploaded receipt may be attached to an order.
 
-The final verified runtime head passed the complete configured CI gate. The prior smoke-test failure was a test-harness fixture defect and was corrected without weakening production rules.
+## What is not claimed as verified
 
-## Deployment requirements
+Emulator tests exercise the rules and build. They do not prove that a production account has the right profile, that a live Console publish succeeded, or that the app was tested on a physical phone. The owner must still verify Authentication email/password settings and perform a real-device signup/restart/COD-order test.
 
-1. Run and record `PRODUCTION_SMOKE_TESTS.md` against the emulator.
-2. Store `PAYMENT_WEBHOOK_SECRET` and the Telebirr production secrets in Firebase Secret Manager.
-3. Use the implemented Telebirr provider-specific signature adapter before accepting production callbacks.
-4. Keep `VITE_ENABLE_DEMO_SANDBOX=false` in production.
-5. Refresh Auth ID tokens after staff role/active custom claims are changed.
-6. Restrict Google Maps production keys to the production origin and required APIs.
-7. Configure monitoring, backups, and alerting.
+## Console-only publishing
+
+- Back up the current published rules.
+- In Firebase Console, select the existing named database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`, open Rules, copy the full `firestore.rules` file from PR #2 and publish it.
+- If the existing Storage bucket works without upgrading the plan, publish `storage.rules` the same way in Storage → Rules.
+- Do not use a CLI, scripts, custom claims, or any deploy workflow to make this release live.
+- Check Firebase Console → Functions for old deployed functions. Removing their source from GitHub does not remove an already-deployed function; delete any confirmed obsolete ones through the Console.
+
+## Remaining limitations
+
+- Online Telebirr and other wallet payment methods are disabled. Only COD is advertised until a trusted payment backend is available.
+- Cloud Functions require the Blaze billing plan. This PR removes their source and deployment workflow; it does not silently upgrade billing.
+- Hosting remains separately configured and previously failed on a missing `FIREBASE_SERVICE_ACCOUNT` secret. Hosting does not deploy database rules.
+- Real-device authentication/order tests and an actual Console rules publish remain unverified until performed by the owner.
