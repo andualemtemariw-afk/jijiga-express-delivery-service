@@ -107,6 +107,12 @@ async function main() {
   await expectDenied('customer cannot read another customer profile', async () => {
     await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
   });
+  await expectDenied('customer cannot self-activate by updating profile', async () => {
+    await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { active: true });
+  });
+  await expectDenied('customer cannot promote own profile to admin', async () => {
+    await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { role: 'admin' });
+  });
 
   const validCustomerOrder = {
     id: 'customer-create-invalid-service',
@@ -184,6 +190,42 @@ async function main() {
     });
   });
   console.log('PASS valid FOOD order creation with inventory reservation');
+
+  // Exercise the full protected customer-order path for a normal profile with no active field.
+  const profileOrderId = 'profile-no-active-food-' + Date.now();
+  await runTransaction(profileWithoutActive.db, async (tx) => {
+    const batchRef = doc(profileWithoutActive.db, 'batches', 'test-food');
+    const orderRef = doc(profileWithoutActive.db, 'orders', profileOrderId);
+    const reservationRef = doc(profileWithoutActive.db, 'inventoryReservations', profileOrderId);
+    const batchSnap = await tx.get(batchRef);
+    if (!batchSnap.exists()) throw new Error('test batch missing for profile-without-active order');
+    tx.update(batchRef, {
+      available: batchSnap.data().available - 1,
+      lastReservationId: profileOrderId,
+      updatedAt: new Date().toISOString()
+    });
+    tx.set(orderRef, {
+      id: profileOrderId, serviceType: 'FOOD', batchId: 'test-food', batchName: 'Test food',
+      mamilaId: 'm1', mamilaName: 'Test', mamilaLocation: 'Jijiga',
+      price: 100, quantity: 1, deliveryFee: 20, totalPrice: 120,
+      status: 'PENDING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      customerId: profileWithoutActiveUid, customerName: 'profile-without-active User',
+      customerPhone: '', customerCity: 'Jijiga', customerPlusCode: '', customerAddress: 'Test',
+      createdAt: new Date().toISOString()
+    });
+    tx.set(reservationRef, {
+      orderId: profileOrderId, batchId: 'test-food', customerId: profileWithoutActiveUid,
+      quantity: 1, action: 'RESERVE', createdAt: new Date().toISOString()
+    });
+  });
+  const createdProfileOrder = await getDoc(doc(profileWithoutActive.db, 'orders', profileOrderId));
+  if (!createdProfileOrder.exists() || createdProfileOrder.data().customerId !== profileWithoutActiveUid) {
+    throw new Error('FAIL customer without active field cannot persist/read own FOOD order');
+  }
+  console.log('PASS customer without active field can persist and read own FOOD order');
+  await expectDenied('customer cannot read another customer order', async () => {
+    await getDoc(doc(customer.db, 'orders', profileOrderId));
+  });
   // Seed a privileged fixture for the customer's release-quantity attack test.
   const releaseOrderId = 'food-release-' + Date.now();
   const releaseBatchId = 'batch-release-' + Date.now();
@@ -428,8 +470,8 @@ async function main() {
   if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
   console.log('PASS order customer can read receipt');
 
-  await Promise.all([signOut(customer.auth), signOut(admin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, admin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, admin, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed.');
 }
