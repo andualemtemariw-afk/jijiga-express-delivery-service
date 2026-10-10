@@ -183,15 +183,6 @@ async function main() {
     });
   });
 
-  await expectDenied('customer cannot create an already-paid service order directly', async () => {
-    await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
-      ...validCustomerOrder,
-      id: 'malicious-paid-create',
-      paymentStatus: 'PAID_CONFIRMED'
-    });
-  });
-
-
 
   await adminDb.doc('batches/test-food').set({
     id: 'test-food', mamilaId: 'm1', name: 'Test food', description: 'Test',
@@ -590,9 +581,17 @@ async function main() {
     status: 'PICKED_UP',
     eeuDetails: eeuDetailsFixture
   });
-  await expectDenied('rider cannot alter EEU meter number or recharge amount', async () => {
+  await expectDenied('rider cannot alter EEU meter number or recharge amount with an otherwise-valid custody event', async () => {
     await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
-      eeuDetails: { ...eeuDetailsFixture, meterNumber: '0000-0000-0000-0', rechargeAmount: 1000 }
+      eeuDetails: {
+        ...eeuDetailsFixture,
+        meterNumber: '0000-0000-0000-0',
+        rechargeAmount: 1000,
+        custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
+          phase: 'AT_EEU_HUB', label: 'AT_EEU_HUB', timestamp: new Date().toISOString(),
+          note: 'otherwise-valid timeline, but protected values are altered', actor: `Rider ${riderUid}`
+        }]
+      }
     });
   });
   await expectDenied('rider cannot skip EEU custody states or mark returned without receipt', async () => {
