@@ -62,7 +62,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const [quantity, setQuantity] = useState(1);
   const [landmark, setLandmark] = useState(customerProfile.address || 'Kebele 04, Near Central Plaza');
   const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '8F2P+5H Jijiga');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [specialNote, setSpecialNote] = useState('');
   const [wrapType, setWrapType] = useState<'Fresh Banana Leaf' | 'Traditional Palm Fiber' | 'Moist Burlap Wrap'>('Fresh Banana Leaf');
 
@@ -637,8 +637,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Online' },
-                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' }
+                      { id: 'COD', label: 'Cash on Delivery', badge: 'Pay courier at handover' }
                     ].map((m) => (
                       <button
                         key={m.id}
