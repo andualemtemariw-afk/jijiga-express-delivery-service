@@ -21,7 +21,11 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isActiveUser() && getUserRole() == 'admin';
+      return isActiveUser()
+        && getUserRole() == 'admin'
+        && request.auth.token.email_verified == true
+        && request.auth.token.role == 'admin'
+        && request.auth.token.active == true;
     }
 
     function isActiveUser() {
