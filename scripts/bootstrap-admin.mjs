@@ -20,6 +20,9 @@ try {
   }
 
   const user = await auth.getUserByEmail(email);
+  if (user.emailVerified !== true) {
+    throw new Error('The target Firebase Auth account must verify its email before administrator bootstrap.');
+  }
   await db.doc(`users/${user.uid}`).set({
     uid: user.uid,
     displayName: user.displayName || email.split('@')[0],
