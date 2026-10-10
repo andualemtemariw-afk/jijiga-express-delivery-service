@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
 
 import { createRequire } from 'node:module';
 const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -627,31 +627,64 @@ async function main() {
   const receiptTimestamp = new Date().toISOString();
   const receiptEeuDetails = {
     ...eeuDetailsFixture,
-    receiptImageUrl: 'data:image/jpeg;base64,AAAA',
+    receiptCaptured: true,
     receiptTimestamp,
     tokenCode: '',
     custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
       phase: 'AT_EEU_HUB',
       label: 'AT_EEU_HUB',
       timestamp: receiptTimestamp,
-      note: 'Test terminal receipt saved inline.',
+      note: 'Test terminal receipt saved in the order receipts subcollection.',
       actor: `Rider ${riderUid}`
     }]
   };
-  await updateDoc(doc(rider.db, 'orders', eeuOrderId), { eeuDetails: receiptEeuDetails });
-  console.log('PASS assigned rider can attach one bounded inline receipt at AT_EEU_HUB');
+  const receiptBatch = writeBatch(rider.db);
+  receiptBatch.set(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
+    receiptImageUrl: 'data:image/jpeg;base64,AAAA',
+    capturedBy: riderUid,
+    capturedAt: new Date()
+  });
+  receiptBatch.update(doc(rider.db, 'orders', eeuOrderId), {
+    eeuDetails: receiptEeuDetails,
+    updatedAt: new Date().toISOString()
+  });
+  await receiptBatch.commit();
+  console.log('PASS assigned rider can atomically attach one capped receipt in the protected subcollection at AT_EEU_HUB');
+
   await expectDenied('rider cannot replace an attached EEU receipt', async () => {
-    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
-      eeuDetails: {
-        ...receiptEeuDetails,
-        receiptImageUrl: 'data:image/jpeg;base64,BBBB',
-        receiptTimestamp: new Date().toISOString(),
-        tokenCode: 'TAMPERED',
-        custodyTimeline: [...receiptEeuDetails.custodyTimeline, {
-          phase: 'AT_EEU_HUB', label: 'AT_EEU_HUB', timestamp: new Date().toISOString(),
-          note: 'Attempted receipt replacement', actor: `Rider ${riderUid}`
-        }]
-      }
+    await setDoc(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,BBBB',
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+  });
+
+  const tooLargeEeuOrderId = 'test-eeu-receipt-too-large';
+  await adminDb.doc(`orders/${tooLargeEeuOrderId}`).set({
+    ...validOrder,
+    id: tooLargeEeuOrderId,
+    serviceType: 'EEU_RECHARGE',
+    price: 500,
+    deliveryFee: 75,
+    totalPrice: 575,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    status: 'PICKED_UP',
+    riderId: riderUid,
+    eeuDetails: { ...eeuDetailsFixture, receiptCaptured: false, custodyPhase: 'AT_EEU_HUB', custodyLabel: 'AT_EEU_HUB' }
+  });
+  await expectDenied('rider cannot attach a receipt exceeding the subcollection size cap', async () => {
+    await setDoc(doc(rider.db, 'orders', tooLargeEeuOrderId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,' + 'A'.repeat(300001),
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+  });
+  await expectDenied('rider cannot attach non-JPEG receipt data', async () => {
+    await setDoc(doc(rider.db, 'orders', tooLargeEeuOrderId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/png;base64,AAAA',
+      capturedBy: riderUid,
+      capturedAt: new Date()
     });
   });
 
@@ -711,14 +744,25 @@ async function main() {
     });
   });
 
-  await expectDenied('unrelated customer cannot read an EEU order containing inline receipt evidence', async () => {
+  await expectDenied('unrelated customer cannot read an EEU order containing receipt evidence', async () => {
     await getDoc(doc(stranger.db, 'orders', eeuOrderId));
   });
+  await expectDenied('outsider cannot read an order-scoped EEU receipt photo', async () => {
+    await getDoc(doc(stranger.db, 'orders', eeuOrderId, 'receipts', 'terminal'));
+  });
   const customerEeuOrder = await getDoc(doc(customer.db, 'orders', eeuOrderId));
-  if (!customerEeuOrder.exists() || customerEeuOrder.data().eeuDetails?.receiptImageUrl !== 'data:image/jpeg;base64,AAAA') {
-    throw new Error('Customer could not read the inline EEU receipt saved in their own order.');
+  if (
+    !customerEeuOrder.exists() ||
+    customerEeuOrder.data().eeuDetails?.receiptCaptured !== true ||
+    'receiptImageUrl' in (customerEeuOrder.data().eeuDetails || {})
+  ) {
+    throw new Error('Order metadata did not persist independently of the receipt photo.');
   }
-  console.log('PASS order customer can read their inline EEU receipt');
+  const customerEeuReceipt = await getDoc(doc(customer.db, 'orders', eeuOrderId, 'receipts', 'terminal'));
+  if (!customerEeuReceipt.exists() || customerEeuReceipt.data().receiptImageUrl !== 'data:image/jpeg;base64,AAAA') {
+    throw new Error('Order customer could not read their own protected EEU receipt photo.');
+  }
+  console.log('PASS order customer can read the protected receipt subcollection while order metadata stays image-free');
 
   await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
   for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
