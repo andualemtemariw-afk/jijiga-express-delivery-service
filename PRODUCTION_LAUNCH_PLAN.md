@@ -1,38 +1,42 @@
 # Jijiga Express — Spark-Compatible Launch Plan
 
-## Scope of this release
+## Scope
 
-This branch preserves the existing Firebase project `sunny-discipline-hvd6f` and named Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project, migrate data, or deploy server-side Functions.
+This branch preserves project `sunny-discipline-hvd6f` and its existing named Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project, migrate data, require a computer, or require Firebase CLI.
 
-To avoid requiring a billing upgrade, the app no longer calls Cloud Functions. Service orders are written directly to Firestore and accepted only when the security rules validate customer identity, service data, price fields, and initial state. New orders are COD-only. Telebirr/online checkout is hidden/disabled until a trusted payment verification service is funded and explicitly reintroduced.
+To avoid requiring Blaze, this branch removes Cloud Functions source and backend deployment/preflight workflows. The app writes new service orders directly to Firestore, with field and service-price checks enforced in Firestore rules. New orders are COD-only. Telebirr/wallet settlement stays disabled until a trusted payment backend is explicitly approved.
+
+EEU receipt photos are compressed on the rider's phone and saved inline in the protected Firestore order document. The app no longer uses Cloud Storage for EEU receipt evidence.
 
 ## Security gates
 
-- New accounts are customer-only and cannot self-assign staff/admin roles.
-- Admin access requires an active Firestore admin profile plus verified email in the existing allow-list. No custom claims, bootstrap script, or CLI are required.
-- Customer read access is scoped to their own profile/order.
-- Order message and delivery-event writes are tied to order participants and current state.
-- Rider payment updates cannot claim a digital payment was paid by a button press.
-- The EEU create rule requires a 13-digit/formatted meter number, permitted recharge amount, separate service fee, customer authorization, and initial `WITH_CUSTOMER` custody state. Later custody changes are strictly scoped and require receipt evidence before return.
-- Batch stock changes are restricted to authorized Mamila/admin edits or exact inventory reservation transactions.
+- Customer self-registration creates only a customer profile.
+- Admin access requires all of: a verified Auth email on the existing allow-list, and a Firestore profile with `role: "admin"` and `active: true`. No custom claims/bootstrap script.
+- Customer reads are restricted to own profile/order; nested messages are restricted to order participants/admin.
+- Runners/riders cannot arbitrarily self-assign work; assignment requires the correct persisted dispatch state.
+- Riders cannot self-confirm a digital payment. COD collection requires the allowed delivery transition.
+- Parcel/Ride/EEU order creation checks required service fields and pricing. EEU requires explicit customer authorization and begins in `WITH_CUSTOMER`.
+- Meter number, recharge amount, service fee, hub and authorization stay immutable; rider custody updates must follow the prescribed state chain. Receipt image/token can be attached once at the EEU hub and cannot be replaced.
+- Delivery-event writes are allow-listed, participant-scoped, and must match the current order status. This prevents arbitrary outsider/future-status events; it does not make participant-authored current-status notes equivalent to server-generated audit records.
+- Batch stock changes require an authorized Mamila/admin action or exact stock reservation/release transaction.
 
-## Phone-only publish steps
+## Phone-only Console publish
 
-1. Back up the live Firestore rules from Console.
-2. In Firebase Console, select the existing named database above, open Rules, paste the complete `firestore.rules` file from PR #2, and publish.
-3. In Storage → Rules, back up existing rules and paste the PR's complete `storage.rules` file if the existing Storage bucket is available under the current plan.
-4. Check Authentication → Users to confirm the allow-listed admin account has verified email and check Firestore `/users/{uid}` for `role: "admin"` and `active: true`.
-5. Test registration, restart persistence, a COD order, cross-customer access denial, and message/event permissions in a controlled test account.
+1. Copy the old published rules as a rollback note.
+2. In Firebase Console, select the existing named database above → **Rules**.
+3. Paste the entire `firestore.rules` source from PR #2 and press **Publish**.
+4. Verify that the allow-listed admin's email is verified and their `/users/{uid}` document has `role: "admin"`, `active: true`.
+5. Test registration/re-authentication, COD order creation, cross-customer read denial, and rider/security transitions from the phone UI.
 
-No local computer, Firebase CLI, or script is needed for those publishing steps.
+No Storage rules publishing is needed for the EEU receipt path. No CLI or script is required.
 
-## Paid backend functions
+## Former Cloud Functions
 
-Firebase documents Cloud Functions as available on the Blaze plan. This branch removes the Functions source and manual backend-deployment workflow instead of asking the owner to upgrade. Older deployed functions, if present in Console → Functions, remain deployed until explicitly deleted there. Verify and delete only confirmed obsolete endpoints; do not assume source deletion removes production deployments.
+The source and deployment workflow were removed from the PR. Firebase's docs say Cloud Functions require the Blaze plan. If older functions still appear in Console → Functions, source removal alone did not delete them. Confirm they're obsolete, then delete through the Console; there is no CLI step in this procedure. The PR does not claim it has removed running resources from the live project.
 
 ## Not yet production-proven
 
-- Physical-phone sign-in and order persistence have not been tested by the owner.
-- Console publishing of Firestore/Storage rules has not been performed by this PR.
-- Existing Storage bucket availability on the current billing plan must be confirmed in Console.
-- Hosting is separate; its previous run failed because the Hosting service-account secret was unavailable.
+- The owner still needs to publish the updated rules in Firebase Console.
+- The owner still needs to test sign-in and a COD order on the physical phone.
+- Any previously deployed Cloud Functions need separate Console removal if present.
+- This release has not enabled online payment settlement.
