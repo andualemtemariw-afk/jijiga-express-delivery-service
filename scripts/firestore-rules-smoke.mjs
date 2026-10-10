@@ -21,7 +21,6 @@ const firebaseConfig = {
   apiKey: 'demo-api-key',
   authDomain: `${projectId}.firebaseapp.com`,
   projectId,
-  storageBucket: bucket,
 };
 
 const users = {};
@@ -707,12 +706,14 @@ async function main() {
     });
   });
 
-  await expectDenied('unrelated customer cannot read receipt', async () => {
-    await getBytes(ref(stranger.storage, receiptPath));
+  await expectDenied('unrelated customer cannot read an EEU order containing inline receipt evidence', async () => {
+    await getDoc(doc(stranger.db, 'orders', eeuOrderId));
   });
-  const customerBytes = await getBytes(ref(customer.storage, receiptPath));
-  if (customerBytes.byteLength !== 3) throw new Error('customer receipt read returned unexpected size');
-  console.log('PASS order customer can read receipt');
+  const customerEeuOrder = await getDoc(doc(customer.db, 'orders', eeuOrderId));
+  if (!customerEeuOrder.exists() || customerEeuOrder.data().eeuDetails?.receiptImageUrl !== 'data:image/jpeg;base64,AAAA') {
+    throw new Error('Customer could not read the inline EEU receipt saved in their own order.');
+  }
+  console.log('PASS order customer can read their inline EEU receipt');
 
   await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
   for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
