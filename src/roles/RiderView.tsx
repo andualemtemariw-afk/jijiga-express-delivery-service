@@ -31,8 +31,45 @@ import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispa
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../services/googleAuth';
+
+
+const MAX_EEU_RECEIPT_DATA_URL_LENGTH = 400000;
+
+/**
+ * Compress an EEU receipt locally and keep it small enough for the existing Firestore order document.
+ * This avoids requiring Cloud Storage (which needs Firebase Blaze) for this no-cost release.
+ */
+async function compressReceiptForFirestore(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Could not open the receipt image. Please capture it again.'));
+      image.src = objectUrl;
+    });
+
+    const maxDimension = 960;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Image compression is unavailable on this device.');
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of [0.72, 0.62, 0.52, 0.42, 0.32]) {
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      if (dataUrl.length <= MAX_EEU_RECEIPT_DATA_URL_LENGTH) return dataUrl;
+    }
+    throw new Error('Receipt image is too large for the free Firestore evidence limit. Please capture the receipt closer with less background.');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 interface Props {
   orders: Order[];
@@ -150,10 +187,7 @@ export function RiderView({
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
     setIsCapturingReceipt(true);
     try {
-      const extension = (receiptFile?.type.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '');
-      const objectRef = storageRef(storage, `eeuReceipts/${cameraOrder.id}/${currentRiderId}/receipt-${Date.now()}.${extension}`);
-      await uploadBytes(objectRef, receiptFile, { contentType: receiptFile.type, customMetadata: { orderId: cameraOrder.id, riderId: currentRiderId, customerId: cameraOrder.customerId } });
-      const receiptImageUrl = await getDownloadURL(objectRef);
+      const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const updatedEeu: EeuRechargeDetails = {
         ...cameraOrder.eeuDetails,
@@ -164,7 +198,7 @@ export function RiderView({
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
           timestamp: nowTime,
-          note: 'Actual EEU terminal receipt image uploaded from rider device.',
+          note: 'Actual EEU terminal receipt image compressed on-device and saved with the protected order record.',
           actor: `Rider ${currentRiderId}`
         }]
       };
