@@ -1,5 +1,5 @@
 import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, ref, uploadBytes, getBytes } from 'firebase/storage';
 import { createRequire } from 'node:module';
@@ -54,6 +54,36 @@ async function clientFor(key) {
   return { app, auth, db, storage };
 }
 
+async function registerCustomerClient() {
+  const suffix = Date.now();
+  const email = `new-customer-${suffix}@example.test`;
+  const password = 'TestPassword-123!';
+  const app = initializeApp(firebaseConfig, `test-registered-customer-${suffix}`);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1:8080');
+  connectStorageEmulator(storage, '127.0.0.1:9199');
+
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = credential.user.uid;
+  // Matches the profile shape written by syncUserProfile for a first-time customer.
+  await setDoc(doc(db, 'users', uid), {
+    uid,
+    displayName: 'New Test Customer',
+    email,
+    photoURL: '',
+    phone: '',
+    city: 'Jijiga',
+    address: '',
+    plusCode: '',
+    role: 'customer',
+    createdAt: new Date().toISOString()
+  });
+  return { app, auth, db, storage, uid, email, password };
+}
+
 async function expectDenied(label, action) {
   try {
     await action();
@@ -69,20 +99,6 @@ async function expectDenied(label, action) {
 
 async function main() {
   const customerUid = await createUser('customer', 'customer');
-  const profileWithoutActiveUid = await createUser('profile-without-active', 'customer', false);
-  // Mirror the production profile shape created by syncUserProfile: role=customer, no active field.
-  await adminDb.doc(`users/${profileWithoutActiveUid}`).set({
-    uid: profileWithoutActiveUid,
-    displayName: 'profile-without-active User',
-    email: 'profile-without-active@example.test',
-    photoURL: '',
-    phone: '',
-    city: 'Jijiga',
-    address: '',
-    plusCode: '',
-    role: 'customer',
-    createdAt: new Date().toISOString()
-  });
   await createUser('admin', 'admin');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
@@ -100,10 +116,17 @@ async function main() {
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
   const customer = await clientFor('customer');
-  const profileWithoutActive = await clientFor('profile-without-active');
+  // Register through Firebase Auth Emulator, create a customer-only profile, then reauthenticate
+  // to exercise the profile lookup performed after an app relaunch without relying on active=true.
+  const profileWithoutActive = await registerCustomerClient();
+  const profileWithoutActiveUid = profileWithoutActive.uid;
   const ownProfile = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
-  if (!ownProfile.exists()) throw new Error('FAIL customer can read own profile when active field is absent');
-  console.log('PASS customer can read own profile when active field is absent');
+  if (!ownProfile.exists()) throw new Error('FAIL newly registered customer cannot read own profile');
+  await signOut(profileWithoutActive.auth);
+  await signInWithEmailAndPassword(profileWithoutActive.auth, profileWithoutActive.email, profileWithoutActive.password);
+  const profileAfterReauthentication = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
+  if (!profileAfterReauthentication.exists()) throw new Error('FAIL customer cannot read own profile after reauthentication');
+  console.log('PASS customer registration/profile read after reauthentication');
   await expectDenied('customer cannot read another customer profile', async () => {
     await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
   });
