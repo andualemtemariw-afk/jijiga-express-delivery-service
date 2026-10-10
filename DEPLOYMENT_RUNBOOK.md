@@ -2,48 +2,57 @@
 
 ## Release model
 
-This branch is designed for the existing Firebase project on the no-cost Spark plan. The customer app writes to the existing Firestore database under restrictive security rules; there is no Cloud Functions source or automatic Cloud Functions deployment in this branch. New orders are COD-only. Telebirr/online checkout must remain disabled until there is an approved, trusted payment verification backend.
+This PR is intended for the existing Firebase project `sunny-discipline-hvd6f` and existing Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project or database. New service orders are COD-only until a trusted payment backend can be used without requiring a billing upgrade.
 
-No Firebase CLI, local computer, bootstrap script, custom auth claims, new Firebase project, or new database is required to publish the rules.
+There is no Cloud Functions source or deployment workflow in this PR branch. EEU terminal receipt photos are compressed on the rider's phone and stored in the existing protected order document in Firestore, so this receipt flow does not need Cloud Storage.
 
-## Preserve the current rules before publishing
+## Exactly how rules deploy today
 
-1. Open Firebase Console on your phone and select project `sunny-discipline-hvd6f`.
-2. Open Firestore Database and select the existing database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. Do not create or migrate a database.
-3. Open the **Rules** tab and copy the currently published rules somewhere safe as rollback evidence before changing anything.
-4. In GitHub, open PR #2, choose **Files changed**, and open `firestore.rules` from branch `fix/customer-profile-self-read`. Copy the complete contents of that file.
-5. Return to the selected production database's Rules editor, replace the editor contents with the copied file, and press **Publish**.
-6. Do not publish to `(default)` unless you verify a separate running client uses that database. Firestore rules apply per database; the app is configured for the named database above.
+**On the current `main` branch before PR #2 is merged:** `.github/workflows/firebase-production-backend-deploy.yml` is triggered only by `workflow_dispatch` (someone manually starts it from GitHub Actions). It installs Firebase CLI and runs `firebase deploy --only firestore:rules,storage,functions`. It is not triggered by a normal push, and it is not automatically run when a pull request is opened. The separate `firestore-rules.yml` workflow runs tests only.
 
-## Publish Storage rules
+**In PR #2:** the backend deploy/preflight workflows and Functions source have been removed. After this PR is merged, these rules will not be automatically published by a workflow. The intended publishing method is copy/paste in Firebase Console.
 
-If the existing Firebase Storage bucket is available in your current plan:
+**Hosting is separate:** `.github/workflows/firebase-hosting.yml` publishes the web front end from `main`. It does not publish Firestore rules. The Android build workflow builds an APK; it does not publish Firestore rules.
 
-1. In the same project, open **Storage** → **Rules**.
-2. Save a copy of the current rules for rollback.
-3. Copy the complete `storage.rules` contents from the same PR branch, paste them into the Storage Rules editor, and press **Publish**.
+## Publish the Firestore rules from your phone
 
-Receipt uploads are immutable, limited to image files up to 10 MiB, and scoped to the authenticated user's UID path. A user still cannot attach a receipt to another customer's order because the Firestore order rules require the assigned rider identity and a valid EEU custody transition. If Firebase Console requires a billing upgrade for your existing Storage bucket, do not add billing without approval; photo receipt upload will remain unavailable until an acceptable no-cost option is confirmed.
+1. Open Firebase Console in your phone browser and select project `sunny-discipline-hvd6f`.
+2. Open **Firestore Database** and select the existing database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. Do not choose `(default)` unless you have confirmed that a separate app uses it. Do not create/migrate a database.
+3. Open the database's **Rules** tab. Copy the currently published rules into a note first so you have a rollback copy.
+4. In GitHub, open PR #2, select **Files changed**, and open `firestore.rules` from branch `fix/customer-profile-self-read`.
+5. Copy the entire contents of `firestore.rules`, return to the selected Firestore database's Rules editor, replace the complete editor contents, and press **Publish**.
+6. Confirm that the console shows the rules were published. Do not report the rules as live until this manual publish succeeds.
 
-## Admin access without scripts or custom claims
+No CLI, computer, terminal, script, or deployment workflow is needed for these steps.
 
-An administrator must satisfy **all three** conditions:
-- Firebase Authentication email is verified.
-- The email is one of the existing allow-listed addresses in `firestore.rules`.
-- The profile `/users/{uid}` in the selected Firestore database has `role: "admin"` and `active: true`.
+## Admin access without custom claims
 
-You can check the Auth UID in Firebase Console → Authentication → Users, and inspect the profile document in Firestore Console. Console edits use project-owner privileges. Do not change another customer's profile or set admin access on an unverified/non-allow-listed account. Admin privileges do not depend on custom claims.
+The signed-in Firebase Auth email must be verified, and it must match one of the existing allow-listed email addresses in `firestore.rules`. The same account's Firestore document `/users/{uid}` in the selected database must contain `role: "admin"` and `active: true`. All three conditions are required. Admin authorization no longer reads custom claims.
 
-## Old deployed Cloud Functions
+You can inspect the account in Firebase Console → **Authentication** → **Users**, then use that user's UID to inspect `users/{uid}` in Firestore Console. Do not create a second admin profile or change a different customer's role.
 
-Deleting source code or a workflow from GitHub does **not** delete a function already deployed in Firebase. Open Firebase Console → Functions and check whether any old functions are listed. If present, remove obsolete functions only after confirming they are no longer required: `createServiceOrder`, `provisionStaff`, `setStaffActive`, `createTelebirrCheckout`, `paymentWebhook`, and `telebirrWebhook`. Use the Console's delete action; no CLI is required. If none are listed, nothing needs deleting. Do not re-enable online payments by calling an old endpoint.
+## Former privileged backend functions
 
-## What runs automatically
+The existing `main` source had these Firebase Cloud Functions:
+- `createServiceOrder`: server-side creation/pricing of Parcel, Ride, and EEU service orders.
+- `provisionStaff`: privileged creation/provisioning of staff accounts.
+- `setStaffActive`: privileged staff activation/deactivation.
+- `createTelebirrCheckout`: server-side Telebirr checkout creation.
+- `paymentWebhook`: HTTP payment settlement endpoint.
+- `telebirrWebhook`: Telebirr payment callback/signature validation.
 
-- GitHub Actions runs the TypeScript/build and Firebase Emulator rule tests for PR #2.
-- The Android workflow builds a debug APK only when code is pushed to `main` (or manually dispatched from GitHub Actions). A PR does not publish production rules.
-- The separate `firebase-hosting.yml` workflow affects the web/PWA only and runs from `main`; it does **not** publish Firestore or Storage rules. Its prior run failed because the `FIREBASE_SERVICE_ACCOUNT` secret was missing.
+They were written under `functions/src/index.ts` using Firebase Cloud Functions v2 HTTPS APIs and were targeted at Firebase project `sunny-discipline-hvd6f`. Their code had no explicit `region`, which means the usual Firebase default is `us-central1`; confirm an actually deployed function's region and status in Firebase Console → **Functions**.
 
-## Manual smoke test after publishing
+Firebase documents Cloud Functions as requiring the Blaze plan, so their source and deploy workflow have been removed from this PR. Removing code from GitHub does not delete functions already deployed to Firebase. If any of those names still appear in Console → Functions, delete only the obsolete functions there after confirming they are unused. No CLI is needed. This PR does not have access to verify or delete deployed resources in your Firebase project.
 
-Use a new customer account to register/sign in, close and reopen the app, place a COD order, and verify that only that customer can read it. Then check the order under the dispatcher/rider account. For EEU, do not process a real meter/recharge during testing; verify only the custody and receipt UI until the full flow is confirmed with a controlled test.
+## Payment and receipt behavior
+
+- New customer service orders use **Cash on Delivery (COD)** with `paymentStatus: "UNPAID"`.
+- Online Telebirr/wallet checkout and webhook settlement are disabled in this branch. Do not use an old function endpoint to accept payment.
+- The rider's EEU receipt image is compressed on-device and stored as a bounded JPEG data URL in the protected order document. Firestore rules limit its size and allow it to be attached once at `AT_EEU_HUB`; receipt/token fields are immutable afterward.
+- Cloud Storage is not required for this receipt flow. This PR does not ask you to publish Storage rules or upgrade billing.
+
+## Manual phone smoke test
+
+After publishing rules, use a test customer: register/sign in, close/reopen the app, submit a COD order, and confirm it appears under that customer's account. Confirm a different customer cannot read it. Test rider order assignment and status changes with a designated test rider. For EEU, use test data only and do not submit a live recharge until the full physical card handoff is verified.
+
