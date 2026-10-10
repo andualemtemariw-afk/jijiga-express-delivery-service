@@ -451,23 +451,37 @@ service cloud.firestore {
         )
         || (
           isRunner()
-          && ((('runnerId' in resource.data) && resource.data.runnerId == request.auth.uid) || (!('runnerId' in resource.data) && request.resource.data.runnerId == request.auth.uid))
+          && (
+            (resource.data.runnerId == request.auth.uid && validRunnerTransition())
+            || (
+              (!('runnerId' in resource.data) || resource.data.runnerId == null)
+              && request.resource.data.runnerId == request.auth.uid
+              && resource.data.status in ['PENDING', 'TRANSACTION_PENDING']
+              && request.resource.data.status == 'RUNNER_ASSIGNED'
+            )
+          )
           && request.resource.data.runnerName == currentUser().data.displayName
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
-          && validRunnerTransition()
         )
         || (
           isRider()
-          && ((('riderId' in resource.data) && resource.data.riderId == request.auth.uid) || (!('riderId' in resource.data) && request.resource.data.riderId == request.auth.uid))
+          && (
+            (resource.data.riderId == request.auth.uid && validRiderTransition())
+            || (
+              (!('riderId' in resource.data) || resource.data.riderId == null)
+              && request.resource.data.riderId == request.auth.uid
+              && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY']
+              && request.resource.data.status == 'RIDER_ACCEPTED'
+            )
+          )
           && request.resource.data.riderName == currentUser().data.displayName
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
-          && validRiderTransition()
           && (
             request.resource.data.status == 'DELIVERED'
             ? (
