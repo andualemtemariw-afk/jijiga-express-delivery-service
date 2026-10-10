@@ -44,7 +44,7 @@ import {
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
 import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
-import { createServiceOrder } from './services/serviceOrderFunctions';
+import { createServiceOrder } from './services/firestoreServiceOrders';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
