@@ -2,7 +2,7 @@
 
 ## Release model
 
-This PR is intended for the existing Firebase project `sunny-discipline-hvd6f` and existing Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project or database. New service orders are COD-only until a trusted payment backend can be used without requiring a billing upgrade.
+This PR is intended for the existing Firebase project `sunny-discipline-hvd6f` and existing Firestore database `ai-studio-remixjijigaexpre-729909c5-f38a-4c4a-8d31-a10d6eb77286`. It does not create a project or database. New service orders are COD-only until a trusted payment backend can be used without requiring a billing upgrade. **Do not publish the new rules to live customers while only the old `main`-branch APK/app is in service**: its flows may no longer match these restrictions. Build and check the updated app first, then coordinate the rule publish with rollout. If this is a private test environment, the risk is smaller.
 
 There is no Cloud Functions source or deployment workflow in this PR branch. EEU terminal receipt photos are compressed on the rider's phone and stored as a separate, immutable document at `/orders/{orderId}/receipts/terminal`. The image is fetched only when an authorized order participant opens it, so regular order-list reads do not download the photo. This uses Firestore only; no Cloud Storage is required.
 
@@ -36,6 +36,10 @@ Phone-only provisioning if the profile is missing or not yet admin:
 3. If there is no profile document, create a document in collection `users` with document ID exactly equal to the Auth UID. Add fields: `uid` (string, UID), `email` (string, verified allow-listed email), `displayName` (string), `role` (string, `admin`), `active` (boolean, `true`), and `createdAt` (string timestamp). Do not change another person's profile.
 4. Sign out/in to Jijiga Express and verify the admin navigation appears. No custom claims are required, and no script/CLI is used.
 
+## Create test staff accounts in the Console
+
+Before the rider/runner tests, create one test account for each role in Authentication → Users, then create or update that exact UID's `/users/{uid}` document in the same Firestore database. Set `role` to the lowercase string `runner` or `rider` and `active` to the boolean `true`; preserve the other profile fields. Do not edit your admin profile to become a rider or runner.
+
 ## Former privileged backend functions
 
 The existing `main` source had these Firebase Cloud Functions:
@@ -60,5 +64,12 @@ Firebase documents Cloud Functions as requiring the Blaze plan, so their source 
 
 ## Manual phone smoke test
 
-After publishing rules, use a test customer: register/sign in, close/reopen the app, submit a COD order, and confirm it appears under that customer's account. Confirm a different customer cannot read it. Test rider order assignment and status changes with a designated test rider. For EEU, use test data only and do not submit a live recharge until the full physical card handoff is verified.
+Only after the updated app is ready and the rules have been published, run these phone checks in order and record each **PASS** or **FAIL**:
+
+1. Register/sign in as a test customer and place one COD order.
+2. Force-close Jijiga Express, reopen it, and confirm the order is still visible under that customer's account.
+3. Sign in as the allow-listed admin and open the same order. If admin access fails, restore the backup of the previously published rules and stop this test sequence.
+4. Sign in as the test runner and claim the order through the valid dispatch state; sign in as the assigned test rider and complete the valid delivery transition with `paymentStatus: COLLECTED_BY_RIDER` after collecting COD.
+
+These are not marked as passed until someone runs them on the phone. For EEU, use test data only and do not submit a live recharge until the physical card handoff is verified.
 
