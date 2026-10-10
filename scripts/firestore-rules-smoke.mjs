@@ -273,6 +273,67 @@ async function main() {
   });
   console.log('PASS COD EEU order created directly with meter, amount, and authorization validation');
 
+  const zeroParcelId = 'zero-price-parcel-' + Date.now();
+  await expectDenied('customer cannot set Parcel price to zero when tariff is nonzero', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', zeroParcelId), {
+      id: zeroParcelId, serviceType: 'PARCEL', batchId: 'parcel-dispatch', batchName: 'Zero-priced parcel',
+      mamilaId: 'm1', mamilaName: 'Jijiga Express Delivery Service Hub', mamilaLocation: 'Jijiga',
+      price: 0, quantity: 1, deliveryFee: 120, totalPrice: 120, status: 'PENDING',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      parcelDetails: {
+        senderName: 'Sender', senderPhone: '0911000000', senderCity: 'Jijiga', senderAddress: 'Origin',
+        receiverName: 'Receiver', receiverPhone: '0911000001', receiverCity: 'Jijiga', receiverAddress: 'Destination',
+        parcelCategory: 'DOCUMENTS', weightCategory: '< 1 kg', description: 'Test zero-priced parcel',
+        isFragile: false, tamperSealRequested: false, trackingCode: 'PARCEL-ZERO'
+      },
+      createdAt: new Date().toISOString()
+    });
+  });
+
+  const zeroRideId = 'zero-price-ride-' + Date.now();
+  await expectDenied('customer cannot set Ride price to zero instead of the fixed fare', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', zeroRideId), {
+      id: zeroRideId, serviceType: 'RIDE', batchId: 'ride-marhaba-taxi', batchName: 'Zero-priced taxi',
+      mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+      price: 0, quantity: 1, deliveryFee: 0, totalPrice: 0, status: 'PENDING',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      rideDetails: {
+        vehicleType: 'MARHABA_TAXI', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+        city: 'Jijiga', tripDistanceKm: 6.8, tripDurationMins: 18, rideStatus: 'REQUESTED'
+      },
+      distanceKm: 6.8, etaMinutes: 18, createdAt: new Date().toISOString()
+    });
+  });
+
+  const mismatchedEeuId = 'mismatched-price-eeu-' + Date.now();
+  await expectDenied('customer cannot make EEU price differ from the recharge amount', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', mismatchedEeuId), {
+      id: mismatchedEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga',
+      batchName: 'Mismatched-price EEU recharge', mamilaId: 'eeu_hub',
+      mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+      price: 0, quantity: 1, deliveryFee: 75, totalPrice: 75, status: 'PENDING',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      eeuDetails: {
+        meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-02',
+        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+        custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
+        custodyTimeline: [{
+          phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(),
+          note: 'Customer authorized physical card service', actor: 'Customer'
+        }],
+        kwhUnits: 232.6
+      },
+      createdAt: new Date().toISOString()
+    });
+  });
+
+
   // Exercise the full protected customer-order path for a normal profile with no active field.
   const profileOrderId = 'profile-no-active-food-' + Date.now();
   await runTransaction(profileWithoutActive.db, async (tx) => {
