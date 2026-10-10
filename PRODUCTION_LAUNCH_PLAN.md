@@ -6,7 +6,7 @@ This branch preserves project `sunny-discipline-hvd6f` and its existing named Fi
 
 To avoid requiring Blaze, this branch removes Cloud Functions source and backend deployment/preflight workflows. The app writes new service orders directly to Firestore, with field and service-price checks enforced in Firestore rules. New orders are COD-only. Telebirr/wallet settlement stays disabled until a trusted payment backend is explicitly approved.
 
-EEU receipt photos are compressed on the rider's phone and saved inline in the protected Firestore order document. The app no longer uses Cloud Storage for EEU receipt evidence.
+EEU receipt photos are compressed on the rider's phone and saved to `/orders/{orderId}/receipts/terminal`, separate from the order document. Firestore Rules cap the JPEG data URL at 300,000 characters, allow one immutable upload by the assigned rider at `AT_EEU_HUB`, and restrict reads to order participants/admin. The photo is fetched only when opened; Cloud Storage is not used.
 
 ## Security gates
 
@@ -28,7 +28,7 @@ EEU receipt photos are compressed on the rider's phone and saved inline in the p
 4. Verify that the allow-listed admin's email is verified and their `/users/{uid}` document has `role: "admin"`, `active: true`.
 5. Test registration/re-authentication, COD order creation, cross-customer read denial, and rider/security transitions from the phone UI.
 
-No Storage rules publishing is needed for the EEU receipt path. No CLI or script is required.
+No Storage rules publishing is needed for the Firestore receipt subcollection. No CLI or script is required.
 
 ## Former Cloud Functions
 
