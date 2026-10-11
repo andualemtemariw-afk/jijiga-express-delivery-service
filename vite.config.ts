@@ -9,23 +9,37 @@ export default defineConfig(() => {
     build: {
       rollupOptions: {
         output: {
-          // Keep heavyweight libraries out of the initial application bundle.
-          // D3 packages are separated individually so the chart vendor chunk
-          // does not simply become one new oversized bundle.
+          // Keep heavyweight dependencies out of the initial application bundle.
+          // Split D3 modules separately so charts do not become one new oversized chunk.
           manualChunks(id) {
             const normalizedId = id.replace(/\\/g, '/');
-            const firebaseMatch = normalizedId.match(/\\/node_modules\\/(?:@firebase|firebase)\\/([^/]+)/);
-            if (firebaseMatch) {
-              return `vendor-firebase-${firebaseMatch[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-            }
+            const marker = '/node_modules/';
+            const markerIndex = normalizedId.lastIndexOf(marker);
 
-            const chartMatch = normalizedId.match(/\\/node_modules\\/(recharts|d3-[^/]+)/);
-            if (chartMatch) {
-              return `vendor-${chartMatch[1]}`;
-            }
+            if (markerIndex !== -1) {
+              const packagePath = normalizedId.slice(markerIndex + marker.length);
+              const parts = packagePath.split('/');
+              const packageName = parts[0];
 
-            if (normalizedId.includes('/node_modules/@vis.gl/react-google-maps/')) {
-              return 'vendor-google-maps';
+              if (packageName === '@firebase' && parts[1]) {
+                return `vendor-firebase-${parts[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+              }
+
+              if (packageName === 'firebase' && parts[1]) {
+                return `vendor-firebase-${parts[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+              }
+
+              if (packageName === 'recharts') {
+                return 'vendor-recharts';
+              }
+
+              if (packageName.startsWith('d3-')) {
+                return `vendor-${packageName}`;
+              }
+
+              if (packageName === '@vis.gl' && parts[1] === 'react-google-maps') {
+                return 'vendor-google-maps';
+              }
             }
 
             return undefined;
