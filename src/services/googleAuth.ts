@@ -144,27 +144,6 @@ export const appSignInWithGoogle = async (): Promise<User> => {
 };
 
 /**
- * Android-safe email/password authentication. This avoids OAuth popup/sessionStorage
- * state handling inside the Capacitor WebView.
- */
-export const signInWithEmail = async (email: string, password: string): Promise<User> => {
-  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-  return result.user;
-};
-
-export const registerWithEmail = async (
-  email: string,
-  password: string,
-  displayName?: string
-): Promise<User> => {
-  const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  if (displayName?.trim()) {
-    await updateProfile(result.user, { displayName: displayName.trim() });
-  }
-  return result.user;
-};
-
-/**
  * Google Sign-in with Workspace Drive / Gmail scopes.
  */
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {

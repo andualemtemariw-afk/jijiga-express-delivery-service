@@ -51,6 +51,8 @@ export interface EeuRechargeDetails {
   rechargeAmount: number; // Cash float amount in ETB
   serviceFee: number; // Delivery & errand service fee
   eeuHubName: string; // e.g. "EEU Jijiga Main District Office"
+  customerAuthorized?: boolean; // Explicit customer authorization before physical-card collection
+  receiptCaptured?: boolean; // Whether receipt snapshot has been recorded
   custodyPhase: EeuCustodyPhase;
   custodyLabel: 'WITH_CUSTOMER' | 'WITH_RIDER' | 'AT_EEU_HUB' | 'RETURNED';
   custodyTimeline: Array<{
