@@ -28,7 +28,6 @@ interface Props {
   mamilas: Mamila[];
   inventory: Batch[];
   customerProfile: {
-    uid: string;
     name: string;
     phone: string;
     city: string;
@@ -62,7 +61,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const [quantity, setQuantity] = useState(1);
   const [landmark, setLandmark] = useState(customerProfile.address || 'Kebele 04, Near Central Plaza');
   const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '8F2P+5H Jijiga');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
   const [specialNote, setSpecialNote] = useState('');
   const [wrapType, setWrapType] = useState<'Fresh Banana Leaf' | 'Traditional Palm Fiber' | 'Moist Burlap Wrap'>('Fresh Banana Leaf');
 
@@ -115,7 +114,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
       status: 'PENDING',
       paymentMethod,
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-      customerId: customerProfile.uid,
+      customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || '',
       customerName: customerProfile.name,
       customerPhone: customerProfile.phone,
       customerCity: customerProfile.city || 'Jijiga',
@@ -637,7 +636,10 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { id: 'COD', label: 'Cash on Delivery', badge: 'Pay courier at handover' }
+                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Popular' },
+                      { id: 'CBE_BIRR', label: 'CBE Birr', badge: 'Direct' },
+                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' },
+                      { id: 'SAHAL', label: 'Sahal / Zaad', badge: 'Cross-border' }
                     ].map((m) => (
                       <button
                         key={m.id}

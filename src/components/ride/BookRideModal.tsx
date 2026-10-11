@@ -41,7 +41,9 @@ export function BookRideModal({
   const [dropoff, setDropoff] = useState(
     selectedCity === 'Hargeisa' ? 'Mansoor Hotel & Conference Hall' : 'Taiwan Commercial Market'
   );
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
+    selectedCity === 'Hargeisa' ? 'ZAAD' : 'TELEBIRR'
+  );
   const [isSearching, setIsSearching] = useState(false);
   const [searchStep, setSearchStep] = useState(0);
 
@@ -95,7 +97,7 @@ export function BookRideModal({
           status: 'PENDING',
           paymentMethod,
           paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-          customerId: (customerProfile as any)?.uid,
+          customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || '',
           customerName: customerProfile.name,
           customerPhone: customerProfile.phone,
           customerCity: selectedCity,
@@ -172,11 +174,11 @@ export function BookRideModal({
                   if (city === 'Hargeisa') {
                     setPickup('Egal International Airport Terminal 1');
                     setDropoff('Mansoor Hotel & Conference Hall');
-                    setPaymentMethod('COD');
+                    setPaymentMethod('ZAAD');
                   } else {
                     setPickup('Kebele 04, Central Plaza');
                     setDropoff('Taiwan Commercial Market');
-                    setPaymentMethod('COD');
+                    setPaymentMethod('TELEBIRR');
                   }
                 }}
                 className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white font-semibold"
@@ -274,7 +276,12 @@ export function BookRideModal({
               <label className="text-xs font-bold text-slate-700 block mb-1">Payment Method</label>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: 'COD', label: 'Cash on Delivery' },
+                  { id: 'ZAAD', label: 'Zaad' },
+                  { id: 'TELEBIRR', label: 'Telebirr' },
+                  { id: 'SAHAL', label: 'Sahal' },
+                  { id: 'EBIRR', label: 'eBIRR' },
+                  { id: 'COOP_PAY', label: 'Coop Pay' },
+                  { id: 'COD', label: 'Cash' },
                 ].map((m) => (
                   <button
                     key={m.id}

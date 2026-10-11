@@ -2,8 +2,14 @@ export type Role = 'CUSTOMER' | 'MAMILA' | 'RUNNER' | 'RIDER' | 'ADMIN';
 
 export type ServiceType = 'FOOD' | 'PARCEL' | 'RIDE' | 'EEU_RECHARGE' | 'KHAT';
 
-export type PaymentMethod =
-  | 'TELEBIRR'
+export type PaymentMethod = 
+  | 'TELEBIRR' 
+  | 'EBIRR' 
+  | 'CBE_BIRR' 
+  | 'COOP_PAY'
+  | 'SAHAL' 
+  | 'ZAAD' 
+  | 'E_DAHAB' 
   | 'COD';
 
 export type PaymentStatus = 
@@ -43,7 +49,6 @@ export interface EeuRechargeDetails {
   meterNumber: string; // 13-digit meter number string
   cardSerialNumber?: string; // Physical card identifier
   rechargeAmount: number; // Cash float amount in ETB
-  customerAuthorized?: boolean; // Explicit customer authorization for physical-card pickup/top-up
   serviceFee: number; // Delivery & errand service fee
   eeuHubName: string; // e.g. "EEU Jijiga Main District Office"
   custodyPhase: EeuCustodyPhase;
@@ -56,8 +61,7 @@ export interface EeuRechargeDetails {
     actor: string;
   }>;
   tokenCode?: string; // 20-digit STS prepaid code
-  receiptCaptured?: boolean; // Immutable photo exists under orders/{orderId}/receipts/terminal
-  receiptImageUrl?: string; // Demo-only legacy preview; production writes use the protected receipts subcollection
+  receiptImageUrl?: string; // Mandatory camera snapshot of EEU terminal paper receipt
   receiptTimestamp?: string;
   kwhUnits?: number;
 }
@@ -162,12 +166,8 @@ export interface Order {
   status: OrderStatus;
   paymentMethod: PaymentMethod;
   paymentStatus?: PaymentStatus;
-  paymentProvider?: PaymentMethod;
   paymentReference?: string;
-  paymentMerchantOrderId?: string;
-  paymentCheckoutPrepayId?: string;
-  paymentVerifiedAt?: Date | string;
-  paymentCheckoutCreatedAt?: Date | string;
+  paymentConfirmedBy?: string;
   customerId: string;
   customerName: string;
   customerPhone?: string;
@@ -177,7 +177,6 @@ export interface Order {
   customerCoordinates?: { lat: number; lng: number };
   mamilaCoordinates?: { lat: number; lng: number };
   riderCoordinates?: { lat: number; lng: number };
-  riderLocationUpdatedAt?: string;
   specialInstructions?: string;
   cookingInstruction?: string; // Custom preparation / cooking note (e.g. "Please cook it well done, no pink inside")
   parcelDetails?: ParcelDetails;
@@ -207,7 +206,6 @@ export interface ChatMessage {
   id: string;
   orderId: string;
   senderRole: MessageSenderRole;
-  senderId?: string;
   senderName: string;
   text: string;
   timestamp: string;
@@ -239,7 +237,6 @@ export interface AppUserProfile {
   address?: string;
   plusCode?: string;
   role: UserRole;
-  active?: boolean;
   mamilaId?: string;
   createdAt: string;
   updatedAt?: string;

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CITIES } from '../../data';
 import { PaymentMethod, ParcelDetails, Order } from '../../types';
 import { 
   X, 
@@ -34,15 +35,15 @@ export function BookParcelModal({
   onBookParcel,
   senderProfile,
 }: BookParcelModalProps) {
-  const senderCity = 'Jijiga';
+  const [senderCity, setSenderCity] = useState(senderProfile.city || 'Jijiga');
   const [senderName, setSenderName] = useState(senderProfile.name);
   const [senderPhone, setSenderPhone] = useState(senderProfile.phone);
   const [senderAddress, setSenderAddress] = useState(senderProfile.address);
 
-  const receiverCity = 'Jijiga';
+  const [receiverCity, setReceiverCity] = useState('Hargeisa');
   const [receiverName, setReceiverName] = useState('Mustafa Farah Omer');
-  const [receiverPhone, setReceiverPhone] = useState('');
-  const [receiverAddress, setReceiverAddress] = useState('');
+  const [receiverPhone, setReceiverPhone] = useState('+252 63 445 6789');
+  const [receiverAddress, setReceiverAddress] = useState('Near Dahabshiil Tower, Independence Ave');
 
   const [category, setCategory] = useState<ParcelDetails['parcelCategory']>('DOCUMENTS');
   const [weight, setWeight] = useState<ParcelDetails['weightCategory']>('< 1 kg');
@@ -50,13 +51,13 @@ export function BookParcelModal({
   const [isFragile, setIsFragile] = useState(false);
   const [tamperSeal, setTamperSeal] = useState(true);
   const [specialNote, setSpecialNote] = useState('Handle with care, expedited courier delivery.');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ZAAD');
 
   if (!isOpen) return null;
 
-  // Jijiga-only parcel delivery: local dispatch rate.
-  const isIntercity = false;
-  const baseRate = 120;
+  // Inter-city fee calculation
+  const isIntercity = senderCity !== receiverCity;
+  const baseRate = isIntercity ? 200 : 120; // 200 ETB inter-city matching walkthrough video
   const weightAddon = weight === '< 1 kg' ? 50 : weight === '1 - 3 kg' ? 100 : weight === '3 - 5 kg' ? 180 : 250;
   const sealAddon = tamperSeal ? 30 : 0;
   const deliveryFee = baseRate;
@@ -65,7 +66,7 @@ export function BookParcelModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trackingTag = 'PARCEL-JJ-' + Math.floor(1000 + Math.random() * 9000);
+    const trackingTag = 'PARCEL-' + (senderCity.slice(0, 2) + receiverCity.slice(0, 2)).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
 
     const parcelDetails: ParcelDetails = {
       senderName,
@@ -101,16 +102,16 @@ export function BookParcelModal({
       status: 'PENDING',
       paymentMethod,
       paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-      customerId: (senderProfile as any)?.uid,
+      customerId: (senderProfile as any)?.uid || (senderProfile as any)?.id || '',
       customerName: senderName,
       customerPhone: senderPhone,
-      customerCity: 'Jijiga',
-      customerPlusCode: senderProfile.plusCode || '',
+      customerCity: receiverCity,
+      customerPlusCode: receiverCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga',
       customerAddress: receiverAddress,
       specialInstructions: specialNote || '',
       parcelDetails,
-      distanceKm: 6.5,
-      etaMinutes: 35,
+      distanceKm: isIntercity ? 145 : 6.5,
+      etaMinutes: isIntercity ? 180 : 35,
       createdAt: new Date(),
     };
 
@@ -131,7 +132,7 @@ export function BookParcelModal({
             </div>
             <div>
               <h3 className="font-bold text-lg">Book Express Parcel Service</h3>
-              <p className="text-xs text-slate-400">Local parcels & documents within Jijiga</p>
+              <p className="text-xs text-slate-400">Inter-city & Express Courier • Jijiga • Hargeisa • Dire Dawa</p>
             </div>
           </div>
           <button
@@ -154,9 +155,15 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Origin City</label>
-                <div className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-slate-100 font-medium text-slate-700">
-                  Jijiga (local delivery area)
-                </div>
+                <select
+                  value={senderCity}
+                  onChange={(e) => setSenderCity(e.target.value)}
+                  className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white font-medium"
+                >
+                  {CITIES.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -202,9 +209,15 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Destination City</label>
-                <div className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-blue-50 font-medium text-slate-700">
-                  Jijiga (local delivery area)
-                </div>
+                <select
+                  value={receiverCity}
+                  onChange={(e) => setReceiverCity(e.target.value)}
+                  className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-white font-medium"
+                >
+                  {CITIES.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -319,7 +332,14 @@ export function BookParcelModal({
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: 'COD', label: 'Cash (COD)', sub: 'Pay courier at handover' },
+                { id: 'TELEBIRR', label: 'Telebirr', sub: 'Ethio Telecom' },
+                { id: 'ZAAD', label: 'Zaad', sub: 'Telesom' },
+                { id: 'EBIRR', label: 'eBIRR', sub: 'Mobile Wallet' },
+                { id: 'SAHAL', label: 'Sahal', sub: 'Golis Telecom' },
+                { id: 'COOP_PAY', label: 'Coop Pay', sub: 'CBO Bank' },
+                { id: 'CBE_BIRR', label: 'CBE Birr', sub: 'Commercial Bank' },
+                { id: 'E_DAHAB', label: 'e-Dahab', sub: 'Dahabshiil' },
+                { id: 'COD', label: 'Cash (COD)', sub: 'Pay Courier' },
               ].map((m) => (
                 <button
                   key={m.id}
@@ -352,7 +372,7 @@ export function BookParcelModal({
                 <span>{senderCity}</span>
                 <ArrowRight className="w-3 h-3 text-emerald-400" />
                 <span>{receiverCity}</span>
-                <span>• ~6 km intra-city</span>
+                <span>• ~{isIntercity ? '145 km express corridor' : '6 km intra-city'}</span>
               </div>
             </div>
 

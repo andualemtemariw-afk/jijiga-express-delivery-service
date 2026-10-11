@@ -30,7 +30,8 @@ import {
   UserCheck,
   Edit3,
   X,
-  Check
+  Check,
+  Receipt
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -50,6 +51,7 @@ interface Props {
   onResolveDispute?: (orderId: string, status: 'RESOLVED' | 'REFUNDED', resolutionNote?: string) => void;
   onOpenMapPreview?: (order: Order) => void;
   onReassignOrder?: (orderId: string, assignment: { runnerId?: string; runnerName?: string; riderId?: string; riderName?: string; status?: Order['status'] }) => Promise<void>;
+  onConfirmPayment?: (orderId: string, receiptReference: string) => Promise<void>;
 }
 
 type ChartViewMode = 'grouped' | 'stacked' | 'totals';
@@ -157,7 +159,7 @@ const TotalsTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
-export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPreview, onReassignOrder }: Props) {
+export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPreview, onReassignOrder, onConfirmPayment }: Props) {
   const [viewMode, setChartViewMode] = useState<ChartViewMode>('grouped');
   const [orderFilters, setOrderFilters] = useState<OrderFilterState>({
     searchQuery: '',
@@ -180,6 +182,24 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
   const [selectedRunnerUid, setSelectedRunnerUid] = useState<string>('');
   const [selectedRiderUid, setSelectedRiderUid] = useState<string>('');
   const [isReassigning, setIsReassigning] = useState<boolean>(false);
+
+  // Explicit Admin Payment Verification state
+  const [paymentConfirmOrder, setPaymentConfirmOrder] = useState<Order | null>(null);
+  const [receiptReference, setReceiptReference] = useState<string>('');
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
+
+  const handleConfirmPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paymentConfirmOrder || !onConfirmPayment) return;
+    setIsSubmittingPayment(true);
+    try {
+      await onConfirmPayment(paymentConfirmOrder.id, receiptReference.trim() || 'VERIFIED_BY_ADMIN');
+      setPaymentConfirmOrder(null);
+      setReceiptReference('');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
 
   useEffect(() => {
     fetchEligibleStaff('runner').then(setAvailableRunners).catch(console.warn);
@@ -768,6 +788,45 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                           </button>
                         )}
                       </div>
+
+                      {/* Explicit Payment Verification Status & Admin Confirmation Button */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {order.paymentStatus === 'PAYMENT_PENDING' && (
+                          <>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              Pay: PENDING ({order.paymentMethod})
+                            </span>
+                            {onConfirmPayment && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPaymentConfirmOrder(order);
+                                  setReceiptReference('');
+                                }}
+                                className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer transition-colors shadow-xs flex items-center gap-1"
+                              >
+                                <Receipt className="w-2.5 h-2.5" />
+                                <span>Verify Slip</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {order.paymentStatus === 'PAID_CONFIRMED' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            ✓ PAID ({order.paymentMethod}{order.paymentReference ? ` · Ref: ${order.paymentReference}` : ''})
+                          </span>
+                        )}
+                        {order.paymentStatus === 'COLLECTED_BY_RIDER' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                            ✓ COD Collected ({order.totalPrice || order.price} ETB)
+                          </span>
+                        )}
+                        {order.paymentStatus === 'UNPAID' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-300">
+                            COD Unpaid ({order.totalPrice || order.price} ETB)
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-1 text-xs">
@@ -937,6 +996,89 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                 {isReassigning ? 'Reassigning...' : 'Save Reassignment'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explicit Admin Payment Verification Modal */}
+      {paymentConfirmOrder && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setPaymentConfirmOrder(null)}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-emerald-600" />
+                <h4 className="font-bold text-slate-900 text-base">Verify Payment Slip</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPaymentConfirmOrder(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Order ID:</span>
+                <span className="font-mono font-bold text-slate-900">#{paymentConfirmOrder.id.slice(-8)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Customer:</span>
+                <span className="font-semibold text-slate-900">{paymentConfirmOrder.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment Gateway:</span>
+                <span className="font-bold text-emerald-700 uppercase">{paymentConfirmOrder.paymentMethod}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Amount:</span>
+                <span className="font-bold text-slate-900 tabular-nums font-mono">{paymentConfirmOrder.totalPrice || paymentConfirmOrder.price} ETB</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmPaymentSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Bank / Gateway Transaction Reference / Slip ID
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. TXN-9842103847 or CBE-REF-0982"
+                  value={receiptReference}
+                  onChange={(e) => setReceiptReference(e.target.value)}
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Cross-reference with your Telebirr / CBE / e-Dahab merchant statement before confirming.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPaymentConfirmOrder(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPayment}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{isSubmittingPayment ? 'Confirming...' : 'Confirm & Mark Paid'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

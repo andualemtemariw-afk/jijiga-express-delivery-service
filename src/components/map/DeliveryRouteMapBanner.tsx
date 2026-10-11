@@ -70,7 +70,7 @@ export function DeliveryRouteMapBanner({
     totalPrice: 500,
     status: 'PICKED_UP',
     paymentMethod: 'TELEBIRR',
-    customerId: 'c1',
+    customerId: '',
     customerName: 'Andualem Awraris Haile',
     customerPhone: '+251 91 123 4567',
     customerCity: 'Jijiga',

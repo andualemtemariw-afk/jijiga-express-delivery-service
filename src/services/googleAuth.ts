@@ -20,15 +20,30 @@ import {
   enableIndexedDbPersistence,
   Firestore
 } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-export const WORKSPACE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/gmail.send',
-];
+// Standard scopes only; broad Gmail/Drive scopes removed to prevent Google OAuth verification review
+export const WORKSPACE_SCOPES: string[] = [];
 
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+/**
+ * Checks whether the app is executing inside a native Capacitor shell (Android / iOS).
+ */
+export const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return Capacitor.isNativePlatform();
+};
+
+/**
+ * Specifically checks for native Android Capacitor environment.
+ */
+export const isCapacitorAndroid = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+};
 
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
 
@@ -176,6 +191,94 @@ export const getAccessToken = async (): Promise<string | null> => {
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+};
+
+/**
+ * Maps Firebase Auth error codes into clean, actionable, human-readable user messages.
+ */
+export const mapAuthError = (error: any): string => {
+  const code = error?.code || '';
+  const message = error?.message || '';
+
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'This email address is already registered. Please sign in or use a different email.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/weak-password':
+      return 'The password is too weak. Please use at least 6 characters.';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password. Please verify your credentials and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email/Password sign-in is not yet enabled in the Firebase Console. An admin must enable Email/Password under Firebase Console > Authentication > Sign-in method.';
+    case 'auth/too-many-requests':
+      return 'Too many failed login attempts. Please wait a few moments before trying again.';
+    case 'auth/user-disabled':
+      return 'This user account has been disabled. Please contact support.';
+    case 'auth/network-request-failed':
+      return 'Network connection failed. Please check your internet connection and try again.';
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized in Firebase Authentication. On Android, please sign in with Email & Password.';
+    case 'auth/popup-closed-by-user':
+      return 'Google sign-in popup was closed before completing authentication.';
+    case 'auth/popup-blocked':
+      return 'Google sign-in popup was blocked by the browser. Please allow popups or use Email sign-in.';
+    default:
+      if (message.includes('missing initial state') || message.includes('initial state')) {
+        return 'OAuth session state failure in WebView. Please use Email & Password sign-in on Android devices.';
+      }
+      return message || 'An unexpected authentication error occurred. Please try again.';
+  }
+};
+
+/**
+ * Signs in using Firebase Email and Password.
+ * Guaranteed zero password storage in localStorage/IndexedDB.
+ */
+export const signInWithEmail = async (email: string, pass: string): Promise<User> => {
+  if (!email || !pass) {
+    throw new Error('Please provide both email and password.');
+  }
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+    return cred.user;
+  } catch (error: any) {
+    console.error('Email sign-in error:', error?.code || error);
+    throw new Error(mapAuthError(error));
+  }
+};
+
+/**
+ * Registers a new customer using Firebase Email and Password.
+ * Updates user profile displayName and returns authenticated User.
+ */
+export const registerWithEmail = async (
+  email: string, 
+  pass: string, 
+  displayName?: string
+): Promise<User> => {
+  if (!email || !pass) {
+    throw new Error('Please provide both email and password.');
+  }
+  if (pass.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
+  }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+    if (displayName && displayName.trim()) {
+      try {
+        await updateProfile(cred.user, { displayName: displayName.trim() });
+      } catch (profileErr) {
+        console.warn('Profile name update notice:', profileErr);
+      }
+    }
+    return cred.user;
+  } catch (error: any) {
+    console.error('Email registration error:', error?.code || error);
+    throw new Error(mapAuthError(error));
+  }
 };
 
 export const initAuth = (

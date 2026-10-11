@@ -1,0 +1,6 @@
+{
+	"appId": "com.jijigaexpress.delivery",
+	"appName": "Jijiga Express Delivery Service",
+	"webDir": "dist",
+	"loggingBehavior": "none"
+}

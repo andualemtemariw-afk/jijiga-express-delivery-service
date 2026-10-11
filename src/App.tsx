@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
-const DEMO_SANDBOX_ENABLED = import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
@@ -17,14 +15,8 @@ import { MapPreviewModal } from './components/map/MapPreviewModal';
 import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
 import { GoogleDriveSyncModal } from './components/drive/GoogleDriveSyncModal';
 import { GmailNotificationModal } from './components/gmail/GmailNotificationModal';
-import {
-  auth,
-  appSignInWithGoogle,
-  signInWithEmail,
-  registerWithEmail,
-  logout,
-  subscribeToNetworkStatus
-} from './services/googleAuth';
+import { AuthModal } from './components/auth/AuthModal';
+import { auth, appSignInWithGoogle, logout, subscribeToNetworkStatus, isCapacitorAndroid } from './services/googleAuth';
 import { syncUserProfile, updateUserProfile } from './services/userService';
 import { 
   claimOrderAsRunner, 
@@ -43,8 +35,6 @@ import {
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
-import { createOrderWithInventoryReservation, cancelOrderAndRestoreInventory } from './services/orderTransactionService';
-import { createServiceOrder } from './services/firestoreServiceOrders';
 import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
@@ -63,6 +53,7 @@ import {
   Database, 
   Flame, 
   UserCheck,
+  UserPlus,
   Wifi,
   WifiOff 
 } from 'lucide-react';
@@ -72,7 +63,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<AppUserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    return DEMO_SANDBOX_ENABLED && localStorage.getItem('jijiga_mode') === 'demo';
+    return localStorage.getItem('jijiga_mode') === 'demo';
   });
 
   const [activeRole, setActiveRole] = useState<Role>('CUSTOMER');
@@ -93,12 +84,6 @@ export default function App() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [showGmailModal, setShowGmailModal] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authName, setAuthName] = useState('');
-
 
   // Network Connectivity & Offline Resilience State
   const [isOnline, setIsOnline] = useState<boolean>(() => {
@@ -197,84 +182,21 @@ export default function App() {
 
   const toggleMode = (mode: 'demo' | 'prod') => {
     const isDemo = mode === 'demo';
-    if (isDemo && !DEMO_SANDBOX_ENABLED) {
-      showAlert('Demo Sandbox is disabled in this production build.', 'error');
-      return;
-    }
     setIsDemoMode(isDemo);
     localStorage.setItem('jijiga_mode', isDemo ? 'demo' : 'prod');
     showAlert(`Switched to ${isDemo ? 'DEMO Mode (bundled data)' : 'PRODUCTION Mode (live Cloud Firestore)'}`, 'info');
   };
 
-  const handleSignIn = async () => {
-    if (Capacitor.isNativePlatform()) {
-      setAuthMode('signin');
-      setShowAuthModal(true);
-      return;
-    }
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<'signin' | 'register'>('signin');
 
-    try {
-      setAuthLoading(true);
-      await appSignInWithGoogle();
-      showAlert('Signed in successfully with Google account.', 'success');
-    } catch (err: any) {
-      console.error('Google sign in failed:', err);
-      const isNetworkErr =
-        err?.code === 'auth/network-request-failed' ||
-        err?.message?.includes('network-request-failed');
-      const msg = isNetworkErr
-        ? 'Google sign-in was interrupted. Please try again from Chrome.'
-        : `Google authentication error: ${err.message || 'Popup closed or restricted.'}`;
-      showAlert(msg, 'error');
-    } finally {
-      setAuthLoading(false);
-    }
+  const handleOpenAuth = (tab: 'signin' | 'register' = 'signin') => {
+    setAuthModalTab(tab);
+    setShowAuthModal(true);
   };
 
-  const handleEmailAuth = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const email = authEmail.trim();
-
-    if (!email || !authPassword) {
-      showAlert('Enter your email address and password.', 'error');
-      return;
-    }
-
-    if (authPassword.length < 6) {
-      showAlert('Password must be at least 6 characters.', 'error');
-      return;
-    }
-
-    try {
-      setAuthLoading(true);
-
-      if (authMode === 'signup') {
-        await registerWithEmail(email, authPassword, authName);
-        showAlert('Account created successfully.', 'success');
-      } else {
-        await signInWithEmail(email, authPassword);
-        showAlert('Signed in successfully.', 'success');
-      }
-
-      setShowAuthModal(false);
-      setAuthPassword('');
-    } catch (err: any) {
-      console.error('Email authentication failed:', err);
-      const code = err?.code || '';
-      const messages: Record<string, string> = {
-        'auth/email-already-in-use': 'That email already has an account. Choose Sign In.',
-        'auth/invalid-email': 'Please enter a valid email address.',
-        'auth/invalid-credential': 'Email or password is incorrect.',
-        'auth/user-not-found': 'No account was found for that email.',
-        'auth/wrong-password': 'Email or password is incorrect.',
-        'auth/weak-password': 'Choose a stronger password (6+ characters).',
-        'auth/too-many-requests': 'Too many attempts. Please try again later.',
-        'auth/network-request-failed': 'Network connection failed. Check your internet and try again.'
-      };
-      showAlert(messages[code] || `Authentication error: ${err?.message || 'Please try again.'}`, 'error');
-    } finally {
-      setAuthLoading(false);
-    }
+  const handleSignIn = () => {
+    handleOpenAuth('signin');
   };
 
   const handleSignOut = async () => {
@@ -345,6 +267,11 @@ export default function App() {
     const subtotal = batch.price * quantity;
     const totalPrice = subtotal + deliveryFee;
 
+    // Decrease inventory atomically
+    setInventory(prev => prev.map(b => 
+      b.id === batch.id ? { ...b, available: Math.max(0, b.available - quantity) } : b
+    ));
+
     const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId] || MAMILA_COORDINATES.m1;
     const destCoords = options?.customerCoordinates || DEFAULT_CUSTOMER_COORDINATES;
 
@@ -378,6 +305,7 @@ export default function App() {
       customerAddress: effectiveAddress,
       customerCoordinates: destCoords,
       mamilaCoordinates: originCoords,
+      riderCoordinates: originCoords,
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
       distanceKm: 3.2,
@@ -389,7 +317,7 @@ export default function App() {
 
     if (!isDemoMode && currentUser) {
       try {
-        await createOrderWithInventoryReservation(newOrder);
+        await saveOrderToFirestore(newOrder);
         await logDeliveryEventToFirestore({
           orderId: orderDocId,
           status: 'PENDING',
@@ -404,6 +332,9 @@ export default function App() {
         console.error('Failed to save order to Firestore:', err);
         // Data integrity rollback: undo optimistic additions so React state strictly matches database truth
         setOrders(prev => prev.filter(o => o.id !== orderDocId));
+        setInventory(prev => prev.map(b => 
+          b.id === batch.id ? { ...b, available: b.available + quantity } : b
+        ));
         showAlert(`Could not sync order to database: ${err.message}`, 'error');
       }
     }
@@ -431,13 +362,8 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
-    if (isDemoMode) {
-      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
-      return;
-    }
-
     try {
-      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
+      await saveOrderToFirestore(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -475,13 +401,8 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
-    if (isDemoMode) {
-      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
-      return;
-    }
-
     try {
-      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
+      await saveOrderToFirestore(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -521,13 +442,8 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
-    if (isDemoMode) {
-      showAlert('Demo Mode: service order kept local; no production backend write was made.', 'info');
-      return;
-    }
-
     try {
-      await createServiceOrder(fullOrder as unknown as Record<string, unknown>);
+      await saveOrderToFirestore(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -567,14 +483,8 @@ export default function App() {
 
     setOrders(prev => [fullOrder, ...prev]);
 
-    if (isDemoMode) {
-      showAlert('Demo Mode: Khat order kept local; no inventory was reserved in production.', 'info');
-      return;
-    }
-
     try {
-      // Khat consumes the same inventory as FOOD and must reserve stock atomically.
-      await createOrderWithInventoryReservation(fullOrder);
+      await saveOrderToFirestore(fullOrder);
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -582,7 +492,7 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'} with atomic inventory reservation.`
+        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'}.`
       });
       showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
     } catch (err: any) {
@@ -606,7 +516,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>, persistToFirestore = true) => {
+  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
     // Prevent customer from modifying protected pricing or courier assignment fields
     if (activeRole === 'CUSTOMER' && userProfile?.role !== 'admin') {
       const protectedKeys = ['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl'];
@@ -619,7 +529,7 @@ export default function App() {
 
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
 
-    if (!isDemoMode && currentUser && persistToFirestore) {
+    if (!isDemoMode && currentUser) {
       try {
         await updateOrderInFirestore(orderId, updates);
         if (updates.status) {
@@ -634,12 +544,6 @@ export default function App() {
           });
         }
       } catch (err: any) {
-        // Persistence failed: restore the previous in-memory order so UI cannot
-        // advertise a state that Firestore rejected.
-        const fresh = orders.find(o => o.id === orderId);
-        if (fresh) {
-          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...fresh } : o));
-        }
         showAlert(`Status update failed: ${err.message}`, 'error');
       }
     }
@@ -671,43 +575,18 @@ export default function App() {
 
     if (targetOrder.status === 'RUNNER_ASSIGNED' || targetOrder.status === 'PENDING' || targetOrder.status === 'TRANSACTION_PENDING') {
       const qty = targetOrder.quantity || 1;
-      if (targetOrder.paymentStatus === 'PAID_CONFIRMED') {
-        showAlert('Paid orders cannot be cancelled from the customer portal. Please contact support for a refund.', 'error');
-        return;
-      }
+      setInventory(prev => prev.map(b => 
+        b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b
+      ));
 
-      if (!isDemoMode && currentUser) {
-        try {
-          if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
-            await cancelOrderAndRestoreInventory(orderId, currentUser.uid);
-          } else {
-            await updateOrderInFirestore(orderId, { status: 'CANCELLED' });
-          }
-          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
-          await logDeliveryEventToFirestore({
-            orderId, status: 'CANCELLED', timestamp: new Date().toISOString(),
-            actorRole: 'CUSTOMER', actorId: currentUser.uid,
-            actorName: userProfile?.displayName || 'Customer',
-            note: targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT'
-              ? 'Order cancelled and reserved stock restored atomically.'
-              : 'Service order cancelled before dispatch.'
-          });
-        } catch (err: any) {
-          showAlert(`Cancellation failed: ${err.message}`, 'error');
-        }
-      } else {
-        if (targetOrder.serviceType === 'FOOD' || targetOrder.serviceType === 'KHAT') {
-          setInventory(prev => prev.map(b => b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b));
-        }
-        handleUpdateOrder(orderId, { status: 'CANCELLED' });
-      }
+      handleUpdateOrder(orderId, { status: 'CANCELLED' });
     }
   };
 
-  // Step-through simulation helper — never advances live production orders.
+  // Step-through simulation helper (Available exclusively in Demo Sandbox or for Admin diagnostics)
   const handleSimulateNextStep = (orderId: string) => {
-    if (!isDemoMode) {
-      showAlert('Simulation is disabled for live production orders.', 'error');
+    if (!isDemoMode && userProfile?.role !== 'admin') {
+      showAlert('Dispatch progression in production is managed exclusively by verified couriers.', 'error');
       return;
     }
     const target = orders.find(o => o.id === orderId);
@@ -767,7 +646,7 @@ export default function App() {
     } else if (target.status === 'PICKED_UP' || target.status === 'IN_TRANSIT') {
       handleUpdateOrder(orderId, { 
         status: 'DELIVERED',
-        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : target.paymentStatus
+        paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : 'PAID_CONFIRMED'
       });
     }
   };
@@ -847,6 +726,41 @@ export default function App() {
       showAlert(`Order #${orderId.slice(-6)} personnel reassigned.`, 'success');
     } catch (err: any) {
       showAlert(`Reassignment failed: ${err.message}`, 'error');
+    }
+  };
+
+  const handleAdminConfirmPayment = async (orderId: string, receiptReference: string) => {
+    if (!currentUser || userProfile?.role !== 'admin') {
+      showAlert('Admin privileges required to confirm payment.', 'error');
+      return;
+    }
+    try {
+      if (!isDemoMode) {
+        await updateOrderInFirestore(orderId, {
+          paymentStatus: 'PAID_CONFIRMED',
+          paymentReference: receiptReference,
+          paymentConfirmedBy: currentUser.email || currentUser.uid,
+        });
+        await logDeliveryEventToFirestore({
+          orderId,
+          status: 'PAID_CONFIRMED' as any,
+          timestamp: new Date().toISOString(),
+          actorRole: 'ADMIN',
+          actorId: currentUser.uid,
+          actorName: userProfile?.displayName || 'Admin',
+          note: `Payment receipt verified by Admin (Ref: ${receiptReference}).`,
+        });
+      }
+      setOrders(prev => prev.map(o => o.id === orderId ? {
+        ...o,
+        paymentStatus: 'PAID_CONFIRMED',
+        paymentReference: receiptReference,
+        paymentConfirmedBy: currentUser.email || currentUser.uid,
+      } : o));
+      showAlert(`Payment for order #${orderId.slice(-6)} verified and confirmed!`, 'success');
+    } catch (err: any) {
+      console.error('Failed to confirm payment:', err);
+      showAlert(`Could not update payment status: ${err.message}`, 'error');
     }
   };
 
@@ -1160,19 +1074,26 @@ export default function App() {
                   <UserCheck className="w-5 h-5 shrink-0" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-blue-950">Customer Sign In Required for Orders</h4>
+                  <h4 className="font-bold text-sm text-blue-950">Customer Authentication Required for Orders</h4>
                   <p className="text-xs text-blue-800 mt-0.5">
-                    On Android, use a free email/password account to avoid WebView Google OAuth issues. Google sign-in remains available on the web app.
+                    Sign in with email/password or Google to place verified orders, book express parcels, and track live deliveries.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <button
-                  onClick={handleSignIn}
-                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  onClick={() => handleOpenAuth('signin')}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" />
-                  Sign In to Continue
+                  <span>Sign In</span>
+                </button>
+                <button
+                  onClick={() => handleOpenAuth('register')}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-slate-50 text-blue-950 border border-blue-300 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <span>Register</span>
                 </button>
               </div>
             </div>
@@ -1228,7 +1149,6 @@ export default function App() {
           {activeRole === 'RIDER' && (
             <RiderView 
               orders={riderOrders} 
-              isDemoMode={isDemoMode}
               orderMessages={orderMessages}
               onSendMessage={handleSendMessage}
               currentRiderId={currentUser?.uid || ''} 
@@ -1245,111 +1165,10 @@ export default function App() {
               onResolveDispute={handleResolveDispute}
               onOpenMapPreview={(order) => setGlobalModalOrder(order)}
               onReassignOrder={handleAdminReassign}
+              onConfirmPayment={handleAdminConfirmPayment}
             />
           )}
         </main>
-
-        {showAuthModal && !currentUser && (
-          <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
-              <div className="flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-950">
-                    {authMode === 'signin' ? 'Sign in to Jijiga Express' : 'Create your Jijiga Express account'}
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Free email/password login works directly inside the Android app.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAuthModal(false)}
-                  className="text-slate-400 hover:text-slate-700 text-xl leading-none"
-                  aria-label="Close authentication dialog"
-                >
-                  ×
-                </button>
-              </div>
-
-              <form onSubmit={handleEmailAuth} className="space-y-3">
-                {authMode === 'signup' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Name</label>
-                    <input
-                      value={authName}
-                      onChange={(e) => setAuthName(e.target.value)}
-                      placeholder="Your name"
-                      autoComplete="name"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    minLength={6}
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm"
-                >
-                  {authLoading ? 'Please wait…' : authMode === 'signin' ? 'Sign In' : 'Create Account'}
-                </button>
-              </form>
-
-              <div className="mt-4 flex items-center justify-between gap-3 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                  className="text-blue-700 font-semibold hover:underline"
-                >
-                  {authMode === 'signin' ? 'Create a new account' : 'I already have an account'}
-                </button>
-
-                {!Capacitor.isNativePlatform() && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAuthModal(false);
-                      handleSignIn();
-                    }}
-                    className="text-slate-700 font-semibold hover:underline"
-                  >
-                    Use Google instead
-                  </button>
-                )}
-              </div>
-
-              <p className="mt-4 text-[11px] leading-4 text-slate-500">
-                Your account uses the existing Firebase project. No new Firebase project or database is created.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Global Map Preview Modal */}
         <MapPreviewModal
@@ -1384,12 +1203,20 @@ export default function App() {
           orders={orders}
         />
 
+        {/* Unified Authentication Modal (Email/Password for Android & Web Google Auth) */}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          defaultTab={authModalTab}
+          onSuccess={() => showAlert('Authentication successful! Welcome to Jijiga Express.', 'success')}
+        />
+
         {/* Production Footer with Subtle Developer / Sandbox Trigger */}
         <footer className="max-w-7xl mx-auto px-4 md:px-6 pt-12 pb-6 border-t border-slate-200 mt-12 text-slate-500 text-xs flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
             <p className="font-semibold text-slate-800">Jijiga Express Delivery Service</p>
             <p className="text-[11px] text-slate-500">
-              Jijiga Express handles local parcels, documents, food, groceries, and shop orders within Jijiga.
+              Verified local batch deliveries, regional parcels & prepaid utilities across Eastern Ethiopia & Somaliland.
             </p>
           </div>
           <div className="flex items-center gap-3 text-[11px]">
@@ -1401,7 +1228,7 @@ export default function App() {
                 <Flame className="w-3.5 h-3.5" />
                 Return to Live Production
               </button>
-            ) : DEMO_SANDBOX_ENABLED ? (
+            ) : (
               <button
                 onClick={() => toggleMode('demo')}
                 className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer flex items-center gap-1"
@@ -1410,7 +1237,7 @@ export default function App() {
                 <Database className="w-3 h-3" />
                 Developer Demo Sandbox
               </button>
-            ) : null}
+            )}
             <span aria-hidden="true" className="text-slate-300">·</span>
             <button
               onClick={() => setShowKeyModal(true)}
