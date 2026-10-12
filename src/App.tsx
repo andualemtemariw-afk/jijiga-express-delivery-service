@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
@@ -6,11 +7,6 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
-import { CustomerView } from './roles/CustomerView';
-import { RunnerView } from './roles/RunnerView';
-import { RiderView } from './roles/RiderView';
-import { AdminView } from './roles/AdminView';
-import { MamilaView } from './roles/MamilaView';
 import { MapPreviewModal } from './components/map/MapPreviewModal';
 import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
 import { GoogleDriveSyncModal } from './components/drive/GoogleDriveSyncModal';
@@ -57,6 +53,23 @@ import {
   Wifi,
   WifiOff 
 } from 'lucide-react';
+
+
+const CustomerView = lazy(() =>
+  import('./roles/CustomerView').then(m => ({ default: m.CustomerView }))
+);
+const RunnerView = lazy(() =>
+  import('./roles/RunnerView').then(m => ({ default: m.RunnerView }))
+);
+const RiderView = lazy(() =>
+  import('./roles/RiderView').then(m => ({ default: m.RiderView }))
+);
+const AdminView = lazy(() =>
+  import('./roles/AdminView').then(m => ({ default: m.AdminView }))
+);
+const MamilaView = lazy(() =>
+  import('./roles/MamilaView').then(m => ({ default: m.MamilaView }))
+);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1100,7 +1113,16 @@ export default function App() {
           </div>
         )}
 
-        <main className="max-w-7xl mx-auto p-4 md:p-6 mt-2">
+        <AppErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="max-w-7xl mx-auto p-6 mt-2 text-sm text-slate-500"
+                 role="status" aria-live="polite">
+              Loading your workspace...
+            </div>
+          }
+        >
+          <main className="max-w-7xl mx-auto p-4 md:p-6 mt-2">
           {activeRole === 'CUSTOMER' && (
             <CustomerView 
               inventory={inventory} 
@@ -1168,7 +1190,9 @@ export default function App() {
               onConfirmPayment={handleAdminConfirmPayment}
             />
           )}
-        </main>
+          </main>
+        </Suspense>
+        </AppErrorBoundary>
 
         {/* Global Map Preview Modal */}
         <MapPreviewModal
