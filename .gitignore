@@ -9,4 +9,3 @@ functions/lib/
 !.env.example
 .emulator-data/
 .gmp_cache/
-bun.lock*
