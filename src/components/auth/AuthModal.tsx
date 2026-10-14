@@ -14,6 +14,7 @@ import {
 import { 
   signInWithEmail, 
   registerWithEmail, 
+  sendPasswordReset,
   appSignInWithGoogle, 
   isCapacitorAndroid,
   isCapacitorNative
@@ -94,6 +95,25 @@ export function AuthModal({
       onClose();
     } catch (err: any) {
       setErrorMessage(err.message || 'Authentication failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setErrorMessage(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Enter your email address first, then select Forgot password.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await sendPasswordReset(trimmedEmail);
+      setErrorMessage('If an account exists for this address, Firebase will send a password-reset email. Check your inbox and spam folder.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to request a password reset. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -259,6 +279,19 @@ export function AuthModal({
                 />
               </div>
             </div>
+
+            {tab === 'signin' && (
+              <div className="flex justify-end -mt-1">
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handlePasswordReset}
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 underline underline-offset-2 disabled:opacity-50"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             {tab === 'register' && (
               <div>
