@@ -502,6 +502,14 @@ service cloud.firestore {
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['runnerTagId'])
+            || (
+              request.resource.data.runnerTagId is string
+              && request.resource.data.runnerTagId.matches('^TAG-ET-[0-9]{5}$')
+              && (!('runnerTagId' in resource.data) || resource.data.runnerTagId == null || request.resource.data.runnerTagId == resource.data.runnerTagId)
+            )
+          )
         )
         || (
           isRider()

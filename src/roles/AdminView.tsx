@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { Order, Batch, AppUserProfile } from '../types';
 import { MAMILAS, CITIES } from '../data';
 import { OrderSearchFilterBar, OrderFilterState } from '../components/orders/OrderSearchFilterBar';
@@ -33,17 +33,8 @@ import {
   Check,
   Receipt
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  Cell
-} from 'recharts';
+
+const AdminDashboard = lazy(() => import('../components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
 interface Props {
   orders: Order[];
@@ -54,29 +45,6 @@ interface Props {
   onConfirmPayment?: (orderId: string, receiptReference: string) => Promise<void>;
 }
 
-type ChartViewMode = 'grouped' | 'stacked' | 'totals';
-
-const MAMILA_CONFIG: Record<string, { name: string; color: string; fill: string; lightBg: string }> = {
-  m1: {
-    name: 'Fresh Morning Farms',
-    color: '#10b981',
-    fill: '#10b981',
-    lightBg: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  },
-  m2: {
-    name: 'Arada Bakery',
-    color: '#f59e0b',
-    fill: '#f59e0b',
-    lightBg: 'bg-amber-50 text-amber-700 border-amber-200'
-  },
-  m3: {
-    name: 'Sheger Dairy',
-    color: '#6366f1',
-    fill: '#6366f1',
-    lightBg: 'bg-indigo-50 text-indigo-700 border-indigo-200'
-  }
-};
-
 function isSameCalendarDay(d1: Date, d2: Date) {
   return (
     d1.getFullYear() === d2.getFullYear() &&
@@ -85,82 +53,16 @@ function isSameCalendarDay(d1: Date, d2: Date) {
   );
 }
 
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    name: string;
-    value: number;
-    color: string;
-    payload: any;
-  }>;
-  label?: string;
-}
-
-const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
-  if (active && payload && payload.length) {
-    const dataItem = payload[0].payload;
-    const totalDayOrders = (dataItem['Fresh Morning Farms'] || 0) + 
-                           (dataItem['Arada Bakery'] || 0) + 
-                           (dataItem['Sheger Dairy'] || 0);
-
-    return (
-      <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl border border-slate-700 text-xs min-w-[220px]">
-        <div className="flex justify-between items-center pb-2 mb-2 border-b border-slate-800">
-          <span className="font-semibold text-slate-200 text-sm">{dataItem.dayLabel}</span>
-          <span className="bg-slate-800 text-slate-300 font-mono text-[10px] px-2 py-0.5 rounded-full font-medium">
-            {totalDayOrders} total
-          </span>
-        </div>
-        <div className="space-y-1.5">
-          {payload.map((entry, index) => (
-            <div key={`tooltip-item-${index}`} className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-slate-300">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                <span className="truncate max-w-[120px]">{entry.name}:</span>
-              </span>
-              <span className="font-mono font-bold text-white ml-2 tabular-nums">{entry.value} orders</span>
-            </div>
-          ))}
-        </div>
-        {dataItem.totalRevenue > 0 && (
-          <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex justify-between items-center text-[11px] text-slate-400">
-            <span>Day Revenue:</span>
-            <span className="font-mono font-semibold text-emerald-400 tabular-nums">{dataItem.totalRevenue.toLocaleString()} ETB</span>
-          </div>
-        )}
-      </div>
-    );
-  }
-  return null;
-};
-
-const TotalsTooltip = ({ active, payload }: CustomTooltipProps) => {
-  if (active && payload && payload.length) {
-    const item = payload[0].payload;
-    return (
-      <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl border border-slate-700 text-xs min-w-[190px]">
-        <div className="font-semibold text-sm mb-1 text-slate-100">{item.name}</div>
-        <div className="text-slate-400 text-[11px] mb-2">{item.location}</div>
-        <div className="flex justify-between items-center py-1 border-t border-slate-800">
-          <span className="text-slate-300">7-Day Orders:</span>
-          <span className="font-mono font-bold text-white tabular-nums">{item.totalOrders} orders</span>
-        </div>
-        <div className="flex justify-between items-center py-1 border-t border-slate-800">
-          <span className="text-slate-300">Total Revenue:</span>
-          <span className="font-mono font-bold text-emerald-400 tabular-nums">{item.totalRevenue.toLocaleString()} ETB</span>
-        </div>
-        <div className="flex justify-between items-center py-1 border-t border-slate-800">
-          <span className="text-slate-300">Daily Average:</span>
-          <span className="font-mono font-semibold text-slate-200 tabular-nums">{item.avgPerDay} / day</span>
-        </div>
-      </div>
-    );
-  }
-  return null;
+const MAMILA_COLOR_MAP: Record<string, string> = {
+  m1: '#10b981',
+  m2: '#f59e0b',
+  m3: '#6366f1',
+  m4: '#ec4899',
+  m5: '#14b8a6',
+  khat_central: '#84cc16'
 };
 
 export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPreview, onReassignOrder, onConfirmPayment }: Props) {
-  const [viewMode, setChartViewMode] = useState<ChartViewMode>('grouped');
   const [orderFilters, setOrderFilters] = useState<OrderFilterState>({
     searchQuery: '',
     status: 'ALL',
@@ -169,11 +71,6 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
     endDate: '',
   });
   const [whatsAppDispatchOrder, setWhatsAppDispatchOrder] = useState<Order | null>(null);
-  const [visibleMamilas, setVisibleMamilas] = useState<Record<string, boolean>>({
-    m1: true,
-    m2: true,
-    m3: true,
-  });
 
   // Dynamic courier staffing & reassignment
   const [reassignOrder, setReassignOrder] = useState<Order | null>(null);
@@ -262,95 +159,6 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
 
   const mamilaPayouts = grossPlatformGMV - totalDeliveryFees;
 
-  // 7-day chronological data array (Day -6 up to Day 0 / Today)
-  const last7DaysData = useMemo(() => {
-    const result = [];
-    const now = new Date();
-
-    for (let i = 6; i >= 0; i--) {
-      const targetDate = new Date(now);
-      targetDate.setDate(now.getDate() - i);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const isToday = i === 0;
-      const dayLabel = isToday
-        ? 'Today'
-        : targetDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      const axisLabel = isToday
-        ? 'Today'
-        : targetDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-
-      const dayOrders = orders.filter(
-        o => isSameCalendarDay(new Date(o.createdAt), targetDate) && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED'
-      );
-
-      const m1Orders = dayOrders.filter(o => o.mamilaId === 'm1');
-      const m2Orders = dayOrders.filter(o => o.mamilaId === 'm2');
-      const m3Orders = dayOrders.filter(o => o.mamilaId === 'm3');
-
-      const totalRevenue = dayOrders.reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
-
-      result.push({
-        dateStr: targetDate.toISOString().split('T')[0],
-        dayLabel,
-        axisLabel,
-        isToday,
-        'Fresh Morning Farms': m1Orders.length,
-        'Arada Bakery': m2Orders.length,
-        'Sheger Dairy': m3Orders.length,
-        totalOrders: dayOrders.length,
-        totalRevenue,
-      });
-    }
-
-    return result;
-  }, [orders]);
-
-  // Aggregate stats per Mamila for the 7-day period
-  const mamila7DaySummary = useMemo(() => {
-    const totalPlatformOrders7Days = last7DaysData.reduce((sum, day) => sum + day.totalOrders, 0);
-
-    return MAMILAS.map(m => {
-      const mamilaOrders = orders.filter(o => {
-        if (o.mamilaId !== m.id || o.status === 'CANCELLED' || o.status === 'DEFECT_REJECTED') return false;
-        const orderDate = new Date(o.createdAt);
-        const diffDays = (new Date().getTime() - orderDate.getTime()) / (1000 * 3600 * 24);
-        return diffDays <= 7.2;
-      });
-
-      const totalOrders = mamilaOrders.length;
-      const totalRevenue = mamilaOrders.reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
-      const avgPerDay = (totalOrders / 7).toFixed(1);
-      const sharePercent = totalPlatformOrders7Days > 0 
-        ? Math.round((totalOrders / totalPlatformOrders7Days) * 100) 
-        : 0;
-
-      return {
-        id: m.id,
-        name: m.name,
-        location: m.location,
-        totalOrders,
-        totalRevenue,
-        avgPerDay,
-        sharePercent,
-        rating: m.rating,
-        color: MAMILA_CONFIG[m.id]?.color || '#3b82f6',
-        lightBg: MAMILA_CONFIG[m.id]?.lightBg || 'bg-slate-100 text-slate-700',
-      };
-    });
-  }, [orders, last7DaysData]);
-
-  // Total 7-day orders count across all Mamilas
-  const total7DayOrders = useMemo(() => {
-    return last7DaysData.reduce((sum, day) => sum + day.totalOrders, 0);
-  }, [last7DaysData]);
-
-  // Top performing Mamila over the 7 days
-  const topMamila = useMemo(() => {
-    if (mamila7DaySummary.length === 0) return null;
-    return [...mamila7DaySummary].sort((a, b) => b.totalOrders - a.totalOrders)[0];
-  }, [mamila7DaySummary]);
-
   // Disputed orders
   const disputedOrders = useMemo(() => {
     return orders.filter(o => Boolean(o.dispute));
@@ -360,13 +168,6 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
   const filteredDispatch = useMemo(() => {
     return applyOrderFilters(orders, orderFilters);
   }, [orders, orderFilters]);
-
-  const toggleMamilaVisibility = (mamilaId: string) => {
-    setVisibleMamilas(prev => ({
-      ...prev,
-      [mamilaId]: !prev[mamilaId],
-    }));
-  };
 
   return (
     <div className="space-y-8">
@@ -415,212 +216,15 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         </div>
       </div>
 
-      {/* RECHARTS SECTION: 7-Day Order Volumes by Mamila */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <BarChart3 className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-xl text-slate-900">7-Day Order Volumes by Mamila</h3>
-            </div>
-            <p className="text-sm text-slate-500 mt-1">
-              Comparative order volume velocity across verified Mamilas over the last 7 days.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-              <button
-                onClick={() => setChartViewMode('grouped')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'grouped'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Grouped
-              </button>
-              <button
-                onClick={() => setChartViewMode('stacked')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'stacked'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Stacked
-              </button>
-              <button
-                onClick={() => setChartViewMode('totals')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'totals'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Mamila Totals
-              </button>
-            </div>
-          </div>
+      {/* RECHARTS COMPONENT: 7-Day Order Volume Trends Dashboard */}
+      <Suspense fallback={
+        <div className="w-full h-80 bg-white rounded-2xl border border-slate-200 p-8 flex flex-col items-center justify-center space-y-3">
+          <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+          <p className="text-xs font-semibold text-slate-500">Loading Recharts 7-Day Trend Analytics...</p>
         </div>
-
-        {/* Mamila Filter Toggles */}
-        {viewMode !== 'totals' && (
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Mamilas:</span>
-            {MAMILAS.map(m => {
-              const cfg = MAMILA_CONFIG[m.id];
-              const isVisible = visibleMamilas[m.id];
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => toggleMamilaVisibility(m.id)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
-                    isVisible
-                      ? 'bg-white border-slate-300 text-slate-900 shadow-2xs hover:bg-slate-50'
-                      : 'bg-slate-100 border-slate-200 text-slate-400 line-through'
-                  }`}
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: isVisible ? cfg.color : '#cbd5e1' }}
-                  />
-                  <span>{m.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Chart Rendering Area */}
-        <div className="w-full h-80 pt-2">
-          {viewMode === 'totals' ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={mamila7DaySummary}
-                margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fill: '#64748b', fontSize: 12 }} 
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  tick={{ fill: '#64748b', fontSize: 12 }} 
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip content={<TotalsTooltip />} cursor={{ fill: '#f8fafc' }} />
-                <Bar 
-                  dataKey="totalOrders" 
-                  name="7-Day Orders" 
-                  radius={[8, 8, 0, 0]}
-                  barSize={48}
-                >
-                  {mamila7DaySummary.map((entry) => (
-                    <Cell key={`cell-${entry.id}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={last7DaysData}
-                margin={{ top: 10, right: 20, left: -10, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="axisLabel" 
-                  tick={{ fill: '#64748b', fontSize: 12 }} 
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                />
-                <YAxis 
-                  tick={{ fill: '#64748b', fontSize: 12 }} 
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-                <Legend 
-                  wrapperStyle={{ paddingTop: '12px' }}
-                  formatter={(value) => <span className="text-xs font-medium text-slate-700">{value}</span>}
-                />
-
-                {visibleMamilas.m1 && (
-                  <Bar
-                    dataKey="Fresh Morning Farms"
-                    fill={MAMILA_CONFIG.m1.color}
-                    stackId={viewMode === 'stacked' ? 'daily' : undefined}
-                    radius={viewMode === 'stacked' ? [0, 0, 0, 0] : [4, 4, 0, 0]}
-                    maxBarSize={40}
-                  />
-                )}
-                {visibleMamilas.m2 && (
-                  <Bar
-                    dataKey="Arada Bakery"
-                    fill={MAMILA_CONFIG.m2.color}
-                    stackId={viewMode === 'stacked' ? 'daily' : undefined}
-                    radius={viewMode === 'stacked' ? [0, 0, 0, 0] : [4, 4, 0, 0]}
-                    maxBarSize={40}
-                  />
-                )}
-                {visibleMamilas.m3 && (
-                  <Bar
-                    dataKey="Sheger Dairy"
-                    fill={MAMILA_CONFIG.m3.color}
-                    stackId={viewMode === 'stacked' ? 'daily' : undefined}
-                    radius={viewMode === 'stacked' ? [4, 4, 0, 0] : [4, 4, 0, 0]}
-                    maxBarSize={40}
-                  />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* 7-Day Performance Cards per Mamila */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          {mamila7DaySummary.map(m => (
-            <div 
-              key={m.id} 
-              className="p-4 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: m.color }} />
-                  <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${m.lightBg}`}>
-                  {m.sharePercent}% share
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mb-3">{m.location}</p>
-
-              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-200/60">
-                <div>
-                  <span className="text-slate-500 block">7-Day Orders:</span>
-                  <span className="font-bold font-mono text-slate-900 text-sm tabular-nums">{m.totalOrders}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Avg Volume:</span>
-                  <span className="font-bold font-mono text-slate-900 text-sm tabular-nums">{m.avgPerDay} / day</span>
-                </div>
-                <div className="col-span-2 pt-1">
-                  <span className="text-slate-500 block">7-Day Revenue:</span>
-                  <span className="font-bold font-mono text-emerald-600 tabular-nums">{m.totalRevenue.toLocaleString()} ETB</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      }>
+        <AdminDashboard orders={orders} inventory={inventory} />
+      </Suspense>
 
       {/* DISPUTES & QUALITY RESOLUTION SECTION */}
       {disputedOrders.length > 0 && (
@@ -842,6 +446,14 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                             {order.riderName || (order.riderId ? 'Staff Rider' : 'Unassigned')}
                           </span>
                         </div>
+                        {order.runnerTagId && (
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Seal:</span>
+                            <span className="font-mono text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {order.runnerTagId}
+                            </span>
+                          </div>
+                        )}
                         {onReassignOrder && (
                           <button
                             type="button"
@@ -886,13 +498,13 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
               <tbody className="divide-y divide-slate-100">
                 {inventory.map(batch => {
                   const mamila = MAMILAS.find(m => m.id === batch.mamilaId);
-                  const cfg = MAMILA_CONFIG[batch.mamilaId];
+                  const color = MAMILA_COLOR_MAP[batch.mamilaId] || '#94a3b8';
                   return (
                     <tr key={batch.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="font-semibold text-slate-900">{batch.name}</div>
                         <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cfg?.color || '#94a3b8' }} />
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                           <span>{mamila?.name || batch.mamilaId}</span>
                         </div>
                       </td>

@@ -322,8 +322,8 @@ export function RiderView({
                         <span className="font-mono font-bold text-slate-800 text-xs">
                           ~{order.distanceKm || 3.2} km · ~{order.etaMinutes || 12} mins
                         </span>
-                        <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">
-                          Tamper Seal Verified: {order.runnerTagId || 'TAG-ET-91820'}
+                        <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
+                          {order.runnerTagId ? `Tamper Seal: ${order.runnerTagId}` : 'Awaiting Runner Seal'}
                         </span>
                       </div>
 

@@ -22,7 +22,9 @@ import { RoutePolyline } from './RoutePolyline';
 import { MapBoundsFitter } from './MapBoundsFitter';
 import { VectorRouteMapFallback } from './VectorRouteMapFallback';
 import { MapErrorBoundary } from './MapErrorBoundary';
-import { UpdateApiKeyModal } from './UpdateApiKeyModal';
+import { lazy, Suspense } from 'react';
+
+const UpdateApiKeyModal = lazy(() => import('./UpdateApiKeyModal').then(m => ({ default: m.UpdateApiKeyModal })));
 import { 
   Bike, 
   Store, 

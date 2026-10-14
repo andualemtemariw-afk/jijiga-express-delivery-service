@@ -10,6 +10,7 @@ import {
 import { db } from './googleAuth';
 import { Order, OrderStatus, AppUserProfile, UserRole } from '../types';
 import { removeUndefinedFields, logDeliveryEventToFirestore } from './firestoreSync';
+import { isValidRunnerTag, generateRunnerTag } from '../utils/tagGenerator';
 
 const ORDERS_COLLECTION = 'orders';
 const USERS_COLLECTION = 'users';
@@ -65,6 +66,10 @@ export async function claimOrderAsRunner(
       throw new Error(`Order #${orderId.slice(-6)} is in terminal status '${data.status}' and cannot be claimed.`);
     }
 
+    if (data.status !== 'PENDING' && data.status !== 'TRANSACTION_PENDING') {
+      throw new Error(`Order #${orderId.slice(-6)} is in status '${data.status}' and cannot be claimed by a runner.`);
+    }
+
     const updates = removeUndefinedFields({
       runnerId: runner.uid,
       runnerName: runner.displayName || 'Verified Staff Runner',
@@ -85,6 +90,72 @@ export async function claimOrderAsRunner(
     actorName: runner.displayName || 'Verified Staff Runner',
     note: `Order claimed for physical quality inspection by runner ${runner.displayName || runner.uid.slice(0, 6)}.`
   });
+}
+
+/**
+ * Atomically seals an inspected order, persists the unique runner tag in format TAG-ET-#####,
+ * and advances the order status to READY_FOR_RIDER.
+ * Ensures the exact tag displayed to the runner is persisted without mutation or regeneration.
+ */
+export async function handoverOrderToRider(
+  orderId: string,
+  runner: { uid: string; displayName?: string },
+  proposedTag?: string
+): Promise<string> {
+  const orderRef = doc(db, ORDERS_COLLECTION, orderId);
+  let persistedTag = '';
+
+  await runTransaction(db, async (transaction) => {
+    const orderDoc = await transaction.get(orderRef);
+    if (!orderDoc.exists()) {
+      throw new Error(`Order #${orderId.slice(-6)} does not exist.`);
+    }
+
+    const data = orderDoc.data() as Order;
+
+    // Authorization guard: only assigned runner can hand over
+    if (data.runnerId && data.runnerId !== runner.uid) {
+      throw new Error(`Unauthorized: Order #${orderId.slice(-6)} is assigned to ${data.runnerName || 'another runner'}.`);
+    }
+
+    // Status transition guard: must be in RUNNER_ASSIGNED
+    if (data.status !== 'RUNNER_ASSIGNED') {
+      if (data.status === 'READY_FOR_RIDER' || data.status === 'VERIFIED_READY') {
+        throw new Error(`Duplicate submission: Order #${orderId.slice(-6)} has already been sealed and handed over.`);
+      }
+      throw new Error(`Cannot hand over order in status '${data.status}'. Order must be RUNNER_ASSIGNED.`);
+    }
+
+    // Reuse existing tag if already persisted; otherwise validate or generate
+    if (data.runnerTagId && isValidRunnerTag(data.runnerTagId)) {
+      persistedTag = data.runnerTagId;
+    } else if (proposedTag && isValidRunnerTag(proposedTag)) {
+      persistedTag = proposedTag;
+    } else {
+      persistedTag = generateRunnerTag();
+    }
+
+    const updates = removeUndefinedFields({
+      status: 'READY_FOR_RIDER' as OrderStatus,
+      runnerTagId: persistedTag,
+      updatedAt: serverTimestamp(),
+    });
+
+    transaction.update(orderRef, updates);
+  });
+
+  // Log milestone audit event with the exact persisted tag
+  await logDeliveryEventToFirestore({
+    orderId,
+    status: 'READY_FOR_RIDER',
+    timestamp: new Date().toISOString(),
+    actorRole: 'RUNNER',
+    actorId: runner.uid,
+    actorName: runner.displayName || 'Verified Staff Runner',
+    note: `Order inspected and sealed with tamper-evident tag ${persistedTag}. Transferred to rider queue.`
+  });
+
+  return persistedTag;
 }
 
 /**

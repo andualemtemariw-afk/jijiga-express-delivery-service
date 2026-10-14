@@ -101,6 +101,7 @@ async function main() {
   await createUser('unverified-admin', 'admin', true, false, 'andualemawraris104@gmail.com');
   await createUser('nonallowlisted-admin', 'admin', true, true, 'outside-admin@example.test');
   const runnerUid = await createUser('runner', 'runner');
+  const otherRunnerUid = await createUser('other-runner', 'runner');
   const riderUid = await createUser('rider', 'rider');
   const otherRiderUid = await createUser('other-rider', 'rider');
   const inactiveRiderUid = await createUser('inactive-rider', 'rider', false);
@@ -585,8 +586,74 @@ async function main() {
   });
 
   const runner = await clientFor('runner');
+  const otherRunner = await clientFor('other-runner');
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
+
+  const unassignedOrderId = 'test-unassigned-order-' + Date.now();
+  await adminDb.doc(`orders/${unassignedOrderId}`).set({
+    id: unassignedOrderId,
+    serviceType: 'FOOD',
+    batchId: 'test-food',
+    batchName: 'Test food',
+    mamilaId: 'm1',
+    mamilaName: 'Test Mamila',
+    mamilaLocation: 'Jijiga',
+    price: 100,
+    quantity: 1,
+    deliveryFee: 20,
+    totalPrice: 120,
+    status: 'PENDING',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    customerId: customerUid,
+    customerName: 'Customer User',
+    customerPhone: '',
+    customerCity: 'Jijiga',
+    customerPlusCode: '',
+    customerAddress: 'Kebele 04',
+    createdAt: new Date().toISOString()
+  });
+
+  // Runner can claim an unassigned pending order with RUNNER_ASSIGNED status
+  await updateDoc(doc(runner.db, 'orders', unassignedOrderId), {
+    runnerId: runnerUid,
+    runnerName: 'runner User',
+    status: 'RUNNER_ASSIGNED'
+  });
+  console.log('PASS runner can claim unassigned order with RUNNER_ASSIGNED status');
+
+  // Competing runner cannot claim an already claimed order
+  await expectDenied('competing runner cannot steal already claimed order', async () => {
+    await updateDoc(doc(otherRunner.db, 'orders', unassignedOrderId), {
+      runnerId: otherRunnerUid,
+      runnerName: 'other-runner User',
+      status: 'RUNNER_ASSIGNED'
+    });
+  });
+
+  // Runner cannot seal with invalid tag format
+  await expectDenied('runner cannot set invalid tag format', async () => {
+    await updateDoc(doc(runner.db, 'orders', unassignedOrderId), {
+      status: 'READY_FOR_RIDER',
+      runnerTagId: 'INVALID-TAG-123'
+    });
+  });
+
+  // Runner seals with valid TAG-ET-##### format
+  const validTag = 'TAG-ET-48217';
+  await updateDoc(doc(runner.db, 'orders', unassignedOrderId), {
+    status: 'READY_FOR_RIDER',
+    runnerTagId: validTag
+  });
+  console.log('PASS runner can seal and hand over with valid TAG-ET-##### tag');
+
+  // Tag immutability: Runner cannot overwrite or change existing tag
+  await expectDenied('runner cannot overwrite or mutate an existing saved tag', async () => {
+    await updateDoc(doc(runner.db, 'orders', unassignedOrderId), {
+      runnerTagId: 'TAG-ET-99999'
+    });
+  });
 
   await expectDenied('runner cannot self-assign a PENDING order without RUNNER_ASSIGNED transition', async () => {
     await updateDoc(doc(runner.db, 'orders', validFoodId), {
@@ -825,8 +892,8 @@ async function main() {
   }
   console.log('PASS order customer can read the protected receipt subcollection while order metadata stays image-free');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed, including pricing and protected EEU receipt subcollection tests.');
 }

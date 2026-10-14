@@ -1,7 +1,8 @@
 import { Order, ChatMessage } from '../types';
-import { Camera, MapPin, PackageCheck, User, MessageSquare, ShieldAlert, XCircle, HandMetal, AlertCircle, RefreshCw } from 'lucide-react';
+import { Camera, MapPin, PackageCheck, User, MessageSquare, ShieldAlert, XCircle, HandMetal, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isValidRunnerTag, generateRunnerTag } from '../utils/tagGenerator';
 
 interface Props {
   orders: Order[];
@@ -9,7 +10,8 @@ interface Props {
   currentRunnerName?: string;
   orderMessages?: Record<string, ChatMessage[]>;
   onSendMessage?: (orderId: string, message: Omit<ChatMessage, 'id' | 'orderId'>) => void;
-  onUpdateStatus: (orderId: string, status: Order['status']) => void;
+  onUpdateStatus?: (orderId: string, status: Order['status'], tag?: string) => Promise<boolean | void> | void;
+  onHandoverOrder?: (orderId: string, tag: string) => Promise<boolean>;
   onRejectDefect?: (orderId: string, reason: string) => void;
   onClaimOrder?: (orderId: string) => Promise<void>;
 }
@@ -21,13 +23,20 @@ export function RunnerView({
   orderMessages, 
   onSendMessage, 
   onUpdateStatus, 
+  onHandoverOrder,
   onRejectDefect,
   onClaimOrder 
 }: Props) {
   const [activeTab, setActiveTab] = useState<'unassigned' | 'my_inspections'>('unassigned');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [submittingHandoverId, setSubmittingHandoverId] = useState<string | null>(null);
   
+  // Persistent tag state per order to guarantee stability across re-renders
+  const [activeTagsByOrder, setActiveTagsByOrder] = useState<Record<string, string>>({});
+  const [handoverError, setHandoverError] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
   // Checklist states for active verification
   const [checkFreshness, setCheckFreshness] = useState(false);
   const [checkInstructions, setCheckInstructions] = useState(false);
@@ -38,21 +47,42 @@ export function RunnerView({
   const [defectReason, setDefectReason] = useState('Substandard freshness or damaged packaging');
 
   // Filter orders:
-  // 1. Unassigned orders awaiting a runner to claim
+  // 1. Strictly unassigned orders awaiting a runner to claim
   const unassignedOrders = orders.filter(
-    o => !o.runnerId && (o.status === 'PENDING' || o.status === 'TRANSACTION_PENDING' || o.status === 'RUNNER_ASSIGNED')
+    o => !o.runnerId && (o.status === 'PENDING' || o.status === 'TRANSACTION_PENDING')
   );
 
-  // 2. Orders claimed by or assigned to this runner
+  // 2. Orders claimed by or assigned to this runner in active inspection status
   const myAssignedOrders = orders.filter(
-    o => (o.runnerId === currentRunnerId || (!o.runnerId && o.status === 'RUNNER_ASSIGNED')) && o.status === 'RUNNER_ASSIGNED'
+    o => o.runnerId === currentRunnerId && o.status === 'RUNNER_ASSIGNED'
   );
 
-  const startVerification = (id: string) => {
-    setVerifyingId(id);
+  const startVerification = (order: Order) => {
+    setVerifyingId(order.id);
+    setHandoverError(null);
     setCheckFreshness(false);
     setCheckInstructions(false);
     setCheckSeal(false);
+
+    // Reuse existing tag if already persisted on the order, or retain previously generated tag, or generate once
+    if (order.runnerTagId && isValidRunnerTag(order.runnerTagId)) {
+      setActiveTagsByOrder(prev => ({ ...prev, [order.id]: order.runnerTagId! }));
+    } else if (!activeTagsByOrder[order.id]) {
+      const generated = generateRunnerTag();
+      setActiveTagsByOrder(prev => ({ ...prev, [order.id]: generated }));
+    }
+  };
+
+  const getTagForOrder = (order: Order): string => {
+    if (order.runnerTagId && isValidRunnerTag(order.runnerTagId)) {
+      return order.runnerTagId;
+    }
+    if (activeTagsByOrder[order.id] && isValidRunnerTag(activeTagsByOrder[order.id])) {
+      return activeTagsByOrder[order.id];
+    }
+    const freshTag = generateRunnerTag();
+    setActiveTagsByOrder(prev => ({ ...prev, [order.id]: freshTag }));
+    return freshTag;
   };
 
   const submitDefect = () => {
@@ -63,14 +93,39 @@ export function RunnerView({
 
   const handleClaim = async (orderId: string) => {
     if (!onClaimOrder) return;
+    setClaimError(null);
     try {
       setClaimingId(orderId);
       await onClaimOrder(orderId);
       setActiveTab('my_inspections');
     } catch (err: any) {
       console.error('Claim error:', err);
+      setClaimError(err?.message || 'Failed to claim order. It may have already been claimed by another courier.');
     } finally {
       setClaimingId(null);
+    }
+  };
+
+  const handleSealAndHandover = async (order: Order) => {
+    const tagToPersist = getTagForOrder(order);
+    setSubmittingHandoverId(order.id);
+    setHandoverError(null);
+    try {
+      let isSuccess = false;
+      if (onHandoverOrder) {
+        isSuccess = await onHandoverOrder(order.id, tagToPersist);
+      } else if (onUpdateStatus) {
+        const res = await onUpdateStatus(order.id, 'READY_FOR_RIDER', tagToPersist);
+        isSuccess = res !== false;
+      }
+      if (isSuccess) {
+        setVerifyingId(null);
+      }
+    } catch (err: any) {
+      console.error('Handover submission error:', err);
+      setHandoverError(err?.message || 'Handover failed to persist in database. Please verify connection and retry.');
+    } finally {
+      setSubmittingHandoverId(null);
     }
   };
 
@@ -119,6 +174,22 @@ export function RunnerView({
               <strong>Open Dispatch Pool:</strong> Claim an available order to begin physical packaging and quality verification at the Mamila store.
             </span>
           </div>
+
+          {claimError && (
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold">Claim Failed</p>
+                <p className="mt-0.5">{claimError}</p>
+              </div>
+              <button 
+                onClick={() => setClaimError(null)} 
+                className="text-rose-500 hover:text-rose-800 text-[11px] font-semibold"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           {unassignedOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-56 text-slate-500 bg-white rounded-2xl border border-slate-200 p-6 text-center">
@@ -196,143 +267,175 @@ export function RunnerView({
             </div>
           ) : (
             <div className="grid gap-4">
-              {myAssignedOrders.map(order => (
-                <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xs font-bold tracking-wider text-blue-600 uppercase bg-blue-50 px-2.5 py-1 rounded-md">
-                        Claimed By You · {order.quantity || 1} bundle(s)
-                      </span>
-                      <h3 className="text-xl font-bold text-slate-900 mt-2">{order.batchName}</h3>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">Order #{order.id}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900 text-sm">{order.mamilaName}</p>
-                      <p className="text-xs text-slate-500 flex items-center justify-end gap-1 mt-0.5">
-                        <MapPin className="w-3.5 h-3.5 text-blue-600" /> {order.mamilaLocation}
-                      </p>
-                      <span className="text-[11px] text-blue-700 font-semibold mt-1 inline-block">
-                        Deliver to: {order.customerCity || 'Jijiga'}
-                      </span>
-                    </div>
-                  </div>
+              {myAssignedOrders.map(order => {
+                const currentTag = getTagForOrder(order);
+                const isSubmitting = submittingHandoverId === order.id;
 
-                  {order.specialInstructions && (
-                    <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-start gap-2.5 text-xs text-amber-950">
-                      <MessageSquare className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                return (
+                  <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                    <div className="flex justify-between items-start">
                       <div>
-                        <span className="font-bold text-amber-900">Customer Handling Instruction: </span>
-                        <span className="italic">"{order.specialInstructions}"</span>
+                        <span className="text-xs font-bold tracking-wider text-blue-600 uppercase bg-blue-50 px-2.5 py-1 rounded-md">
+                          Claimed By You · {order.quantity || 1} bundle(s)
+                        </span>
+                        <h3 className="text-xl font-bold text-slate-900 mt-2">{order.batchName}</h3>
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">Order #{order.id}</p>
                       </div>
-                    </div>
-                  )}
-
-                  {verifyingId === order.id ? (
-                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-5">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                        <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                          <Camera className="w-4 h-4 text-blue-600" />
-                          Runner Physical Verification Checklist
-                        </h4>
-                        <span className="font-mono text-xs text-emerald-600 font-bold">
-                          TAG-ET-{Math.floor(10000 + Math.random() * 90000)}
+                      <div className="text-right">
+                        <p className="font-semibold text-slate-900 text-sm">{order.mamilaName}</p>
+                        <p className="text-xs text-slate-500 flex items-center justify-end gap-1 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-blue-600" /> {order.mamilaLocation}
+                        </p>
+                        <span className="text-[11px] text-blue-700 font-semibold mt-1 inline-block">
+                          Deliver to: {order.customerCity || 'Jijiga'}
                         </span>
                       </div>
+                    </div>
 
-                      {/* 3-Point Checklist */}
-                      <div className="space-y-2.5 text-xs">
-                        <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={checkFreshness} 
-                            onChange={(e) => setCheckFreshness(e.target.checked)}
-                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                          />
-                          <div>
-                            <span className="font-semibold text-slate-900 block">Harvest & Expiry Verification</span>
-                            <span className="text-slate-500 text-[11px]">Inspect harvest freshness, packaging integrity, and best-before date.</span>
-                          </div>
-                        </label>
-
-                        <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={checkInstructions} 
-                            onChange={(e) => setCheckInstructions(e.target.checked)}
-                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                          />
-                          <div>
-                            <span className="font-semibold text-slate-900 block">Customer Note Confirmation</span>
-                            <span className="text-slate-500 text-[11px]">Ensure bundle fulfills any special handling or packaging instructions.</span>
-                          </div>
-                        </label>
-
-                        <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={checkSeal} 
-                            onChange={(e) => setCheckSeal(e.target.checked)}
-                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-                          />
-                          <div>
-                            <span className="font-semibold text-slate-900 block">Apply Tamper-Evident Tag</span>
-                            <span className="text-slate-500 text-[11px]">Affix barcode seal so customer can verify original condition at doorstep.</span>
-                          </div>
-                        </label>
-                      </div>
-
-                      {/* Verification Actions */}
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                        <button 
-                          onClick={() => {
-                            setDefectOrderId(order.id);
-                            setVerifyingId(null);
-                          }}
-                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer"
-                        >
-                          <ShieldAlert className="w-4 h-4" />
-                          Reject Batch (Report Defect)
-                        </button>
-
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => setVerifyingId(null)} 
-                            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button 
-                            disabled={!checkFreshness || !checkInstructions || !checkSeal}
-                            onClick={() => { 
-                              setVerifyingId(null); 
-                              onUpdateStatus(order.id, 'READY_FOR_RIDER'); 
-                            }} 
-                            className="px-5 py-2 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
-                          >
-                            <PackageCheck className="w-4 h-4" />
-                            Seal & Hand Over to Rider
-                          </button>
+                    {order.specialInstructions && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-start gap-2.5 text-xs text-amber-950">
+                        <MessageSquare className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-amber-900">Customer Handling Instruction: </span>
+                          <span className="italic">"{order.specialInstructions}"</span>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
-                      <button 
-                        onClick={() => startVerification(order.id)} 
-                        className="w-full sm:flex-1 py-3 bg-slate-900 text-white rounded-xl font-semibold text-xs md:text-sm hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                      >
-                        <Camera className="w-4 h-4" /> Verify Bundle Quality & Tag
-                      </button>
-                      <button
-                        onClick={() => setDefectOrderId(order.id)}
-                        className="px-4 py-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-semibold text-xs hover:bg-rose-100 transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        Report Defect
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+
+                    {verifyingId === order.id ? (
+                      <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-5">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                          <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-blue-600" />
+                            Runner Physical Verification Checklist
+                          </h4>
+                          <span className="font-mono text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold">
+                            {currentTag}
+                          </span>
+                        </div>
+
+                        {handoverError && (
+                          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2.5">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-bold">Handover Write Failed</p>
+                              <p className="mt-0.5">{handoverError}</p>
+                            </div>
+                            <button 
+                              onClick={() => setHandoverError(null)} 
+                              className="text-rose-500 hover:text-rose-800 text-[11px] font-semibold"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+
+                        {/* 3-Point Checklist */}
+                        <div className="space-y-2.5 text-xs">
+                          <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={checkFreshness} 
+                              disabled={isSubmitting}
+                              onChange={(e) => setCheckFreshness(e.target.checked)}
+                              className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-semibold text-slate-900 block">Harvest & Expiry Verification</span>
+                              <span className="text-slate-500 text-[11px]">Inspect harvest freshness, packaging integrity, and best-before date.</span>
+                            </div>
+                          </label>
+
+                          <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={checkInstructions} 
+                              disabled={isSubmitting}
+                              onChange={(e) => setCheckInstructions(e.target.checked)}
+                              className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-semibold text-slate-900 block">Customer Note Confirmation</span>
+                              <span className="text-slate-500 text-[11px]">Ensure bundle fulfills any special handling or packaging instructions.</span>
+                            </div>
+                          </label>
+
+                          <label className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={checkSeal} 
+                              disabled={isSubmitting}
+                              onChange={(e) => setCheckSeal(e.target.checked)}
+                              className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-semibold text-slate-900 block">Apply Tamper-Evident Tag</span>
+                              <span className="text-slate-500 text-[11px]">Affix barcode seal ({currentTag}) so customer can verify original condition at doorstep.</span>
+                            </div>
+                          </label>
+                        </div>
+
+                        {/* Verification Actions */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                          <button 
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              setDefectOrderId(order.id);
+                              setVerifyingId(null);
+                            }}
+                            className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <ShieldAlert className="w-4 h-4" />
+                            Reject Batch (Report Defect)
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              disabled={isSubmitting}
+                              onClick={() => setVerifyingId(null)} 
+                              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              disabled={!checkFreshness || !checkInstructions || !checkSeal || isSubmitting}
+                              onClick={() => handleSealAndHandover(order)} 
+                              className="px-5 py-2 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                  <span>Persisting Tag & Sealing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <PackageCheck className="w-4 h-4" />
+                                  <span>Seal & Hand Over ({currentTag})</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                        <button 
+                          onClick={() => startVerification(order)} 
+                          className="w-full sm:flex-1 py-3 bg-slate-900 text-white rounded-xl font-semibold text-xs md:text-sm hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                        >
+                          <Camera className="w-4 h-4" /> Verify Bundle Quality & Tag
+                        </button>
+                        <button
+                          onClick={() => setDefectOrderId(order.id)}
+                          className="px-4 py-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-semibold text-xs hover:bg-rose-100 transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          Report Defect
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

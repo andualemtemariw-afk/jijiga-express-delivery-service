@@ -127,6 +127,8 @@ export function validateEeuTransition(
       reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
     };
   }
+
+  return { allowed: true };
 }
 
 /**
