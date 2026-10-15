@@ -769,7 +769,7 @@ export function RiderView({
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
+                    The compressed receipt photo is saved in the protected order receipts subcollection. Confirm the full 20-digit token against the printed slip before submitting.
                   </p>
                 </div>
 
