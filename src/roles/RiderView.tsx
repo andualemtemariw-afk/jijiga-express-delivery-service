@@ -489,7 +489,7 @@ export function RiderView({
                   </div>
 
                   {/* Cash Change Calculator for COD */}
-                  {order.paymentMethod === 'COD' && order.status === 'PICKED_UP' && (
+                  {order.serviceType !== 'EEU_RECHARGE' && order.paymentMethod === 'COD' && order.status === 'PICKED_UP' && (
                     <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 text-xs">
                       <div className="flex items-center gap-2 text-amber-900 font-bold">
                         <Calculator className="w-4 h-4" />
