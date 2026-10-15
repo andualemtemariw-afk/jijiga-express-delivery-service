@@ -864,7 +864,8 @@ async function main() {
     ...eeuDetailsFixture,
     receiptCaptured: true,
     receiptTimestamp,
-    tokenCode: '',
+    // Receipt capture and a valid 20-digit STS token are required atomically by the rules.
+    tokenCode: '12345678901234567890',
     custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
       phase: 'AT_EEU_HUB',
       label: 'AT_EEU_HUB',
@@ -884,7 +885,7 @@ async function main() {
     updatedAt: new Date().toISOString()
   });
   await receiptBatch.commit();
-  console.log('PASS assigned rider can atomically attach one capped receipt in the protected subcollection at AT_EEU_HUB');
+  console.log('PASS assigned rider atomically records receipt, metadata and valid 20-digit STS token at AT_EEU_HUB');
 
   await expectDenied('rider cannot replace an attached EEU receipt', async () => {
     await setDoc(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
@@ -999,8 +1000,8 @@ async function main() {
   }
   console.log('PASS order customer can read the protected receipt subcollection while order metadata stays image-free');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(eeuRider.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, eeuRider, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed, including pricing and protected EEU receipt subcollection tests.');
 }
