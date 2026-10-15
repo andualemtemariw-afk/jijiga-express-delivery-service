@@ -86,7 +86,9 @@ export function validateMeterNumber(meterNumber: string): { isValid: boolean; cl
  * Normalize a printed 20-digit STS token; spaces and hyphens may be entered for readability.
  */
 export function normalizeEeuStsToken(token: string): string {
-  return token.replace(/\D/g, '').slice(0, 20);
+  // Preserve every digit so overlong tokens fail the exact 20-digit validation instead
+  // of silently truncating a mistyped token into a different, apparently valid token.
+  return token.replace(/\D/g, '');
 }
 
 /**
