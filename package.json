@@ -44,6 +44,7 @@
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.6",
-    "uuid": "11.1.1"
+    "uuid": "11.1.1",
+    "source-map-js": "1.2.2"
   }
 }
