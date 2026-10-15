@@ -778,7 +778,7 @@ export function RiderView({
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setCameraOrder(null)}
+                    onClick={closeReceiptCamera}
                     className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                   >
                     Cancel
