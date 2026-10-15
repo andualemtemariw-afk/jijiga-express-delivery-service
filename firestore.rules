@@ -444,8 +444,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Cache the full order diff once. Recomputing affectedKeys() in each role branch
-    // can exceed the Firestore rules expression budget for EEU custody timelines.
+    // Each role-specific helper caches affected keys once; dispatch avoids evaluating unrelated role branches.
     function validAdminOrderUpdate() {
       let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
       return (isAdmin()
@@ -621,8 +620,65 @@ service cloud.firestore {
           && request.resource.data.capturedBy == request.auth.uid
           && request.resource.data.capturedAt is timestamp
           && request.resource.data.receiptImageUrl is string
-          && request.resource.data.receiptImageUrl.size() <= 300000
-          && request.resource.data.receiptImageUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$');
+          && (
+            request.resource.data.receiptImageUrl.size() <= 300000
+              ? request.resource.data.receiptImageUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+
+        // Receipt evidence is immutable after creation.
+        allow update, delete: if false;
+      }
+
+      match /messages/{messageId} {
+        allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
+        allow create: if (isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId))
+          && request.resource.data.orderId == orderId
+          && request.resource.data.senderId == request.auth.uid
+          && roleMatchesSender()
+          && request.resource.data.senderName == currentUser().data.displayName;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Deprecated standalone chat collection is intentionally closed. The application uses order-scoped chats.
+    match /orderChats/{chatId} {
+      allow read, write: if false;
+    }
+
+    // Immutable delivery events: actor identity must match the authenticated account and the order role.
+    match /deliveryEvents/{eventId} {
+      allow read: if isAdmin()
+        || (signedIn() && (
+          resource.data.actorId == request.auth.uid
+          || (resource.data.orderId is string && isOrderCustomer(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRunner(resource.data.orderId))
+          || (resource.data.orderId is string && isOrderRider(resource.data.orderId))
+        ));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'orderId', 'status', 'timestamp', 'actorRole', 'actorId', 'actorName', 'note', 'createdAt'
+        ])
+        && request.resource.data.orderId is string
+        && request.resource.data.status == orderDoc(request.resource.data.orderId).data.status
+        && request.resource.data.timestamp is string
+        && request.resource.data.actorId == request.auth.uid
+        && (
+          (getUserRole() == 'customer' && request.resource.data.actorRole == 'CUSTOMER' && isOrderCustomer(request.resource.data.orderId))
+          || (getUserRole() == 'runner' && request.resource.data.actorRole == 'RUNNER' && isOrderRunner(request.resource.data.orderId))
+          || (getUserRole() == 'rider' && request.resource.data.actorRole == 'RIDER' && isOrderRider(request.resource.data.orderId))
+          || (isAdmin() && request.resource.data.actorRole == 'ADMIN')
+        );
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+)
+              : false
+          );
         // Receipt evidence is immutable after creation.
         allow update, delete: if false;
       }
