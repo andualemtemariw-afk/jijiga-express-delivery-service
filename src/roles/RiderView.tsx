@@ -220,7 +220,7 @@ export function RiderView({
         ...cameraOrder.eeuDetails,
         receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
-        tokenCode: cameraTokenInput.trim(),
+        tokenCode: normalizedTokenCode,
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
@@ -316,7 +316,7 @@ export function RiderView({
                         order={order}
                         isRiderView={true}
                         onAdvanceState={(nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
-                        onRequestCameraReceipt={() => setCameraOrder(order)}
+                        onRequestCameraReceipt={() => openReceiptCamera(order)}
                       />
                       {eeuErrorMsg[order.id] && (
                         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
@@ -754,7 +754,7 @@ export function RiderView({
                     type="text"
                     required
                     value={cameraTokenInput}
-                    onChange={(e) => setCameraTokenInput(e.target.value)}
+                    onChange={(e) => setCameraTokenInput(normalizeEeuStsToken(e.target.value))}
                     placeholder="e.g. 4920 1928 4820 9182 3849"
                     className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider text-center font-bold"
                   />
@@ -780,7 +780,7 @@ export function RiderView({
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || !cameraTokenInput.trim()}
+                    disabled={isCapturingReceipt || cameraTokenInput.length !== 20}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
