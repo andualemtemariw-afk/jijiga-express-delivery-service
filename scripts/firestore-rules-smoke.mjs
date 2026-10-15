@@ -1000,8 +1000,8 @@ async function main() {
   }
   console.log('PASS order customer can read the protected receipt subcollection while order metadata stays image-free');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(eeuRider.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, eeuRider, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed, including pricing and protected EEU receipt subcollection tests.');
 }
