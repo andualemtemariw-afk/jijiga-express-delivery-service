@@ -67,22 +67,24 @@ service cloud.firestore {
 
     // Prefer the protected subcollection receipt; recognize existing legacy inline receipts during rollout.
     function hasEeuReceipt(orderId) {
+      let legacyDetails = orderDoc(orderId).data.eeuDetails;
       return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
         || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+          legacyDetails is map
+          && ('receiptImageUrl' in legacyDetails)
+          && legacyDetails.receiptImageUrl is string
+          && legacyDetails.receiptImageUrl != ''
         );
     }
 
     function hasEeuReceiptAfter(orderId) {
+      let legacyDetails = orderDoc(orderId).data.eeuDetails;
       return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
         || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+          legacyDetails is map
+          && ('receiptImageUrl' in legacyDetails)
+          && legacyDetails.receiptImageUrl is string
+          && legacyDetails.receiptImageUrl != ''
         );
     }
 
@@ -192,10 +194,15 @@ service cloud.firestore {
     }
 
     function validEeuDetailsUpdate(orderId) {
+      let changedKeys = request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys();
+      let timeline = request.resource.data.eeuDetails.custodyTimeline;
+      let previousTimeline = resource.data.eeuDetails.custodyTimeline;
+      let phase = request.resource.data.eeuDetails.custodyPhase;
+      let previousPhase = resource.data.eeuDetails.custodyPhase;
       return resource.data.serviceType == 'EEU_RECHARGE'
         && resource.data.eeuDetails is map
         && request.resource.data.eeuDetails is map
-        && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
+        && changedKeys.hasOnly([
           'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode'
         ])
         && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
@@ -204,19 +211,17 @@ service cloud.firestore {
         && request.resource.data.eeuDetails.serviceFee == resource.data.eeuDetails.serviceFee
         && request.resource.data.eeuDetails.eeuHubName == resource.data.eeuDetails.eeuHubName
         && request.resource.data.eeuDetails.kwhUnits == resource.data.eeuDetails.kwhUnits
-        && request.resource.data.eeuDetails.custodyTimeline is list
-        && resource.data.eeuDetails.custodyTimeline is list
-        && request.resource.data.eeuDetails.custodyTimeline.size() == resource.data.eeuDetails.custodyTimeline.size() + 1
-        && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].actor == 'Rider ' + request.auth.uid
+        && timeline is list
+        && previousTimeline is list
+        && timeline.size() == previousTimeline.size() + 1
+        && timeline[previousTimeline.size()].actor == 'Rider ' + request.auth.uid
         // Image data lives under /orders/{orderId}/receipts/terminal, outside the order list document.
         // Metadata is attached once while at the hub, and only when a bounded receipt document exists.
         && (
-          !request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasAny([
-            'receiptCaptured', 'receiptTimestamp', 'tokenCode'
-          ])
+          !changedKeys.hasAny(['receiptCaptured', 'receiptTimestamp', 'tokenCode'])
           || (
-            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            previousPhase == 'AT_EEU_HUB'
+            && phase == 'AT_EEU_HUB'
             && (!('receiptCaptured' in resource.data.eeuDetails) || resource.data.eeuDetails.receiptCaptured != true)
             && request.resource.data.eeuDetails.receiptCaptured == true
             && hasEeuReceiptAfter(orderId)
@@ -227,37 +232,37 @@ service cloud.firestore {
         )
         && (
           (
-            request.resource.data.eeuDetails.custodyPhase == resource.data.eeuDetails.custodyPhase
-            && resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            phase == previousPhase
+            && previousPhase == 'AT_EEU_HUB'
             && request.resource.data.eeuDetails.receiptCaptured == true
             && hasEeuReceiptAfter(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+            && timeline[previousTimeline.size()].phase == 'AT_EEU_HUB'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
-            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            previousPhase == 'WITH_CUSTOMER'
+            && phase == 'WITH_RIDER_OUTBOUND'
             && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
+            && timeline[previousTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
-            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            previousPhase == 'WITH_RIDER_OUTBOUND'
+            && phase == 'AT_EEU_HUB'
             && request.resource.data.eeuDetails.custodyLabel == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+            && timeline[previousTimeline.size()].phase == 'AT_EEU_HUB'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            previousPhase == 'AT_EEU_HUB'
+            && phase == 'WITH_RIDER_RETURN'
             && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
             && hasEeuReceipt(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_RETURN'
+            && timeline[previousTimeline.size()].phase == 'WITH_RIDER_RETURN'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
-            && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            previousPhase == 'WITH_RIDER_RETURN'
+            && phase == 'RETURNED'
             && request.resource.data.eeuDetails.custodyLabel == 'RETURNED'
             && hasEeuReceipt(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'RETURNED'
+            && timeline[previousTimeline.size()].phase == 'RETURNED'
           )
         );
     }
