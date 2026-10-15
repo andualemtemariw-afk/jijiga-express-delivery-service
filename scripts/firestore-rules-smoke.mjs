@@ -261,7 +261,7 @@ async function main() {
     mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
     price: 500, quantity: 1, deliveryFee: 75, totalPrice: 575, status: 'PENDING',
     paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
-    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerName: 'New Test Customer', customerPhone: '0911000000', customerCity: 'Jijiga',
     customerPlusCode: '', customerAddress: 'Kebele 04',
     eeuDetails: {
       meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-01',
@@ -273,6 +273,113 @@ async function main() {
     createdAt: new Date().toISOString()
   });
   console.log('PASS COD EEU order created directly with meter, amount, and authorization validation');
+  const directEeuRef = doc(profileWithoutActive.db, 'orders', directEeuId);
+  const validEeuSnapshot = await getDoc(directEeuRef);
+  const validEeuData = validEeuSnapshot.data();
+  if (!validEeuData) throw new Error('Valid EEU order fixture could not be read');
+
+  const outsideEeuId = 'outside-city-eeu-' + Date.now();
+  await expectDenied('EEU orders cannot be created outside Jijiga', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', outsideEeuId), {
+      ...validEeuData, id: outsideEeuId, customerCity: 'Dire Dawa'
+    });
+  });
+
+  const unauthorizedEeuId = 'unauthorized-eeu-' + Date.now();
+  await expectDenied('EEU order requires explicit customer authorization', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', unauthorizedEeuId), {
+      ...validEeuData,
+      id: unauthorizedEeuId,
+      eeuDetails: { ...validEeuData.eeuDetails, customerAuthorized: false }
+    });
+  });
+
+  // Exercise the full physical-card custody lifecycle using only the Firebase emulator.
+  // The Admin SDK assigns the test rider; client writes below are checked by deployed-style rules.
+  await adminDb.doc(`orders/${directEeuId}`).update({
+    status: 'RIDER_ACCEPTED',
+    riderId: riderUid,
+    riderName: 'rider User'
+  });
+  const eeuRider = await clientFor('rider');
+  const eeuOrderRef = doc(eeuRider.db, 'orders', directEeuId);
+
+  async function attemptEeuPhase(phase, label, nextOrderStatus, nextPaymentStatus) {
+    const snapshot = await getDoc(eeuOrderRef);
+    if (!snapshot.exists()) throw new Error('EEU rider test order unexpectedly disappeared');
+    const order = snapshot.data();
+    const details = order.eeuDetails;
+    const updatedDetails = {
+      ...details,
+      custodyPhase: phase,
+      custodyLabel: label,
+      custodyTimeline: [...details.custodyTimeline, {
+        phase,
+        label,
+        timestamp: new Date().toISOString(),
+        note: `Test custody transition to ${phase}`,
+        actor: `Rider ${riderUid}`
+      }]
+    };
+    const update = {
+      eeuDetails: updatedDetails,
+      status: nextOrderStatus,
+      updatedAt: new Date().toISOString()
+    };
+    if (nextPaymentStatus !== undefined) update.paymentStatus = nextPaymentStatus;
+    await updateDoc(eeuOrderRef, update);
+  }
+
+  await expectDenied('EEU rider cannot start pickup without recording cash collection', async () => {
+    await attemptEeuPhase('WITH_RIDER_OUTBOUND', 'WITH_RIDER', 'PICKED_UP', 'UNPAID');
+  });
+  await attemptEeuPhase('WITH_RIDER_OUTBOUND', 'WITH_RIDER', 'PICKED_UP', 'COLLECTED_BY_RIDER');
+  console.log('PASS EEU rider records cash + physical card collection at pickup');
+  await attemptEeuPhase('AT_EEU_HUB', 'AT_EEU_HUB', 'PICKED_UP');
+
+  await expectDenied('EEU rider cannot return the card without receipt evidence', async () => {
+    await attemptEeuPhase('WITH_RIDER_RETURN', 'WITH_RIDER', 'PICKED_UP');
+  });
+
+  async function captureTestEeuReceipt(tokenCode) {
+    const snapshot = await getDoc(eeuOrderRef);
+    const details = snapshot.data().eeuDetails;
+    const updatedDetails = {
+      ...details,
+      receiptCaptured: true,
+      receiptTimestamp: new Date().toISOString(),
+      tokenCode,
+      custodyTimeline: [...details.custodyTimeline, {
+        phase: 'AT_EEU_HUB',
+        label: 'AT_EEU_HUB',
+        timestamp: new Date().toISOString(),
+        note: 'Emulator test receipt capture',
+        actor: `Rider ${riderUid}`
+      }]
+    };
+    const batch = writeBatch(eeuRider.db);
+    batch.set(doc(eeuRider.db, 'orders', directEeuId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,AA==',
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+    batch.update(eeuOrderRef, {
+      eeuDetails: updatedDetails,
+      updatedAt: new Date().toISOString()
+    });
+    await batch.commit();
+  }
+
+  await expectDenied('EEU rider cannot store a malformed STS token', async () => {
+    await captureTestEeuReceipt('12345');
+  });
+  await captureTestEeuReceipt('12345678901234567890');
+  console.log('PASS EEU receipt and 20-digit STS token recorded atomically');
+
+  await attemptEeuPhase('WITH_RIDER_RETURN', 'WITH_RIDER', 'PICKED_UP');
+  await attemptEeuPhase('RETURNED', 'RETURNED', 'DELIVERED');
+  console.log('PASS EEU five-stage physical-card lifecycle reaches DELIVERED only after receipt and return');
+
 
   const zeroParcelId = 'zero-price-parcel-' + Date.now();
   await expectDenied('customer cannot set Parcel price to zero when tariff is nonzero', async () => {
@@ -318,7 +425,7 @@ async function main() {
       mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
       price: 0, quantity: 1, deliveryFee: 75, totalPrice: 75, status: 'PENDING',
       paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
-      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerName: 'New Test Customer', customerPhone: '0911000000', customerCity: 'Jijiga',
       customerPlusCode: '', customerAddress: 'Kebele 04',
       eeuDetails: {
         meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-02',
