@@ -285,6 +285,18 @@ async function main() {
     });
   });
 
+  // Regression: do not trust a client-supplied Jijiga city when the saved profile is elsewhere.
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { city: 'Dire Dawa' });
+  const spoofedEeuId = 'spoofed-jijiga-eeu-' + Date.now();
+  await expectDenied('EEU order with forged Jijiga city is denied when saved profile is outside Jijiga', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', spoofedEeuId), {
+      ...validEeuData,
+      id: spoofedEeuId,
+      customerCity: 'Jijiga'
+    });
+  });
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { city: 'Jijiga' });
+
   const unauthorizedEeuId = 'unauthorized-eeu-' + Date.now();
   await expectDenied('EEU order requires explicit customer authorization', async () => {
     await setDoc(doc(profileWithoutActive.db, 'orders', unauthorizedEeuId), {
@@ -303,6 +315,13 @@ async function main() {
   });
   const eeuRider = await clientFor('rider');
   const eeuOrderRef = doc(eeuRider.db, 'orders', directEeuId);
+
+  await expectDenied('EEU rider cannot bypass custody using IN_TRANSIT status', async () => {
+    await updateDoc(eeuOrderRef, { status: 'IN_TRANSIT', updatedAt: new Date().toISOString() });
+  });
+  await expectDenied('EEU rider cannot mark pickup before outbound card custody', async () => {
+    await updateDoc(eeuOrderRef, { status: 'PICKED_UP', updatedAt: new Date().toISOString() });
+  });
 
   async function attemptEeuPhase(phase, label, nextOrderStatus, nextPaymentStatus) {
     const snapshot = await getDoc(eeuOrderRef);
