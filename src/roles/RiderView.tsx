@@ -761,6 +761,8 @@ export function RiderView({
                   />
                 </div>
 
+                <p className="text-center font-mono font-bold text-slate-500">{cameraTokenInput.length}/20 digits entered</p>
+
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
                     <Receipt className="w-3.5 h-3.5 text-amber-700" />
