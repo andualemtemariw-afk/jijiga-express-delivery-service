@@ -45,6 +45,10 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
 
+  // This is an address-bound physical errand, not a digital recharge. Never stamp an
+  // out-of-area or unknown customer profile as Jijiga; require an explicit Jijiga profile.
+  const serviceAreaAllowed = customerProfile?.city?.trim() === 'Jijiga';
+
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
   const totalDue = rechargeAmount + serviceFee;
   const estimatedKwh = calculateEstimatedUnits(rechargeAmount);
@@ -61,7 +65,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meterValidation.isValid || !customerAuthorized) return;
+    if (!serviceAreaAllowed || !meterValidation.isValid || !customerAuthorized) return;
     if (!Number.isSafeInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0) return;
     if (!customerAddress.trim() || !customerPhone.trim()) return;
 
@@ -109,7 +113,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       customerId: customerProfile?.uid || '',
       customerName: customerDisplayName,
       customerPhone: customerPhone,
-      customerCity: 'Jijiga',
+      customerCity: customerProfile?.city?.trim() || '',
       customerAddress: customerAddress,
       customerPlusCode: customerProfile?.plusCode || '8F2P+5H Jijiga',
       specialInstructions: specialNote ? `EEU Note: ${specialNote}` : '',
@@ -156,6 +160,11 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
         <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-100 text-[11px] font-medium text-blue-900">
           This service currently covers addresses in Jijiga only. At pickup, the rider collects your physical card and the recharge amount plus service fee.
         </div>
+        {!serviceAreaAllowed && (
+          <div role="alert" className="mx-5 mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11px] leading-relaxed text-rose-800">
+            EEU card errands can only be requested from a customer profile whose delivery city is set to Jijiga. Your current profile city is {customerProfile?.city?.trim() || 'not set'}. Update your profile city to Jijiga before booking; this form will not overwrite an out-of-area profile.
+          </div>
+        )}
 
         {/* Chain of Custody Protocol Notice */}
         <div className="bg-amber-50 border-b border-amber-200/80 px-5 py-3 text-xs text-amber-900 flex items-start gap-2.5">
@@ -369,7 +378,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!meterValidation.isValid || !customerAuthorized || !customerAddress.trim() || !customerPhone.trim() || !Number.isSafeInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0}
+                disabled={!serviceAreaAllowed || !meterValidation.isValid || !customerAuthorized || !customerAddress.trim() || !customerPhone.trim() || !Number.isSafeInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition"
               >
                 <span>Dispatch Rider for Card Pickup</span>
