@@ -305,7 +305,9 @@ export function RiderView({
                           ? 'bg-amber-100 text-amber-800 border border-amber-300' 
                           : 'bg-emerald-100 text-emerald-800'
                       }`}>
-                        {order.paymentMethod === 'COD' ? 'Collect Cash on Delivery' : `${order.paymentMethod} Paid`}
+                        {order.serviceType === 'EEU_RECHARGE'
+                          ? (order.paymentStatus === 'COLLECTED_BY_RIDER' ? 'Cash + card collected at pickup' : 'Collect recharge float + fee at pickup')
+                          : (order.paymentMethod === 'COD' ? 'Collect Cash on Delivery' : `${order.paymentMethod} Paid`)}
                       </span>
                     </div>
                   </div>
