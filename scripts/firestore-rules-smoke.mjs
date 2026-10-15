@@ -258,14 +258,14 @@ async function main() {
   const directEeuId = 'valid-eeu-' + Date.now();
   await setDoc(doc(profileWithoutActive.db, 'orders', directEeuId), {
     id: directEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga', batchName: 'EEU recharge test',
-    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
     price: 500, quantity: 1, deliveryFee: 75, totalPrice: 575, status: 'PENDING',
     paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
     customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
     customerPlusCode: '', customerAddress: 'Kebele 04',
     eeuDetails: {
       meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-01',
-      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
       custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
       custodyTimeline: [{ phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer authorized physical card service', actor: 'Customer' }],
       kwhUnits: 232.6
@@ -315,14 +315,14 @@ async function main() {
     await setDoc(doc(profileWithoutActive.db, 'orders', mismatchedEeuId), {
       id: mismatchedEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga',
       batchName: 'Mismatched-price EEU recharge', mamilaId: 'eeu_hub',
-      mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+      mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
       price: 0, quantity: 1, deliveryFee: 75, totalPrice: 75, status: 'PENDING',
       paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
       customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
       customerPlusCode: '', customerAddress: 'Kebele 04',
       eeuDetails: {
         meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-02',
-        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
         custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
         custodyTimeline: [{
           phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(),
@@ -694,7 +694,7 @@ async function main() {
     cardSerialNumber: 'EEU-TEST-01',
     rechargeAmount: 500,
     serviceFee: 75,
-    eeuHubName: 'EEU Jijiga Test Hub',
+    eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
     custodyPhase: 'AT_EEU_HUB',
     custodyLabel: 'AT_EEU_HUB',
     customerAuthorized: true,
