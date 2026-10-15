@@ -26,6 +26,8 @@ jobs:
         run: npm ci
       - name: Root typecheck
         run: npm run lint
+      - name: EEU state-machine tests
+        run: npm run test:eeu
       - name: Root production build
         run: npm run build
       # The functions/ folder is retained only for firebase-admin emulator test support.
