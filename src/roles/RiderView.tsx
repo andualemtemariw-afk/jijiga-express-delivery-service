@@ -179,6 +179,23 @@ export function RiderView({
     });
   };
 
+  const openReceiptCamera = (order: Order) => {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    setReceiptPreviewUrl(null);
+    setReceiptFile(null);
+    setCameraTokenInput('');
+    setEeuErrorMsg(prev => ({ ...prev, [order.id]: null }));
+    setCameraOrder(order);
+  };
+
+  const closeReceiptCamera = () => {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    setReceiptPreviewUrl(null);
+    setReceiptFile(null);
+    setCameraTokenInput('');
+    setCameraOrder(null);
+  };
+
   const handleReceiptFileSelected = (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setEeuErrorMsg(prev => ({ ...prev, [cameraOrder?.id || 'unknown']: 'Please capture an image file.' })); return; }
