@@ -242,6 +242,7 @@ export function RiderView({
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);
+      setCameraTokenInput('');
       setCameraOrder(null);
     } catch (error: any) {
       setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: error?.message || 'Receipt upload failed.' }));
