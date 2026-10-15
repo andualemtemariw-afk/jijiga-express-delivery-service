@@ -705,7 +705,7 @@ export function RiderView({
                   <h4 className="font-bold text-sm">Mandatory Camera Intent: EEU Paper Receipt</h4>
                 </div>
                 <button
-                  onClick={() => setCameraOrder(null)}
+                  onClick={closeReceiptCamera}
                   className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
