@@ -444,28 +444,13 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    match /orders/{orderId} {
-      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
-      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
-      allow read: if signedIn() && (
-        isAdmin()
-        || resource.data.customerId == request.auth.uid
-        || (isRunner() && (
-          resource.data.runnerId == request.auth.uid
-          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
-        ))
-        || (isRider() && (
-          resource.data.riderId == request.auth.uid
-          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
-        ))
-      );
-
-      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
-      allow create: if signedIn() && validCustomerOrderCreate();
-
-      allow update: if signedIn() && (
+    // Cache the full order diff once. Recomputing affectedKeys() in each role branch
+    // can exceed the Firestore rules expression budget for EEU custody timelines.
+    function validOrderUpdate(orderId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return signedIn() && (
         (isAdmin()
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          && !changedKeys.hasAny([
             'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt', 'paymentMerchantOrderId', 'paymentCheckoutPrepayId', 'paymentCheckoutCreatedAt'
           ])
         )
@@ -476,7 +461,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.deliveryFee == resource.data.deliveryFee
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
+          && changedKeys.hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
           && (
             request.resource.data.status == resource.data.status
             || (
@@ -516,9 +501,9 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && changedKeys.hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['runnerTagId'])
+            !changedKeys.hasAny(['runnerTagId'])
             || (
               request.resource.data.runnerTagId is string
               && request.resource.data.runnerTagId.matches('^TAG-ET-[0-9]{5}$')
@@ -541,7 +526,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && changedKeys.hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
           && (
             request.resource.data.status == 'DELIVERED'
             ? (
@@ -561,7 +546,7 @@ service cloud.firestore {
             )
           )
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eeuDetails'])
+            !changedKeys.hasAny(['eeuDetails'])
             || validEeuDetailsUpdate(orderId)
           )
           && (
@@ -570,11 +555,33 @@ service cloud.firestore {
             || request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
           )
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
+            !changedKeys.hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
             || request.resource.data.riderLocationUpdatedAt is string
           )
         )
       );
+    }
+
+    match /orders/{orderId} {
+      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
+      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
+      allow read: if signedIn() && (
+        isAdmin()
+        || resource.data.customerId == request.auth.uid
+        || (isRunner() && (
+          resource.data.runnerId == request.auth.uid
+          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+        ))
+        || (isRider() && (
+          resource.data.riderId == request.auth.uid
+          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+        ))
+      );
+
+      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
+      allow create: if signedIn() && validCustomerOrderCreate();
+
+      allow update: if validOrderUpdate(orderId);
 
       allow delete: if isAdmin();
 
