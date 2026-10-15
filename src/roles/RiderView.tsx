@@ -167,10 +167,13 @@ export function RiderView({
       custodyTimeline: [...order.eeuDetails.custodyTimeline, newTimelineItem],
     };
 
+    const cashCollectedAtPickup = nextPhase === 'WITH_RIDER_OUTBOUND' && order.paymentMethod === 'COD';
     onUpdateOrder(order.id, {
       eeuDetails: updatedEeuDetails,
       status: isReturned ? 'DELIVERED' : 'PICKED_UP',
-      paymentStatus: (isReturned && order.paymentMethod === 'COD') ? 'COLLECTED_BY_RIDER' : order.paymentStatus,
+      paymentStatus: ((isReturned || cashCollectedAtPickup) && order.paymentMethod === 'COD')
+        ? 'COLLECTED_BY_RIDER'
+        : order.paymentStatus,
       riderId: currentRiderId,
       riderName: currentRiderName || 'Verified Rider'
     });
