@@ -163,7 +163,9 @@ service cloud.firestore {
       return request.resource.data.eeuDetails is map
         && request.resource.data.eeuDetails.meterNumber is string
         && request.resource.data.eeuDetails.meterNumber.matches('^([0-9]{13}|[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9])$')
-        && request.resource.data.customerCity == 'Jijiga'
+        // Service-area enforcement must use the saved profile, not only a client-controlled order field.
+        && currentUser().data.city == 'Jijiga'
+        && request.resource.data.customerCity == currentUser().data.city
         && request.resource.data.customerAddress is string
         && request.resource.data.customerAddress.size() > 0
         && request.resource.data.customerPhone is string
@@ -589,6 +591,28 @@ service cloud.firestore {
             request.resource.data.status != 'DELIVERED'
             || resource.data.serviceType != 'EEU_RECHARGE'
             || request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+          )
+          // Keep order status and physical-card custody phase aligned, including writes
+          // that attempt to bypass the dedicated five-step EEU lifecycle.
+          && (
+            resource.data.serviceType != 'EEU_RECHARGE'
+            || (
+              request.resource.data.status == 'RIDER_ACCEPTED'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+            )
+            || (
+              request.resource.data.status == 'PICKED_UP'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase in [
+                'WITH_RIDER_OUTBOUND', 'AT_EEU_HUB', 'WITH_RIDER_RETURN'
+              ]
+            )
+            || (
+              request.resource.data.status == 'DELIVERED'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            )
           )
           && (
             !changedKeys.hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
