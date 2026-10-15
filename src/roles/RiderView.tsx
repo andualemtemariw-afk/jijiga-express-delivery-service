@@ -207,6 +207,11 @@ export function RiderView({
 
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
+    const normalizedTokenCode = normalizeEeuStsToken(cameraTokenInput);
+    if (normalizedTokenCode.length !== 20) {
+      setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: 'Enter the full 20-digit STS token shown on the official EEU receipt.' }));
+      return;
+    }
     setIsCapturingReceipt(true);
     try {
       const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
