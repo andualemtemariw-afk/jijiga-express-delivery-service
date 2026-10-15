@@ -29,7 +29,7 @@ import { OrderMapPreview } from '../components/map/OrderMapPreview';
 import { CommunicationBridgeModal } from '../components/communication/CommunicationBridgeModal';
 import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispatchModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
-import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
+import { EEU_STATE_CHAIN, getNextEeuPhase, normalizeEeuStsToken, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
 
