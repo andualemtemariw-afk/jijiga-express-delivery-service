@@ -86,9 +86,13 @@ export function validateMeterNumber(meterNumber: string): { isValid: boolean; cl
  * Normalize a printed 20-digit STS token; spaces and hyphens may be entered for readability.
  */
 export function normalizeEeuStsToken(token: string): string {
-  // Preserve every digit so overlong tokens fail the exact 20-digit validation instead
-  // of silently truncating a mistyped token into a different, apparently valid token.
-  return token.replace(/\D/g, '');
+  // Spaces and hyphens are presentation separators; preserve all other characters so
+  // invalid input cannot be silently transformed into a different, apparently valid token.
+  return token.replace(/[\s-]/g, '');
+}
+
+export function isValidEeuStsToken(token: string): boolean {
+  return /^\d{20}$/.test(normalizeEeuStsToken(token));
 }
 
 /**
@@ -138,7 +142,7 @@ export function validateEeuTransition(
         reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
       };
     }
-    if (token.length !== 20) {
+    if (!isValidEeuStsToken(token)) {
       return {
         allowed: false,
         reason: 'The 20-digit STS token must be recorded from the official EEU receipt before the card can leave the hub.'

@@ -29,7 +29,7 @@ import { OrderMapPreview } from '../components/map/OrderMapPreview';
 import { CommunicationBridgeModal } from '../components/communication/CommunicationBridgeModal';
 import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispatchModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
-import { EEU_STATE_CHAIN, getNextEeuPhase, normalizeEeuStsToken, validateEeuTransition } from '../utils/eeuStateMachine';
+import { EEU_STATE_CHAIN, getNextEeuPhase, isValidEeuStsToken, normalizeEeuStsToken, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
 
@@ -208,7 +208,7 @@ export function RiderView({
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
     const normalizedTokenCode = normalizeEeuStsToken(cameraTokenInput);
-    if (normalizedTokenCode.length !== 20) {
+    if (!isValidEeuStsToken(normalizedTokenCode)) {
       setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: 'Enter the full 20-digit STS token shown on the official EEU receipt.' }));
       return;
     }
@@ -764,6 +764,9 @@ export function RiderView({
                 </div>
 
                 <p className="text-center font-mono font-bold text-slate-500">{cameraTokenInput.length}/20 digits entered</p>
+                {cameraTokenInput.length > 0 && !/^\d*$/.test(cameraTokenInput) && (
+                  <p role="alert" className="text-center text-xs text-rose-700">Use digits only; spaces and hyphens are allowed as separators.</p>
+                )}
 
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
@@ -785,7 +788,7 @@ export function RiderView({
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || cameraTokenInput.length !== 20}
+                    disabled={isCapturingReceipt || !isValidEeuStsToken(cameraTokenInput)}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >

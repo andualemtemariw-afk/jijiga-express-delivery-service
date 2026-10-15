@@ -373,6 +373,9 @@ async function main() {
   await expectDenied('EEU rider cannot store a malformed STS token', async () => {
     await captureTestEeuReceipt('12345');
   });
+  await expectDenied('EEU rider cannot store an overlong STS token', async () => {
+    await captureTestEeuReceipt('123456789012345678901');
+  });
   await captureTestEeuReceipt('12345678901234567890');
   console.log('PASS EEU receipt and 20-digit STS token recorded atomically');
 
