@@ -341,6 +341,60 @@ async function main() {
     await attemptEeuPhase('WITH_RIDER_RETURN', 'WITH_RIDER', 'PICKED_UP');
   });
 
+  await expectDenied('EEU rider cannot create a receipt without atomically recording STS metadata', async () => {
+    await setDoc(doc(eeuRider.db, 'orders', directEeuId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,AA==',
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+  });
+
+  // Simulate an orphan/legacy receipt document: even if a receipt exists, a rider
+  // cannot leave the hub unless the parent order records receiptCaptured + a valid token.
+  const orphanEeuId = 'orphan-eeu-receipt-' + Date.now();
+  const orphanEeuDetails = {
+    ...validEeuData.eeuDetails,
+    custodyPhase: 'AT_EEU_HUB',
+    custodyLabel: 'AT_EEU_HUB',
+    custodyTimeline: [
+      { phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer handoff', actor: 'Customer' },
+      { phase: 'WITH_RIDER_OUTBOUND', label: 'WITH_RIDER', timestamp: new Date().toISOString(), note: 'Rider collected card and cash', actor: 'Rider ' + riderUid },
+      { phase: 'AT_EEU_HUB', label: 'AT_EEU_HUB', timestamp: new Date().toISOString(), note: 'Arrived at EEU hub', actor: 'Rider ' + riderUid }
+    ]
+  };
+  await adminDb.doc('orders/' + orphanEeuId).set({
+    ...validEeuData,
+    id: orphanEeuId,
+    status: 'PICKED_UP',
+    paymentStatus: 'COLLECTED_BY_RIDER',
+    riderId: riderUid,
+    riderName: 'rider User',
+    eeuDetails: orphanEeuDetails
+  });
+  await adminDb.doc('orders/' + orphanEeuId + '/receipts/terminal').set({
+    receiptImageUrl: 'data:image/jpeg;base64,AA==',
+    capturedBy: riderUid,
+    capturedAt: new Date()
+  });
+  await expectDenied('EEU rider cannot leave the hub with an orphan receipt and no recorded STS token', async () => {
+    await updateDoc(doc(eeuRider.db, 'orders', orphanEeuId), {
+      eeuDetails: {
+        ...orphanEeuDetails,
+        custodyPhase: 'WITH_RIDER_RETURN',
+        custodyLabel: 'WITH_RIDER',
+        custodyTimeline: [...orphanEeuDetails.custodyTimeline, {
+          phase: 'WITH_RIDER_RETURN',
+          label: 'WITH_RIDER',
+          timestamp: new Date().toISOString(),
+          note: 'Attempt to leave hub without recorded token',
+          actor: 'Rider ' + riderUid
+        }]
+      },
+      status: 'PICKED_UP',
+      updatedAt: new Date().toISOString()
+    });
+  });
+
   async function captureTestEeuReceipt(tokenCode) {
     const snapshot = await getDoc(eeuOrderRef);
     const details = snapshot.data().eeuDetails;
@@ -889,6 +943,29 @@ async function main() {
   });
   await receiptBatch.commit();
   console.log('PASS assigned rider atomically records receipt, metadata and valid 20-digit STS token at AT_EEU_HUB');
+
+  await expectDenied('rider cannot rewrite prior EEU custody timeline entries', async () => {
+    const tamperedTimeline = receiptEeuDetails.custodyTimeline.map((entry, index) =>
+      index === 0 ? { ...entry, note: 'Forged prior customer custody event' } : entry
+    );
+    tamperedTimeline.push({
+      phase: 'WITH_RIDER_RETURN',
+      label: 'WITH_RIDER',
+      timestamp: new Date().toISOString(),
+      note: 'Attempt to leave hub after rewriting the history',
+      actor: 'Rider ' + riderUid
+    });
+    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+      eeuDetails: {
+        ...receiptEeuDetails,
+        custodyPhase: 'WITH_RIDER_RETURN',
+        custodyLabel: 'WITH_RIDER',
+        custodyTimeline: tamperedTimeline
+      },
+      status: 'PICKED_UP',
+      updatedAt: new Date().toISOString()
+    });
+  });
 
   await expectDenied('rider cannot replace an attached EEU receipt', async () => {
     await setDoc(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
