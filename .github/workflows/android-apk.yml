@@ -4,6 +4,16 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'capacitor.config.*'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'vite.config.ts'
+      - '.github/workflows/android-apk.yml'
 
 jobs:
   build-android:
