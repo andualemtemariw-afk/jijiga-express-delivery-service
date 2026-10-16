@@ -17,6 +17,7 @@ import { syncUserProfile, updateUserProfile } from './services/userService';
 import { 
   claimOrderAsRunner, 
   claimOrderAsRider, 
+  handoverOrderToRider,
   adminReassignOrder 
 } from './services/dispatchService';
 import { 
@@ -318,7 +319,6 @@ export default function App() {
       customerAddress: effectiveAddress,
       customerCoordinates: destCoords,
       mamilaCoordinates: originCoords,
-      riderCoordinates: originCoords,
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
       distanceKm: 3.2,
@@ -646,7 +646,7 @@ export default function App() {
     if (target.status === 'RUNNER_ASSIGNED' || target.status === 'PENDING' || target.status === 'TRANSACTION_PENDING') {
       handleUpdateOrder(orderId, { 
         status: 'READY_FOR_RIDER', 
-        runnerTagId: 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000) 
+        runnerTagId: target.runnerTagId || 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000) 
       });
     } else if (target.status === 'READY_FOR_RIDER' || target.status === 'VERIFIED_READY') {
       handleUpdateOrder(orderId, { 
@@ -689,6 +689,39 @@ export default function App() {
     } catch (err: any) {
       showAlert(err.message || 'Could not claim order.', 'error');
     }
+  };
+
+  const handleHandoverOrder = async (orderId: string, proposedTag: string): Promise<boolean> => {
+    if (!isDemoMode && !currentUser) {
+      throw new Error('Please sign in as a runner to seal and hand over this order.');
+    }
+    if (!isDemoMode && userProfile?.role !== 'runner' && userProfile?.role !== 'admin') {
+      throw new Error('Access restricted: verified runner credentials are required for handover.');
+    }
+
+    const runnerName = userProfile?.displayName || currentUser?.displayName || 'Verified Staff Runner';
+    let persistedTag: string;
+
+    if (isDemoMode) {
+      // Demo mode keeps the runner's displayed tag unchanged without writing production data.
+      persistedTag = proposedTag;
+    } else {
+      persistedTag = await handoverOrderToRider(
+        orderId,
+        { uid: currentUser!.uid, displayName: runnerName },
+        proposedTag
+      );
+    }
+
+    setOrders(prev => prev.map(order => order.id === orderId ? {
+      ...order,
+      status: 'READY_FOR_RIDER',
+      runnerTagId: persistedTag,
+      ...(currentUser?.uid ? { runnerId: currentUser.uid } : {}),
+      runnerName,
+    } : order));
+    showAlert(`Order #${orderId.slice(-6)} sealed with ${persistedTag} and handed to the rider queue.`, 'success');
+    return true;
   };
 
   const handleClaimRiderJob = async (orderId: string) => {
@@ -1161,10 +1194,11 @@ export default function App() {
               orderMessages={orderMessages}
               onSendMessage={handleSendMessage}
               onClaimOrder={handleClaimRunnerJob}
-              onUpdateStatus={(id, status) => handleUpdateOrder(id, { 
-                status, 
-                runnerTagId: 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000) 
-              })} 
+              onUpdateStatus={(id, status, tag) => handleUpdateOrder(id, {
+                status,
+                ...(status === 'READY_FOR_RIDER' && tag ? { runnerTagId: tag } : {})
+              })}
+              onHandoverOrder={handleHandoverOrder}
               onRejectDefect={handleRejectDefect}
             />
           )}
