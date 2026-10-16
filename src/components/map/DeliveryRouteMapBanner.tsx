@@ -8,7 +8,6 @@ import {
   MessageSquare, 
   Maximize2, 
   Clock, 
-  Gauge, 
   Package, 
   FastForward,
   ChevronDown,
@@ -123,8 +122,12 @@ export function DeliveryRouteMapBanner({
           </h3>
           <p className="text-xs text-slate-300 max-w-xl">
             {isRealOrder
-              ? `Tracking ${displayOrder.riderName || 'Courier'} live on route to ${displayOrder.customerAddress || displayOrder.customerCity}.`
-              : 'Direct route visualization connecting Jijiga Express Central Hub to local sectors with live telemetry.'}
+              ? hasFreshRiderLocation
+                ? `Receiving fresh GPS from ${displayOrder.riderName || 'the courier'} en route to ${displayOrder.customerAddress || displayOrder.customerCity}.`
+                : demoSandboxEnabled
+                  ? 'Demo route simulation only; a live courier GPS fix has not been verified.'
+                  : 'Waiting for the assigned courier to send a fresh GPS location.'
+              : 'Demo route visualization for Jijiga Express delivery corridors; no live courier is being tracked.'}
           </p>
         </div>
 
