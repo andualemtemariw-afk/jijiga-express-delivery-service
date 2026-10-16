@@ -11,8 +11,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:rules": "npx --yes firebase-tools@15.32.1 --config firebase.rules-test.json emulators:exec --only auth,firestore \"node scripts/firestore-rules-smoke.mjs\"",
-    "test:eeu": "node --import tsx --test scripts/eeu-state-machine.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:eeu": "node --import tsx --test scripts/eeu-state-machine.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
@@ -44,8 +44,7 @@
     "vite": "^6.2.3"
   },
   "overrides": {
-    "@grpc/grpc-js": "1.14.6",
-    "uuid": "11.1.1",
-    "source-map-js": "1.2.2"
+    "@grpc/grpc-js": "1.14.5",
+    "uuid": "11.1.1"
   }
 }
