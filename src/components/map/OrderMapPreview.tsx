@@ -100,8 +100,26 @@ function LiveGoogleMap({
   const [showTraffic, setShowTraffic] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<'mamila' | 'rider' | 'customer' | null>(null);
   const [recenterCount, setRecenterCount] = useState(0);
+  const [trackingNow, setTrackingNow] = useState(() => Date.now());
   const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
   const [simulatedTransitFrac, setSimulatedTransitFrac] = useState(0.45);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTrackingNow(Date.now()), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const locationTimestampMs = order.riderLocationUpdatedAt ? Date.parse(order.riderLocationUpdatedAt) : NaN;
+  const locationAgeMs = trackingNow - locationTimestampMs;
+  const hasFreshRiderLocation = !!order.riderCoordinates
+    && Number.isFinite(locationTimestampMs)
+    && locationAgeMs >= -60000
+    && locationAgeMs <= 90000;
+  const showRiderMarker = hasFreshRiderLocation || demoSandboxEnabled;
+
+  useEffect(() => {
+    if (!showRiderMarker && selectedMarker === 'rider') setSelectedMarker(null);
+  }, [showRiderMarker, selectedMarker]);
 
   const hasAdvancedMarker = typeof window !== 'undefined' && !!window.google?.maps?.marker?.AdvancedMarkerElement;
 
@@ -132,16 +150,19 @@ function LiveGoogleMap({
   }, [order.customerCoordinates, order.customerCity]);
 
   const riderPos: LatLng = useMemo(() => {
-    if (order.riderCoordinates) return order.riderCoordinates;
+    if (hasFreshRiderLocation && order.riderCoordinates) return order.riderCoordinates;
     if (demoSandboxEnabled) return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedTransitFrac);
     return customerPos;
-  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
+  }, [hasFreshRiderLocation, order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
 
   const routePath = useMemo(() => {
     return generateRoutePoints(mamilaPos, customerPos);
   }, [mamilaPos, customerPos]);
 
-  const pointsToFit = useMemo(() => [mamilaPos, customerPos, riderPos], [mamilaPos, customerPos, riderPos]);
+  const pointsToFit = useMemo(
+    () => showRiderMarker ? [mamilaPos, customerPos, riderPos] : [mamilaPos, customerPos],
+    [showRiderMarker, mamilaPos, customerPos, riderPos]
+  );
   const calculatedDistance = useMemo(() => calculateDistanceKm(mamilaPos, customerPos), [mamilaPos, customerPos]);
 
   if (!hasAdvancedMarker) {
@@ -155,7 +176,9 @@ function LiveGoogleMap({
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-md flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold">Live Route Telemetry</span>
+            <span className="font-semibold">
+              {hasFreshRiderLocation ? 'Live GPS Location' : demoSandboxEnabled ? 'Demo Route Simulation' : order.riderCoordinates ? 'GPS Location Stale' : 'Waiting for Rider GPS'}
+            </span>
             <span className="text-slate-400 font-mono text-[11px]">
               {order.customerCity || 'Jijiga'}
             </span>
@@ -267,7 +290,7 @@ function LiveGoogleMap({
           )}
 
           {/* Live Rider / Dispatch Courier Marker */}
-          {hasAdvancedMarker && order.riderCoordinates && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
+          {hasAdvancedMarker && showRiderMarker && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
             <AdvancedMarker
               position={riderPos}
               title={`Rider: ${order.riderName || 'Staff Rider'}`}
@@ -318,7 +341,7 @@ function LiveGoogleMap({
             </InfoWindow>
           )}
 
-          {selectedMarker === 'rider' && (
+          {showRiderMarker && selectedMarker === 'rider' && (
             <InfoWindow position={riderPos} onCloseClick={() => setSelectedMarker(null)}>
               <div className="p-1 max-w-[200px] text-slate-900">
                 <div className="flex items-center gap-1.5 font-bold text-xs text-blue-600">

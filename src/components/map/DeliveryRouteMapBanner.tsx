@@ -8,7 +8,6 @@ import {
   MessageSquare, 
   Maximize2, 
   Clock, 
-  Gauge, 
   Package, 
   FastForward,
   ChevronDown,
@@ -18,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Order } from '../../types';
 import { OrderMapPreview } from './OrderMapPreview';
-import { DEFAULT_CUSTOMER_COORDINATES, MAMILA_COORDINATES, LatLng } from '../../utils/geo';
+import { DEFAULT_CUSTOMER_COORDINATES, MAMILA_COORDINATES, calculateDistanceKm, LatLng } from '../../utils/geo';
 
 interface Props {
   activeOrder?: Order | null;
@@ -39,21 +38,13 @@ export function DeliveryRouteMapBanner({
   onCallCourier,
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [telemetrySpeed, setTelemetrySpeed] = useState(24);
-  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(false);
+  const [trackingNow, setTrackingNow] = useState(() => Date.now());
   const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
 
-  // Dynamic simulated speed telemetry jitter for ultra-realistic courier tracking
   useEffect(() => {
-    if (!isSimulatingTraffic) return;
-    const interval = setInterval(() => {
-      setTelemetrySpeed(prev => {
-        const delta = Math.floor(Math.random() * 5) - 2;
-        return Math.max(18, Math.min(38, prev + delta));
-      });
-    }, 2500);
+    const interval = setInterval(() => setTrackingNow(Date.now()), 15000);
     return () => clearInterval(interval);
-  }, [isSimulatingTraffic]);
+  }, []);
 
   // Synthetic route data is available only in an explicit development/demo sandbox.
   const displayOrder: Order = activeOrder || (demoSandboxEnabled ? {
@@ -81,13 +72,27 @@ export function DeliveryRouteMapBanner({
     riderName: 'Active Fleet Courier',
     distanceKm: 2.4,
     etaMinutes: 7,
-    runnerTagId: 'TAG-SEAL-99820',
+    runnerTagId: 'TAG-ET-91820',
     createdAt: new Date(),
   } : null as unknown as Order);
 
   if (!activeOrder && !demoSandboxEnabled) return null;
 
   const isRealOrder = !!activeOrder;
+  const locationTimestampMs = displayOrder.riderLocationUpdatedAt ? Date.parse(displayOrder.riderLocationUpdatedAt) : NaN;
+  const locationAgeMs = trackingNow - locationTimestampMs;
+  const hasFreshRiderLocation = !!displayOrder.riderCoordinates
+    && Number.isFinite(locationTimestampMs)
+    && locationAgeMs >= -60000
+    && locationAgeMs <= 90000;
+  const trackingStatus = hasFreshRiderLocation
+    ? 'LIVE GPS LOCATION'
+    : demoSandboxEnabled
+      ? 'DEMO SIMULATION ONLY'
+      : 'WAITING FOR RIDER GPS';
+  const liveDirectDistanceKm = hasFreshRiderLocation && displayOrder.riderCoordinates && displayOrder.customerCoordinates
+    ? calculateDistanceKm(displayOrder.riderCoordinates, displayOrder.customerCoordinates)
+    : null;
 
   return (
     <div className="bg-white rounded-2xl border-2 border-blue-500/30 shadow-md overflow-hidden transition-all">
@@ -95,9 +100,17 @@ export function DeliveryRouteMapBanner({
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 p-4 md:p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              LIVE COURIER RADAR • GPS ACTIVE
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
+              hasFreshRiderLocation
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : demoSandboxEnabled
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                hasFreshRiderLocation ? 'bg-emerald-400 animate-pulse' : demoSandboxEnabled ? 'bg-amber-400' : 'bg-slate-400'
+              }`} />
+              {trackingStatus}
             </span>
             <span className="text-[11px] font-mono text-blue-300">
               {isRealOrder ? `Order #${displayOrder.id}` : 'Fleet Patrol Demo'}
@@ -109,8 +122,12 @@ export function DeliveryRouteMapBanner({
           </h3>
           <p className="text-xs text-slate-300 max-w-xl">
             {isRealOrder
-              ? `Tracking ${displayOrder.riderName || 'Courier'} live on route to ${displayOrder.customerAddress || displayOrder.customerCity}.`
-              : 'Direct route visualization connecting Jijiga Express Central Hub to local sectors with live telemetry.'}
+              ? hasFreshRiderLocation
+                ? `Receiving fresh GPS from ${displayOrder.riderName || 'the courier'} en route to ${displayOrder.customerAddress || displayOrder.customerCity}.`
+                : demoSandboxEnabled
+                  ? 'Demo route simulation only; a live courier GPS fix has not been verified.'
+                  : 'Waiting for the assigned courier to send a fresh GPS location.'
+              : 'Demo route visualization for Jijiga Express delivery corridors; no live courier is being tracked.'}
           </p>
         </div>
 
@@ -160,30 +177,42 @@ export function DeliveryRouteMapBanner({
                 {displayOrder.riderName || 'Staff Rider'}
               </span>
               <span className="text-[10px] text-emerald-600 font-semibold block">
-                Express Moto • Verified
+                {displayOrder.riderId || displayOrder.riderName ? 'Courier assigned' : 'Awaiting rider assignment'}
               </span>
             </div>
 
             <div className="space-y-0.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Live Speed
+                Location Signal
               </span>
               <span className="font-mono font-extrabold text-slate-900 text-sm flex items-center gap-1">
-                <Gauge className="w-3.5 h-3.5 text-amber-500" />
-                {telemetrySpeed} km/h
+                <Radio className="w-3.5 h-3.5 text-amber-500" />
+                {hasFreshRiderLocation ? 'GPS ACTIVE' : demoSandboxEnabled ? 'DEMO ONLY' : 'NO GPS FIX'}
               </span>
-              <span className="text-[10px] text-slate-500 block">Traffic: Light</span>
+              <span className="text-[10px] text-slate-500 block">
+                {hasFreshRiderLocation
+                  ? `Updated ${new Date(locationTimestampMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : demoSandboxEnabled ? 'Synthetic location; not real courier GPS' : 'Waiting for rider location'}
+              </span>
             </div>
 
             <div className="space-y-0.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Remaining Distance
+                {hasFreshRiderLocation ? 'Approx. Direct Distance' : demoSandboxEnabled ? 'Demo Route Distance' : 'Remaining Distance'}
               </span>
               <span className="font-mono font-bold text-slate-900 text-sm block">
-                ~{displayOrder.distanceKm || 2.4} km
+                {liveDirectDistanceKm !== null
+                  ? `~${liveDirectDistanceKm.toFixed(1)} km`
+                  : demoSandboxEnabled && displayOrder.distanceKm !== undefined
+                    ? `~${displayOrder.distanceKm} km (demo)`
+                    : 'Waiting for GPS'}
               </span>
               <span className="text-[10px] text-blue-600 font-semibold block">
-                ETA: ~{displayOrder.etaMinutes || 7} mins
+                {hasFreshRiderLocation && displayOrder.etaMinutes !== undefined
+                  ? `Estimated ETA: ~${displayOrder.etaMinutes} mins`
+                  : demoSandboxEnabled
+                    ? `Demo ETA: ~${displayOrder.etaMinutes || 7} mins`
+                    : 'ETA unavailable until GPS updates'}
               </span>
             </div>
 
@@ -193,9 +222,11 @@ export function DeliveryRouteMapBanner({
               </span>
               <span className="font-mono font-bold text-emerald-700 text-xs flex items-center gap-1 truncate">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                {displayOrder.runnerTagId || 'TAG-ET-91820'}
+                {displayOrder.runnerTagId || 'Not assigned'}
               </span>
-              <span className="text-[10px] text-slate-500 block">Tamper Verified</span>
+              <span className="text-[10px] text-slate-500 block">
+                {displayOrder.runnerTagId ? 'Tag recorded on order' : 'Security seal pending'}
+              </span>
             </div>
           </div>
 

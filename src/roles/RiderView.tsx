@@ -128,7 +128,10 @@ export function RiderView({
             : Infinity;
           if (!previous || now - previous.at >= 15000 || distanceApprox >= 30) {
             lastGpsWriteRef.current[order.id] = { at: now, ...coords };
-            onUpdateOrder(order.id, { riderCoordinates: coords });
+            onUpdateOrder(order.id, {
+              riderCoordinates: coords,
+              riderLocationUpdatedAt: new Date(now).toISOString(),
+            });
           }
         });
       },

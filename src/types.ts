@@ -179,6 +179,8 @@ export interface Order {
   customerCoordinates?: { lat: number; lng: number };
   mamilaCoordinates?: { lat: number; lng: number };
   riderCoordinates?: { lat: number; lng: number };
+  /** ISO 8601 timestamp of the most recent device GPS fix saved for this order. */
+  riderLocationUpdatedAt?: string;
   specialInstructions?: string;
   cookingInstruction?: string; // Custom preparation / cooking note (e.g. "Please cook it well done, no pink inside")
   parcelDetails?: ParcelDetails;
