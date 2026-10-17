@@ -88,10 +88,32 @@ async function expectDenied(label, action) {
     throw new Error(`${label}: expected denial but operation succeeded`);
   } catch (error) {
     const code = error?.code || '';
+    if (/maximum of 1000 expressions|Unable to evaluate the expression|evaluation error at L[0-9]+/i.test(String(error?.message || error))) throw new Error('Rules evaluation failure in ' + label + ': ' + String(error?.message || error));
     if (!String(code).includes('permission-denied') && !String(code).includes('storage/unauthorized')) {
       throw error;
     }
     console.log(`PASS ${label}`);
+  }
+}
+
+async function diagnoseDenied(label, action) {
+  try {
+    await action();
+    console.log(`DIAGNOSTIC UNEXPECTEDLY ALLOWED: ${label}`);
+    return { label, status: 'allowed' };
+  } catch (error) {
+    const code = String(error?.code || '');
+    const message = String(error?.message || error);
+    if (/maximum of 1000 expressions|Unable to evaluate the expression|evaluation error at L[0-9]+/i.test(message)) {
+      console.log(`DIAGNOSTIC RULE EVALUATION ERROR: ${label}: ${message}`);
+      return { label, status: 'evaluation-error', message };
+    }
+    if (code.includes('permission-denied')) {
+      console.log(`DIAGNOSTIC CLEAN DENIAL: ${label}`);
+      return { label, status: 'permission-denied' };
+    }
+    console.log(`DIAGNOSTIC UNEXPECTED ERROR: ${label}: ${message}`);
+    return { label, status: 'unexpected-error', message };
   }
 }
 
@@ -129,11 +151,38 @@ async function main() {
   const profileAfterReauthentication = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
   if (!profileAfterReauthentication.exists()) throw new Error('FAIL customer cannot read own profile after reauthentication');
   console.log('PASS customer registration/profile read after reauthentication');
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), {
+    displayName: 'Updated Test Customer'
+  });
+  const updatedOwnProfile = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
+  if (updatedOwnProfile.data()?.displayName !== 'Updated Test Customer') {
+    throw new Error('FAIL customer cannot update own displayName');
+  }
+  console.log('PASS customer can update own displayName');
   await expectDenied('customer cannot read another customer profile', async () => {
     await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
   });
+  // Emulator-only diagnostic matrix: identify which protected-field shape triggers
+  // a rule-evaluation error. Do not treat evaluator errors as successful denials.
+  const profileRef = doc(profileWithoutActive.db, 'users', profileWithoutActiveUid);
+  const protectedFieldProbes = [
+    ['active (new field)', () => updateDoc(profileRef, { active: true })],
+    ['role (existing field)', () => updateDoc(profileRef, { role: 'admin' })],
+    ['isAdmin (new field)', () => updateDoc(profileRef, { isAdmin: true })],
+    ['mamilaId (new field)', () => updateDoc(profileRef, { mamilaId: 'diagnostic-mamila' })],
+    ['createdAt (existing field)', () => updateDoc(profileRef, { createdAt: '2000-01-01T00:00:00.000Z' })]
+  ];
+  const probeResults = [];
+  for (const [label, action] of protectedFieldProbes) {
+    probeResults.push(await diagnoseDenied(label, action));
+  }
+  const badProbes = probeResults.filter(result => result.status !== 'permission-denied');
+  if (badProbes.length > 0) {
+    throw new Error('Protected-field diagnostic probes did not all return clean permission-denied: ' +
+      badProbes.map(result => `${result.label}=${result.status}`).join(', '));
+  }
   await expectDenied('customer cannot self-activate by updating profile', async () => {
-    await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { active: true });
+    await updateDoc(profileRef, { active: true });
   });
   await expectDenied('customer cannot promote own profile to admin', async () => {
     await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { role: 'admin' });

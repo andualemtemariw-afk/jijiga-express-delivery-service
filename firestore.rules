@@ -46,7 +46,7 @@ service cloud.firestore {
     function isActiveUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && currentUser().data.active == true;
+        && currentUser().data.get('active', false) == true;
     }
 
     function isRunner() {
@@ -338,10 +338,13 @@ service cloud.firestore {
         ]);
 
       allow update: if signedIn() && (
-        isAdmin()
-        || (
+        (
           request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+        || (
+          request.auth.uid != uid
+          && isAdmin()
         )
       );
 

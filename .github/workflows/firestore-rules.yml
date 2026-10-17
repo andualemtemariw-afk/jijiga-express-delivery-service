@@ -71,3 +71,30 @@ jobs:
 
       - name: Run Firestore rules tests
         run: npm run test:rules
+
+      - name: Isolate protected profile key denial with minimal rules
+        if: failure()
+        run: npx --yes firebase-tools@15.32.1 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
+
+      - name: Check whether unconditional update denial produces same evaluator error
+        if: failure()
+        run: npx --yes firebase-tools@15.32.1 --config firebase.rules-deny-all-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "PROFILE_DENY_ALL=1 node scripts/firestore-profile-isolation-smoke.mjs"
+
+      - name: Compare isolated rules with latest Firebase CLI
+        if: failure()
+        run: npx --yes firebase-tools@15.34.0 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
+
+      - name: Compare isolated rules with pre-v1.22 Firestore emulator
+        if: failure()
+        run: npx --yes firebase-tools@15.24.0 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
+
+      - name: Print Firestore emulator diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f firestore-debug.log ]; then
+            echo "---- Firestore emulator debug log (last 800 lines) ----"
+            tail -n 800 firestore-debug.log
+          else
+            echo "firestore-debug.log not found in repository root"
+            find . -type f -name 'firestore-debug.log' -print
+          fi
