@@ -55,6 +55,7 @@ jobs:
         run: npm run build
 
       - name: Deploy PR preview (not live)
+        if: ${{ vars.ENABLE_FIREBASE_HOSTING_PREVIEW == 'true' }}
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
