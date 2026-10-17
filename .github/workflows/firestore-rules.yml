@@ -72,6 +72,10 @@ jobs:
       - name: Run Firestore rules tests
         run: npm run test:rules
 
+      - name: Isolate protected profile key denial with minimal rules
+        if: failure()
+        run: npx --yes firebase-tools@15.32.1 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
+
       - name: Print Firestore emulator diagnostics on failure
         if: failure()
         run: |
