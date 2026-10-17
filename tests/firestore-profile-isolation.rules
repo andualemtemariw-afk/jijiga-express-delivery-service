@@ -14,12 +14,10 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // Isolated test variant: compare optional values using Map.get defaults.
+      // Isolated control: valid auth and owner checks, then a literal false condition.
       allow update: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.data.get('active', false) == false
-        && request.resource.data.get('isAdmin', false) == false
-        && request.resource.data.get('mamilaId', '') == '';
+        && false;
     }
 
     match /{document=**} {
