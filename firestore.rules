@@ -337,16 +337,16 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // TEMPORARY EMULATOR DIAGNOSTIC: key allowlist only; do not merge this version.
-      allow update: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly([
-          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
-          'address', 'plusCode', 'role', 'createdAt'
-        ]);
-
-      // TEMPORARY EMULATOR ISOLATION: disable this path to test whether it causes evaluator errors.
-      allow update: if false;
+      allow update: if signedIn() && (
+        (
+          request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+        || (
+          request.auth.uid != uid
+          && isAdmin()
+        )
+      );
 
       allow delete: if isAdmin();
     }
