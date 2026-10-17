@@ -42,7 +42,7 @@ try {
     } catch (error) {
       console.log(`DENY_ALL_DIAGNOSTIC code=${error?.code || 'no-code'} message=${String(error?.message || error).replace(/\\s+/g, ' ').slice(0, 1000)}`);
     }
-    return;
+    process.exit(0);
   }
 
   await updateDoc(profileRef, { displayName: 'Updated Test Customer' });
