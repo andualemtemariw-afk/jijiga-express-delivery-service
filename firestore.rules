@@ -338,16 +338,14 @@ service cloud.firestore {
         ]);
 
       allow update: if signedIn() && (
-        request.auth.uid == uid
-          ? (
-              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
-              || (
-                resource.data.role == 'admin'
-                && resource.data.get('active', false) == true
-                && isAllowlistedAdminEmail()
-              )
-            )
-          : isAdmin()
+        (
+          request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+        || (
+          request.auth.uid != uid
+          && isAdmin()
+        )
       );
 
       allow delete: if isAdmin();
