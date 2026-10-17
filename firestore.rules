@@ -345,10 +345,8 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // Only an admin may update another user's profile.
-      allow update: if signedIn()
-        && request.auth.uid != uid
-        && isAdmin();
+      // TEMPORARY EMULATOR ISOLATION: disable this path to test whether it causes evaluator errors.
+      allow update: if false;
 
       allow delete: if isAdmin();
     }
