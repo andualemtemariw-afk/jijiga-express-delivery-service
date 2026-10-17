@@ -326,8 +326,9 @@ service cloud.firestore {
       // Avoid relying on a diff result to protect role and account-control fields.
       // A protected field must remain either absent on both sides or present with the same value.
       function protectedFieldUnchanged(field) {
-        return (field in resource.data) == (field in request.resource.data)
-          && resource.data.get(field, null) == request.resource.data.get(field, null);
+        return debug(field) == field
+          && debug((field in resource.data) == (field in request.resource.data))
+          && debug(resource.data.get(field, null) == request.resource.data.get(field, null));
       }
 
       function protectedProfileFieldsUnchanged() {
@@ -352,10 +353,10 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      allow update: if signedIn() && (
-        request.auth.uid == uid
-          ? protectedProfileFieldsUnchanged()
-          : isAdmin()
+      allow update: if debug(signedIn()) && (
+        debug(request.auth.uid == uid)
+          ? debug(protectedProfileFieldsUnchanged())
+          : debug(isAdmin())
       );
 
       allow delete: if isAdmin();
