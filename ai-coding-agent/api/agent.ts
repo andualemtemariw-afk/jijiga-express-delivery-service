@@ -16,7 +16,7 @@ type ResponseLike = {
 
 const OWNER = "andualemtemariw-afk";
 const REPO = "jijiga-express-delivery-service";
-const MODEL = "gemini-2.5-flash-lite";
+const MODEL = "gemini-3.5-flash-lite";
 const MAX_TASK_CHARS = 4000;
 const MAX_OUTPUT_TOKENS = 2000;
 const MAX_SOURCE_CHARS = 6200;
