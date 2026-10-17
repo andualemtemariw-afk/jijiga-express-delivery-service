@@ -327,7 +327,7 @@ service cloud.firestore {
       // A protected field must remain either absent on both sides or present with the same value.
       function protectedFieldUnchanged(field) {
         return (field in resource.data) == (field in request.resource.data)
-          && (!(field in resource.data) || resource.data[field] == request.resource.data[field]);
+          && resource.data.get(field, null) == request.resource.data.get(field, null);
       }
 
       function protectedProfileFieldsUnchanged() {
