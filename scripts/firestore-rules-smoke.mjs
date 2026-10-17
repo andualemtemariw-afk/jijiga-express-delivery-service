@@ -88,6 +88,7 @@ async function expectDenied(label, action) {
     throw new Error(`${label}: expected denial but operation succeeded`);
   } catch (error) {
     const code = error?.code || '';
+    if (/maximum of 1000 expressions|Unable to evaluate the expression|evaluation error at L[0-9]+/i.test(String(error?.message || error))) throw new Error('Rules evaluation failure in ' + label + ': ' + String(error?.message || error));
     if (!String(code).includes('permission-denied') && !String(code).includes('storage/unauthorized')) {
       throw error;
     }
