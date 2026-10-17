@@ -14,7 +14,7 @@ assert.match(api, /AGENT_ACCESS_CODE/, "API must fail closed without the preview
 assert.match(api, /MAX_OUTPUT_TOKENS = 2000/, "Output must be bounded");
 assert.match(api, /MAX_REQUESTS_PER_WINDOW = 8/, "Best-effort request guard must exist");
 assert.match(api, /raw\.githubusercontent\.com/, "Source access must use read-only raw GitHub URLs");
-assert.match(api, /gemini\.googleapis\.com/, "Model calls must go directly to Google free-tier API");
+assert.match(api, /generativelanguage\\.googleapis\\.com/, "Model calls must go directly to Google free-tier API");
 assert.doesNotMatch(api, /ai-gateway\.vercel\.sh|createPullRequest|createBranch|firebase-admin|initializeApp\(/i, "Agent must not add a paid Gateway fallback, Git writes, or Firebase access");
 
 console.log("SAFETY CHECK PASS: isolated read-only code agent; fixed Gemini free-tier model; env-only lock; no Firebase, GitHub writes, or paid Gateway fallback.");
