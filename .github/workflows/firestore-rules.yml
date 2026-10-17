@@ -80,6 +80,10 @@ jobs:
         if: failure()
         run: npx --yes firebase-tools@15.34.0 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
 
+      - name: Compare isolated rules with pre-v1.22 Firestore emulator
+        if: failure()
+        run: npx --yes firebase-tools@15.24.0 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
+
       - name: Print Firestore emulator diagnostics on failure
         if: failure()
         run: |
