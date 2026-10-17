@@ -323,6 +323,21 @@ service cloud.firestore {
     // User profiles. Self-registration can ONLY create a customer profile.
     // Staff/admin roles are provisioned by trusted backend functions.
     match /users/{uid} {
+      // Avoid relying on a diff result to protect role and account-control fields.
+      // A protected field must remain either absent on both sides or present with the same value.
+      function protectedFieldUnchanged(field) {
+        return (field in resource.data) == (field in request.resource.data)
+          && (!(field in resource.data) || resource.data[field] == request.resource.data[field]);
+      }
+
+      function protectedProfileFieldsUnchanged() {
+        return protectedFieldUnchanged('role')
+          && protectedFieldUnchanged('isAdmin')
+          && protectedFieldUnchanged('uid')
+          && protectedFieldUnchanged('createdAt')
+          && protectedFieldUnchanged('active')
+          && protectedFieldUnchanged('mamilaId');
+      }
       allow read: if signedIn() && (
         request.auth.uid == uid
         || isAdmin()
@@ -340,7 +355,7 @@ service cloud.firestore {
       allow update: if signedIn() && (
         (
           request.auth.uid == uid
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+          && protectedProfileFieldsUnchanged()
         )
         || (
           request.auth.uid != uid
