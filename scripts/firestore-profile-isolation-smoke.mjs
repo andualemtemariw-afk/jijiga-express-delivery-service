@@ -35,6 +35,16 @@ try {
   });
   console.log('PASS minimal-rules customer profile creation');
 
+  if (process.env.PROFILE_DENY_ALL === '1') {
+    try {
+      await updateDoc(profileRef, { active: true });
+      console.log('DENY_ALL_DIAGNOSTIC result=unexpectedly-allowed');
+    } catch (error) {
+      console.log(`DENY_ALL_DIAGNOSTIC code=${error?.code || 'no-code'} message=${String(error?.message || error).replace(/\\s+/g, ' ').slice(0, 1000)}`);
+    }
+    return;
+  }
+
   await updateDoc(profileRef, { displayName: 'Updated Test Customer' });
   console.log('PASS minimal-rules allowed displayName update');
 
