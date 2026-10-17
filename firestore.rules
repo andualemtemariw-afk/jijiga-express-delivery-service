@@ -323,22 +323,6 @@ service cloud.firestore {
     // User profiles. Self-registration can ONLY create a customer profile.
     // Staff/admin roles are provisioned by trusted backend functions.
     match /users/{uid} {
-      // Avoid relying on a diff result to protect role and account-control fields.
-      // A protected field must remain either absent on both sides or present with the same value.
-      function protectedFieldUnchanged(field) {
-        return debug(field) == field
-          && debug((field in resource.data) == (field in request.resource.data))
-          && debug(resource.data.get(field, null) == request.resource.data.get(field, null));
-      }
-
-      function protectedProfileFieldsUnchanged() {
-        return protectedFieldUnchanged('role')
-          && protectedFieldUnchanged('isAdmin')
-          && protectedFieldUnchanged('uid')
-          && protectedFieldUnchanged('createdAt')
-          && protectedFieldUnchanged('active')
-          && protectedFieldUnchanged('mamilaId');
-      }
       allow read: if signedIn() && (
         request.auth.uid == uid
         || isAdmin()
@@ -353,11 +337,18 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      allow update: if debug(signedIn()) && (
-        debug(request.auth.uid == uid)
-          ? debug(protectedProfileFieldsUnchanged())
-          : debug(isAdmin())
-      );
+      // Self-service profile updates are limited to explicitly editable customer fields.
+      // Use a whitelist so new/protected fields cannot be added or changed by the account owner.
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'email', 'photoURL', 'phone', 'city', 'address', 'plusCode'
+        ]);
+
+      // Admins may manage other users, but the admin path cannot be used on their own profile.
+      allow update: if signedIn()
+        && request.auth.uid != uid
+        && isAdmin();
 
       allow delete: if isAdmin();
     }
