@@ -96,6 +96,27 @@ async function expectDenied(label, action) {
   }
 }
 
+async function diagnoseDenied(label, action) {
+  try {
+    await action();
+    console.log(`DIAGNOSTIC UNEXPECTEDLY ALLOWED: ${label}`);
+    return { label, status: 'allowed' };
+  } catch (error) {
+    const code = String(error?.code || '');
+    const message = String(error?.message || error);
+    if (/maximum of 1000 expressions|Unable to evaluate the expression|evaluation error at L[0-9]+/i.test(message)) {
+      console.log(`DIAGNOSTIC RULE EVALUATION ERROR: ${label}: ${message}`);
+      return { label, status: 'evaluation-error', message };
+    }
+    if (code.includes('permission-denied')) {
+      console.log(`DIAGNOSTIC CLEAN DENIAL: ${label}`);
+      return { label, status: 'permission-denied' };
+    }
+    console.log(`DIAGNOSTIC UNEXPECTED ERROR: ${label}: ${message}`);
+    return { label, status: 'unexpected-error', message };
+  }
+}
+
 async function main() {
   const customerUid = await createUser('customer', 'customer');
   await createUser('admin', 'admin', true, true, 'andualemawraris4@gmail.com');
@@ -141,8 +162,27 @@ async function main() {
   await expectDenied('customer cannot read another customer profile', async () => {
     await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
   });
+  // Emulator-only diagnostic matrix: identify which protected-field shape triggers
+  // a rule-evaluation error. Do not treat evaluator errors as successful denials.
+  const profileRef = doc(profileWithoutActive.db, 'users', profileWithoutActiveUid);
+  const protectedFieldProbes = [
+    ['active (new field)', () => updateDoc(profileRef, { active: true })],
+    ['role (existing field)', () => updateDoc(profileRef, { role: 'admin' })],
+    ['isAdmin (new field)', () => updateDoc(profileRef, { isAdmin: true })],
+    ['mamilaId (new field)', () => updateDoc(profileRef, { mamilaId: 'diagnostic-mamila' })],
+    ['createdAt (existing field)', () => updateDoc(profileRef, { createdAt: '2000-01-01T00:00:00.000Z' })]
+  ];
+  const probeResults = [];
+  for (const [label, action] of protectedFieldProbes) {
+    probeResults.push(await diagnoseDenied(label, action));
+  }
+  const badProbes = probeResults.filter(result => result.status !== 'permission-denied');
+  if (badProbes.length > 0) {
+    throw new Error('Protected-field diagnostic probes did not all return clean permission-denied: ' +
+      badProbes.map(result => `${result.label}=${result.status}`).join(', '));
+  }
   await expectDenied('customer cannot self-activate by updating profile', async () => {
-    await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { active: true });
+    await updateDoc(profileRef, { active: true });
   });
   await expectDenied('customer cannot promote own profile to admin', async () => {
     await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { role: 'admin' });
