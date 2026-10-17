@@ -71,3 +71,14 @@ jobs:
 
       - name: Run Firestore rules tests
         run: npm run test:rules
+
+      - name: Print Firestore emulator diagnostics on failure
+        if: failure()
+        run: |
+          if [ -f firestore-debug.log ]; then
+            echo "---- Firestore emulator debug log (last 800 lines) ----"
+            tail -n 800 firestore-debug.log
+          else
+            echo "firestore-debug.log not found in repository root"
+            find . -type f -name 'firestore-debug.log' -print
+          fi
