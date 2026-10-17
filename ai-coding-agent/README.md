@@ -5,7 +5,7 @@ This is an isolated application in `ai-coding-agent/`. It does not replace the e
 ## What it does
 
 - Reads a small, allowlisted set of source files from a chosen branch of `andualemtemariw-afk/jijiga-express-delivery-service`.
-- Sends redacted source excerpts and the user's task to one fixed model, `gemini-2.5-flash-lite`, through Google's Gemini Developer API.
+- Sends redacted source excerpts and the user's task to one fixed model, `gemini-3.5-flash-lite`, through Google's Gemini Developer API.
 - Returns findings, a recommended fix, tests to run, and a proposed patch.
 - Does **not** commit code, create branches or pull requests, merge, deploy, read live Firestore records, or change production settings.
 
@@ -13,7 +13,7 @@ This is an isolated application in `ai-coding-agent/`. It does not replace the e
 
 1. Use a Google AI Studio API key for a project on the **Free** tier.
 2. Do not attach a billing account to that Google project or enable paid usage. When free quota is exhausted, the API should reject/throttle requests; this app returns the failure and does not use paid-model fallback.
-3. The model is hard-coded to `gemini-2.5-flash-lite`. The browser cannot choose a provider/model.
+3. The model is hard-coded to `gemini-3.5-flash-lite`. The browser cannot choose a provider/model.
 4. Do not configure Vercel AI Gateway, paid model providers, AI Gateway credits, or auto top-up for this app. It calls the Gemini Developer API directly.
 5. Keep Vercel on the existing Hobby plan. This static page and function use included Hobby usage, subject to current limits; no paid plan or add-on is needed for this project.
 6. Configure the following environment variables in the Vercel **Preview** target only, never Production:
