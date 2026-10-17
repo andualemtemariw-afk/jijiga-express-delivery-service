@@ -46,8 +46,12 @@ try {
       caught = error;
     }
     if (!caught) throw new Error(`FAIL ${label}: update unexpectedly succeeded`);
+    const message = String(caught.message || caught);
+    if (/maximum of 1000 expressions|Unable to evaluate the expression|evaluation error at L[0-9]+|Service call error/i.test(message)) {
+      throw new Error(`FAIL ${label}: Firestore returned a rules evaluation error instead of a clean denial: ${message}`);
+    }
     if (caught.code !== 'permission-denied') {
-      throw new Error(`FAIL ${label}: expected permission-denied, got ${caught.code || 'no-code'}: ${caught.message || caught}`);
+      throw new Error(`FAIL ${label}: expected permission-denied, got ${caught.code || 'no-code'}: ${message}`);
     }
     console.log(`PASS minimal-rules clean denial: ${label}`);
   }
