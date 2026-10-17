@@ -186,7 +186,7 @@ async function fetchSource(path: string, ref: string, token: string): Promise<st
   if (contentLength > 500_000) return null;
   const source = await response.text();
   if (source.length > 500_000) return null;
-  return relevantExcerpt(source, "", MAX_SOURCE_CHARS);
+  return redactSecrets(source.slice(0, 200_000));
 }
 
 export default async function handler(req: RequestLike, res: ResponseLike) {
