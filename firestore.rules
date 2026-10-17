@@ -337,16 +337,29 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      allow update: if signedIn() && (
-        (
-          request.auth.uid == uid
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
-        )
-        || (
-          request.auth.uid != uid
-          && isAdmin()
-        )
-      );
+      // Self-service updates are limited to profile fields. Account-control fields
+      // must keep the same presence and value; avoid diff() for this protection check.
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
+          'address', 'plusCode', 'role', 'createdAt',
+          'active', 'isAdmin', 'mamilaId'
+        ])
+        && request.resource.data.get('uid', null) == resource.data.get('uid', null)
+        && request.resource.data.get('role', null) == resource.data.get('role', null)
+        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+        && (('active' in resource.data) == ('active' in request.resource.data))
+        && resource.data.get('active', null) == request.resource.data.get('active', null)
+        && (('isAdmin' in resource.data) == ('isAdmin' in request.resource.data))
+        && resource.data.get('isAdmin', null) == request.resource.data.get('isAdmin', null)
+        && (('mamilaId' in resource.data) == ('mamilaId' in request.resource.data))
+        && resource.data.get('mamilaId', null) == request.resource.data.get('mamilaId', null);
+
+      // Only an admin may update another user's profile.
+      allow update: if signedIn()
+        && request.auth.uid != uid
+        && isAdmin();
 
       allow delete: if isAdmin();
     }
