@@ -130,6 +130,14 @@ async function main() {
   const profileAfterReauthentication = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
   if (!profileAfterReauthentication.exists()) throw new Error('FAIL customer cannot read own profile after reauthentication');
   console.log('PASS customer registration/profile read after reauthentication');
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), {
+    displayName: 'Updated Test Customer'
+  });
+  const updatedOwnProfile = await getDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid));
+  if (updatedOwnProfile.data()?.displayName !== 'Updated Test Customer') {
+    throw new Error('FAIL customer cannot update own displayName');
+  }
+  console.log('PASS customer can update own displayName');
   await expectDenied('customer cannot read another customer profile', async () => {
     await getDoc(doc(customer.db, 'users', profileWithoutActiveUid));
   });
