@@ -345,10 +345,8 @@ service cloud.firestore {
           'displayName', 'email', 'photoURL', 'phone', 'city', 'address', 'plusCode'
         ]);
 
-      // Admins may manage other users, but the admin path cannot be used on their own profile.
-      allow update: if signedIn()
-        && request.auth.uid != uid
-        && isAdmin();
+      // TEMPORARY EMULATOR ISOLATION ONLY: disable admin profile updates to isolate self-update evaluation.
+      allow update: if false;
 
       allow delete: if isAdmin();
     }
