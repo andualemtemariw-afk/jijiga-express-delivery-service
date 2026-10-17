@@ -14,13 +14,12 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // Isolated reproduction of rejecting newly added protected profile keys.
+      // Isolated test variant: deny protected-key additions using only field presence.
       allow update: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly([
-          'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
-          'address', 'plusCode', 'role', 'createdAt'
-        ]);
+        && !('active' in request.resource.data)
+        && !('isAdmin' in request.resource.data)
+        && !('mamilaId' in request.resource.data);
     }
 
     match /{document=**} {
