@@ -353,14 +353,9 @@ service cloud.firestore {
         ]);
 
       allow update: if signedIn() && (
-        (
-          request.auth.uid == uid
-          && protectedProfileFieldsUnchanged()
-        )
-        || (
-          request.auth.uid != uid
-          && isAdmin()
-        )
+        request.auth.uid == uid
+          ? protectedProfileFieldsUnchanged()
+          : isAdmin()
       );
 
       allow delete: if isAdmin();
