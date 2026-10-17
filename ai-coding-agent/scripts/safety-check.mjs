@@ -8,7 +8,7 @@ assert.match(html, /FREE-TIER ONLY/, "UI must state the free-tier-only intent");
 assert.match(html, /No Firebase connection/, "UI must state no Firebase access");
 assert.match(html, /No GitHub write access/, "UI must state no repository writes");
 assert.match(html, /Do not paste API keys/, "UI must warn users not to paste secrets");
-assert.match(api, /gemini-2\.5-flash-lite/, "API must use the fixed free-tier model");
+assert.match(api, /gemini-3\.5-flash-lite/, "API must use the fixed free-tier model");
 assert.match(api, /GEMINI_API_KEY/, "API key must be server-side env only");
 assert.match(api, /AGENT_ACCESS_CODE/, "API must fail closed without the preview access code");
 assert.match(api, /MAX_OUTPUT_TOKENS = 2000/, "Output must be bounded");
