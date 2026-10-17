@@ -76,6 +76,10 @@ jobs:
         if: failure()
         run: npx --yes firebase-tools@15.32.1 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
 
+      - name: Check whether unconditional update denial produces same evaluator error
+        if: failure()
+        run: npx --yes firebase-tools@15.32.1 --config firebase.rules-deny-all-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "PROFILE_DENY_ALL=1 node scripts/firestore-profile-isolation-smoke.mjs"
+
       - name: Compare isolated rules with latest Firebase CLI
         if: failure()
         run: npx --yes firebase-tools@15.34.0 --config firebase.rules-isolation-test.json --project demo-profile-rules-isolation emulators:exec --only auth,firestore "node scripts/firestore-profile-isolation-smoke.mjs"
