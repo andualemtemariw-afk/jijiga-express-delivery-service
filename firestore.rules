@@ -337,16 +337,16 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // Self-service profile updates are limited to explicitly editable customer fields.
-      // Use a whitelist so new/protected fields cannot be added or changed by the account owner.
-      allow update: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'displayName', 'email', 'photoURL', 'phone', 'city', 'address', 'plusCode'
-        ]);
-
-      // TEMPORARY EMULATOR ISOLATION ONLY: disable admin profile updates to isolate self-update evaluation.
-      allow update: if false;
+      allow update: if signedIn() && (
+        (
+          request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'uid', 'createdAt', 'active', 'mamilaId'])
+        )
+        || (
+          request.auth.uid != uid
+          && isAdmin()
+        )
+      );
 
       allow delete: if isAdmin();
     }
