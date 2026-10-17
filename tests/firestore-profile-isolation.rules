@@ -14,12 +14,12 @@ service cloud.firestore {
           'address', 'plusCode', 'role', 'createdAt'
         ]);
 
-      // Isolated test variant: deny protected-key additions using only field presence.
+      // Isolated test variant: compare optional values using Map.get defaults.
       allow update: if request.auth != null
         && request.auth.uid == uid
-        && !('active' in request.resource.data)
-        && !('isAdmin' in request.resource.data)
-        && !('mamilaId' in request.resource.data);
+        && request.resource.data.get('active', false) == false
+        && request.resource.data.get('isAdmin', false) == false
+        && request.resource.data.get('mamilaId', '') == '';
     }
 
     match /{document=**} {
