@@ -1,0 +1,10 @@
+{
+  "name": "jijiga-express-ai-coding-agent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Read-only coding assistant for the Jijiga Express Delivery Service repository",
+  "scripts": {
+    "build": "node scripts/safety-check.mjs",
+    "test": "node scripts/safety-check.mjs"
+  }
+}
