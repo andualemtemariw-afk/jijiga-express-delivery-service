@@ -14,6 +14,7 @@ import {
 import { 
   signInWithEmail, 
   registerWithEmail, 
+  sendPasswordReset,
   appSignInWithGoogle, 
   isCapacitorAndroid,
   isCapacitorNative
@@ -45,6 +46,7 @@ export function AuthModal({
   // UI state
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -54,6 +56,7 @@ export function AuthModal({
     setPassword('');
     setConfirmPassword('');
     setErrorMessage(null);
+    setSuccessMessage(null);
   };
 
   const handleClose = () => {
@@ -64,6 +67,7 @@ export function AuthModal({
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
@@ -99,8 +103,29 @@ export function AuthModal({
     }
   };
 
+  const handlePasswordReset = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Enter your email address first, then select Forgot password.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await sendPasswordReset(trimmedEmail);
+      setSuccessMessage('If an account exists for this address, Firebase will send a password-reset email. Check your inbox and spam folder.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to request a password reset. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setErrorMessage(null);
+    setSuccessMessage(null);
     setIsLoading(true);
     try {
       await appSignInWithGoogle();
@@ -192,6 +217,13 @@ export function AuthModal({
 
         {/* Form Body */}
         <div className="p-5 space-y-4">
+          {successMessage && (
+            <div role="status" className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start gap-2.5 animate-in fade-in duration-150">
+              <span className="font-semibold">Password reset</span>
+              <p className="text-[11px] leading-relaxed">{successMessage}</p>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in duration-150">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -259,6 +291,19 @@ export function AuthModal({
                 />
               </div>
             </div>
+
+            {tab === 'signin' && (
+              <div className="flex justify-end -mt-1">
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handlePasswordReset}
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 underline underline-offset-2 disabled:opacity-50"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
 
             {tab === 'register' && (
               <div>

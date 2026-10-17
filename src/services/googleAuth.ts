@@ -4,6 +4,7 @@ import {
   connectAuthEmulator,
   signInWithPopup, 
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   createUserWithEmailAndPassword,
   updateProfile,
   signOut,
@@ -198,8 +199,14 @@ export const mapAuthError = (error: any): string => {
       return 'This user account has been disabled. Please contact support.';
     case 'auth/network-request-failed':
       return 'Network connection failed. Please check your internet connection and try again.';
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized in Firebase Authentication. On Android, please sign in with Email & Password.';
+    case 'auth/unauthorized-domain': {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      return `Firebase Authentication has not authorized ${hostname}. A project administrator must add this exact hostname under Firebase Console > Authentication > Settings > Authorized domains. This is a project setting, not a password problem.`;
+    }
+    case 'auth/invalid-action-code':
+      return 'This password reset link is invalid or expired. Request a new reset email.';
+    case 'auth/expired-action-code':
+      return 'This password reset link has expired. Request a new reset email.';
     case 'auth/popup-closed-by-user':
       return 'Google sign-in popup was closed before completing authentication.';
     case 'auth/popup-blocked':
@@ -225,6 +232,22 @@ export const signInWithEmail = async (email: string, pass: string): Promise<User
     return cred.user;
   } catch (error: any) {
     console.error('Email sign-in error:', error?.code || error);
+    throw new Error(mapAuthError(error));
+  }
+};
+
+/**
+ * Sends a Firebase password-reset email without storing or logging credentials.
+ */
+export const sendPasswordReset = async (email: string): Promise<void> => {
+  const normalizedEmail = email.trim();
+  if (!normalizedEmail) {
+    throw new Error('Enter your email address first, then select Forgot password.');
+  }
+  try {
+    await sendPasswordResetEmail(auth, normalizedEmail);
+  } catch (error: any) {
+    console.error('Password reset request error:', error?.code || 'unknown');
     throw new Error(mapAuthError(error));
   }
 };
