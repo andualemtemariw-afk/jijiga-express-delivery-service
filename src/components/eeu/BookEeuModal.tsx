@@ -35,8 +35,8 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   onSubmit,
   customerProfile
 }) => {
-  const [meterInput, setMeterInput] = useState<string>('0142883910293');
-  const [cardSerial, setCardSerial] = useState<string>('EEU-SM-99482');
+  const [meterInput, setMeterInput] = useState<string>('');
+  const [cardSerial, setCardSerial] = useState<string>('');
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
@@ -44,6 +44,10 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
+
+  // This is an address-bound physical errand, not a digital recharge. Never stamp an
+  // out-of-area or unknown customer profile as Jijiga; require an explicit Jijiga profile.
+  const serviceAreaAllowed = customerProfile?.city?.trim() === 'Jijiga';
 
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
   const totalDue = rechargeAmount + serviceFee;
@@ -61,10 +65,11 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meterValidation.isValid) return;
+    if (!serviceAreaAllowed || !meterValidation.isValid || !customerAuthorized) return;
+    if (!Number.isSafeInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0) return;
+    if (!customerAddress.trim() || !customerPhone.trim()) return;
 
     const hub = EEU_HUBS.find(h => h.id === selectedHubId) || EEU_HUBS[0];
-    const nowIso = new Date().toISOString();
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const customerDisplayName = customerProfile?.displayName || 'Customer';
@@ -73,7 +78,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       meterNumber: meterValidation.formatted,
       cardSerialNumber: cardSerial.trim() || undefined,
       rechargeAmount: Number(rechargeAmount),
-      customerAuthorized: true,
+      customerAuthorized,
       serviceFee: serviceFee,
       eeuHubName: hub.name,
       custodyPhase: 'WITH_CUSTOMER',
@@ -108,7 +113,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       customerId: customerProfile?.uid || '',
       customerName: customerDisplayName,
       customerPhone: customerPhone,
-      customerCity: customerProfile?.city || 'Jijiga',
+      customerCity: customerProfile?.city?.trim() || '',
       customerAddress: customerAddress,
       customerPlusCode: customerProfile?.plusCode || '8F2P+5H Jijiga',
       specialInstructions: specialNote ? `EEU Note: ${specialNote}` : '',
@@ -150,6 +155,16 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Active service area and pickup-cash expectations */}
+        <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-100 text-[11px] font-medium text-blue-900">
+          This service currently covers addresses in Jijiga only. At pickup, the rider collects your physical card and the recharge amount plus service fee.
+        </div>
+        {!serviceAreaAllowed && (
+          <div role="alert" className="mx-5 mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11px] leading-relaxed text-rose-800">
+            EEU card errands can only be requested from a customer profile whose delivery city is set to Jijiga. Your current profile city is {customerProfile?.city?.trim() || 'not set'}. Update your profile city to Jijiga before booking; this form will not overwrite an out-of-area profile.
+          </div>
+        )}
 
         {/* Chain of Custody Protocol Notice */}
         <div className="bg-amber-50 border-b border-amber-200/80 px-5 py-3 text-xs text-amber-900 flex items-start gap-2.5">
@@ -237,7 +252,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                 Cash Float / Recharge Amount (ETB)
               </label>
               <span className="text-[11px] text-emerald-700 font-bold">
-                ≈ {estimatedKwh} kWh Estimated Units
+                ≈ {estimatedKwh} kWh (estimate only)
               </span>
             </div>
             <div className="grid grid-cols-4 gap-2 mb-2">
@@ -272,7 +287,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
           {/* Pickup & Return Address */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="font-bold text-slate-800 block mb-1">Pickup & Return Address</label>
+              <label className="font-bold text-slate-800 block mb-1">Pickup & Return Address (Jijiga)</label>
               <input
                 type="text"
                 required
@@ -312,7 +327,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
           {/* Payment Method Selector */}
           <div>
             <label className="font-bold text-slate-800 block mb-1">Payment Method for Float & Errand Fee</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2">
               {(['COD'] as PaymentMethod[]).map(pm => (
                 <button
                   key={pm}
@@ -325,11 +340,15 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                   }`}
                 >
                   {pm === 'TELEBIRR' && 'Telebirr Wallet'}
-                  {pm === 'COD' && 'Cash Handover'}
+                  {pm === 'COD' && 'Cash + Card Handover at Pickup'}
                 </button>
               ))}
             </div>
           </div>
+
+          <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-900">
+            Have the selected recharge amount and ETB {serviceFee} service fee ready. The rider records card and cash pickup, the official EEU receipt, and return of your physical card. Estimated kWh is not a guaranteed tariff calculation.
+          </p>
 
           {/* Cost Summary Breakdown */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
@@ -359,7 +378,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!meterValidation.isValid || rechargeAmount <= 0}
+                disabled={!serviceAreaAllowed || !meterValidation.isValid || !customerAuthorized || !customerAddress.trim() || !customerPhone.trim() || !Number.isSafeInteger(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition"
               >
                 <span>Dispatch Rider for Card Pickup</span>

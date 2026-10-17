@@ -58,11 +58,11 @@ export const EEU_STATE_CHAIN: EeuStepConfig[] = [
   }
 ];
 
+// Only show the two Jijiga service points approved for this workflow. Do not advertise
+// unverified branches or locations outside the initial Jijiga service area.
 export const EEU_HUBS = [
-  { id: 'hub_jijiga_main', name: 'EEU Jijiga Main District Office (Keleb)', address: 'Near Regional Admin Complex, Keleb Sector' },
-  { id: 'hub_jijiga_taiwan', name: 'EEU Taiwan Market Commercial Station', address: 'Taiwan Market Commercial Center, Jijiga' },
-  { id: 'hub_jijiga_airport', name: 'EEU Garaad Wiilwaal District Kiosk', address: 'Airport Road Sub-center' },
-  { id: 'hub_diredawa_central', name: 'EEU Dire Dawa Regional Operations Hub', address: 'Kezira Business Sector, Dire Dawa' }
+  { id: 'hub_jijiga_main', name: 'EEU Jijiga Main District Office (Keleb)', address: 'Keleb, Jijiga' },
+  { id: 'hub_jijiga_taiwan', name: 'EEU Taiwan Commercial Station', address: 'Taiwan Market area, Jijiga' }
 ];
 
 /**
@@ -80,6 +80,19 @@ export function validateMeterNumber(meterNumber: string): { isValid: boolean; cl
   }
 
   return { isValid, cleaned, formatted };
+}
+
+/**
+ * Normalize a printed 20-digit STS token; spaces and hyphens may be entered for readability.
+ */
+export function normalizeEeuStsToken(token: string): string {
+  // Spaces and hyphens are presentation separators; preserve all other characters so
+  // invalid input cannot be silently transformed into a different, apparently valid token.
+  return token.replace(/[\s-]/g, '');
+}
+
+export function isValidEeuStsToken(token: string): boolean {
+  return /^\d{20}$/.test(normalizeEeuStsToken(token));
 }
 
 /**
@@ -121,11 +134,20 @@ export function validateEeuTransition(
   }
 
   // Camera receipt mandatory rule when advancing from AT_EEU_HUB to WITH_RIDER_RETURN or RETURNED
-  if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && !(currentDetails.receiptCaptured || currentDetails.receiptImageUrl)) {
-    return {
-      allowed: false,
-      reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
-    };
+  if (nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') {
+    const token = normalizeEeuStsToken(currentDetails.tokenCode || '');
+    if (!(currentDetails.receiptCaptured || currentDetails.receiptImageUrl)) {
+      return {
+        allowed: false,
+        reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
+      };
+    }
+    if (!isValidEeuStsToken(token)) {
+      return {
+        allowed: false,
+        reason: 'The 20-digit STS token must be recorded from the official EEU receipt before the card can leave the hub.'
+      };
+    }
   }
 
   return { allowed: true };

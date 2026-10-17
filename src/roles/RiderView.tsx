@@ -29,7 +29,7 @@ import { OrderMapPreview } from '../components/map/OrderMapPreview';
 import { CommunicationBridgeModal } from '../components/communication/CommunicationBridgeModal';
 import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispatchModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
-import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
+import { EEU_STATE_CHAIN, getNextEeuPhase, isValidEeuStsToken, normalizeEeuStsToken, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
 
@@ -167,13 +167,33 @@ export function RiderView({
       custodyTimeline: [...order.eeuDetails.custodyTimeline, newTimelineItem],
     };
 
+    const cashCollectedAtPickup = nextPhase === 'WITH_RIDER_OUTBOUND' && order.paymentMethod === 'COD';
     onUpdateOrder(order.id, {
       eeuDetails: updatedEeuDetails,
       status: isReturned ? 'DELIVERED' : 'PICKED_UP',
-      paymentStatus: (isReturned && order.paymentMethod === 'COD') ? 'COLLECTED_BY_RIDER' : order.paymentStatus,
+      paymentStatus: ((isReturned || cashCollectedAtPickup) && order.paymentMethod === 'COD')
+        ? 'COLLECTED_BY_RIDER'
+        : order.paymentStatus,
       riderId: currentRiderId,
       riderName: currentRiderName || 'Verified Rider'
     });
+  };
+
+  const openReceiptCamera = (order: Order) => {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    setReceiptPreviewUrl(null);
+    setReceiptFile(null);
+    setCameraTokenInput('');
+    setEeuErrorMsg(prev => ({ ...prev, [order.id]: null }));
+    setCameraOrder(order);
+  };
+
+  const closeReceiptCamera = () => {
+    if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    setReceiptPreviewUrl(null);
+    setReceiptFile(null);
+    setCameraTokenInput('');
+    setCameraOrder(null);
   };
 
   const handleReceiptFileSelected = (file?: File) => {
@@ -187,6 +207,11 @@ export function RiderView({
 
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
+    const normalizedTokenCode = normalizeEeuStsToken(cameraTokenInput);
+    if (!isValidEeuStsToken(normalizedTokenCode)) {
+      setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: 'Enter the full 20-digit STS token shown on the official EEU receipt.' }));
+      return;
+    }
     setIsCapturingReceipt(true);
     try {
       const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
@@ -195,7 +220,7 @@ export function RiderView({
         ...cameraOrder.eeuDetails,
         receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
-        tokenCode: cameraTokenInput.trim(),
+        tokenCode: normalizedTokenCode,
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
@@ -217,6 +242,7 @@ export function RiderView({
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);
+      setCameraTokenInput('');
       setCameraOrder(null);
     } catch (error: any) {
       setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: error?.message || 'Receipt upload failed.' }));
@@ -279,7 +305,9 @@ export function RiderView({
                           ? 'bg-amber-100 text-amber-800 border border-amber-300' 
                           : 'bg-emerald-100 text-emerald-800'
                       }`}>
-                        {order.paymentMethod === 'COD' ? 'Collect Cash on Delivery' : `${order.paymentMethod} Paid`}
+                        {order.serviceType === 'EEU_RECHARGE'
+                          ? (order.paymentStatus === 'COLLECTED_BY_RIDER' ? 'Cash + card collected at pickup' : 'Collect recharge float + fee at pickup')
+                          : (order.paymentMethod === 'COD' ? 'Collect Cash on Delivery' : `${order.paymentMethod} Paid`)}
                       </span>
                     </div>
                   </div>
@@ -291,7 +319,7 @@ export function RiderView({
                         order={order}
                         isRiderView={true}
                         onAdvanceState={(nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
-                        onRequestCameraReceipt={() => setCameraOrder(order)}
+                        onRequestCameraReceipt={() => openReceiptCamera(order)}
                       />
                       {eeuErrorMsg[order.id] && (
                         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
@@ -461,7 +489,7 @@ export function RiderView({
                   </div>
 
                   {/* Cash Change Calculator for COD */}
-                  {order.paymentMethod === 'COD' && order.status === 'PICKED_UP' && (
+                  {order.serviceType !== 'EEU_RECHARGE' && order.paymentMethod === 'COD' && order.status === 'PICKED_UP' && (
                     <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 text-xs">
                       <div className="flex items-center gap-2 text-amber-900 font-bold">
                         <Calculator className="w-4 h-4" />
@@ -679,7 +707,7 @@ export function RiderView({
                   <h4 className="font-bold text-sm">Mandatory Camera Intent: EEU Paper Receipt</h4>
                 </div>
                 <button
-                  onClick={() => setCameraOrder(null)}
+                  onClick={closeReceiptCamera}
                   className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -729,11 +757,16 @@ export function RiderView({
                     type="text"
                     required
                     value={cameraTokenInput}
-                    onChange={(e) => setCameraTokenInput(e.target.value)}
+                    onChange={(e) => setCameraTokenInput(normalizeEeuStsToken(e.target.value))}
                     placeholder="e.g. 4920 1928 4820 9182 3849"
                     className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider text-center font-bold"
                   />
                 </div>
+
+                <p className="text-center font-mono font-bold text-slate-500">{cameraTokenInput.length}/20 digits entered</p>
+                {cameraTokenInput.length > 0 && !/^\d*$/.test(cameraTokenInput) && (
+                  <p role="alert" className="text-center text-xs text-rose-700">Use digits only; spaces and hyphens are allowed as separators.</p>
+                )}
 
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
@@ -741,21 +774,21 @@ export function RiderView({
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
+                    The compressed receipt photo is saved in the protected order receipts subcollection. Confirm the full 20-digit token against the printed slip before submitting.
                   </p>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
-                    onClick={() => setCameraOrder(null)}
+                    onClick={closeReceiptCamera}
                     className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || !cameraTokenInput.trim()}
+                    disabled={isCapturingReceipt || !isValidEeuStsToken(cameraTokenInput)}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >

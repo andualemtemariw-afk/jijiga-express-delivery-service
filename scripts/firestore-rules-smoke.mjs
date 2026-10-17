@@ -258,14 +258,14 @@ async function main() {
   const directEeuId = 'valid-eeu-' + Date.now();
   await setDoc(doc(profileWithoutActive.db, 'orders', directEeuId), {
     id: directEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga', batchName: 'EEU recharge test',
-    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
     price: 500, quantity: 1, deliveryFee: 75, totalPrice: 575, status: 'PENDING',
     paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
-    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerName: 'New Test Customer', customerPhone: '0911000000', customerCity: 'Jijiga',
     customerPlusCode: '', customerAddress: 'Kebele 04',
     eeuDetails: {
       meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-01',
-      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
       custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
       custodyTimeline: [{ phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer authorized physical card service', actor: 'Customer' }],
       kwhUnits: 232.6
@@ -273,6 +273,189 @@ async function main() {
     createdAt: new Date().toISOString()
   });
   console.log('PASS COD EEU order created directly with meter, amount, and authorization validation');
+  const directEeuRef = doc(profileWithoutActive.db, 'orders', directEeuId);
+  const validEeuSnapshot = await getDoc(directEeuRef);
+  const validEeuData = validEeuSnapshot.data();
+  if (!validEeuData) throw new Error('Valid EEU order fixture could not be read');
+
+  const outsideEeuId = 'outside-city-eeu-' + Date.now();
+  await expectDenied('EEU orders cannot be created outside Jijiga', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', outsideEeuId), {
+      ...validEeuData, id: outsideEeuId, customerCity: 'Dire Dawa'
+    });
+  });
+
+  // Regression: do not trust a client-supplied Jijiga city when the saved profile is elsewhere.
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { city: 'Dire Dawa' });
+  const spoofedEeuId = 'spoofed-jijiga-eeu-' + Date.now();
+  await expectDenied('EEU order with forged Jijiga city is denied when saved profile is outside Jijiga', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', spoofedEeuId), {
+      ...validEeuData,
+      id: spoofedEeuId,
+      customerCity: 'Jijiga'
+    });
+  });
+  await updateDoc(doc(profileWithoutActive.db, 'users', profileWithoutActiveUid), { city: 'Jijiga' });
+
+  const unauthorizedEeuId = 'unauthorized-eeu-' + Date.now();
+  await expectDenied('EEU order requires explicit customer authorization', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', unauthorizedEeuId), {
+      ...validEeuData,
+      id: unauthorizedEeuId,
+      eeuDetails: { ...validEeuData.eeuDetails, customerAuthorized: false }
+    });
+  });
+
+  // Exercise the full physical-card custody lifecycle using only the Firebase emulator.
+  // The Admin SDK assigns the test rider; client writes below are checked by deployed-style rules.
+  await adminDb.doc(`orders/${directEeuId}`).update({
+    status: 'RIDER_ACCEPTED',
+    riderId: riderUid,
+    riderName: 'rider User'
+  });
+  const eeuRider = await clientFor('rider');
+  const eeuOrderRef = doc(eeuRider.db, 'orders', directEeuId);
+
+  await expectDenied('EEU rider cannot bypass custody using IN_TRANSIT status', async () => {
+    await updateDoc(eeuOrderRef, { status: 'IN_TRANSIT', updatedAt: new Date().toISOString() });
+  });
+  await expectDenied('EEU rider cannot mark pickup before outbound card custody', async () => {
+    await updateDoc(eeuOrderRef, { status: 'PICKED_UP', updatedAt: new Date().toISOString() });
+  });
+
+  async function attemptEeuPhase(phase, label, nextOrderStatus, nextPaymentStatus) {
+    const snapshot = await getDoc(eeuOrderRef);
+    if (!snapshot.exists()) throw new Error('EEU rider test order unexpectedly disappeared');
+    const order = snapshot.data();
+    const details = order.eeuDetails;
+    const updatedDetails = {
+      ...details,
+      custodyPhase: phase,
+      custodyLabel: label,
+      custodyTimeline: [...details.custodyTimeline, {
+        phase,
+        label,
+        timestamp: new Date().toISOString(),
+        note: `Test custody transition to ${phase}`,
+        actor: `Rider ${riderUid}`
+      }]
+    };
+    const update = {
+      eeuDetails: updatedDetails,
+      status: nextOrderStatus,
+      updatedAt: new Date().toISOString()
+    };
+    if (nextPaymentStatus !== undefined) update.paymentStatus = nextPaymentStatus;
+    await updateDoc(eeuOrderRef, update);
+  }
+
+  await expectDenied('EEU rider cannot start pickup without recording cash collection', async () => {
+    await attemptEeuPhase('WITH_RIDER_OUTBOUND', 'WITH_RIDER', 'PICKED_UP', 'UNPAID');
+  });
+  await attemptEeuPhase('WITH_RIDER_OUTBOUND', 'WITH_RIDER', 'PICKED_UP', 'COLLECTED_BY_RIDER');
+  console.log('PASS EEU rider records cash + physical card collection at pickup');
+  await attemptEeuPhase('AT_EEU_HUB', 'AT_EEU_HUB', 'PICKED_UP');
+
+  await expectDenied('EEU rider cannot return the card without receipt evidence', async () => {
+    await attemptEeuPhase('WITH_RIDER_RETURN', 'WITH_RIDER', 'PICKED_UP');
+  });
+
+  await expectDenied('EEU rider cannot create a receipt without atomically recording STS metadata', async () => {
+    await setDoc(doc(eeuRider.db, 'orders', directEeuId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,AA==',
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+  });
+
+  // Simulate an orphan/legacy receipt document: even if a receipt exists, a rider
+  // cannot leave the hub unless the parent order records receiptCaptured + a valid token.
+  const orphanEeuId = 'orphan-eeu-receipt-' + Date.now();
+  const orphanEeuDetails = {
+    ...validEeuData.eeuDetails,
+    custodyPhase: 'AT_EEU_HUB',
+    custodyLabel: 'AT_EEU_HUB',
+    custodyTimeline: [
+      { phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer handoff', actor: 'Customer' },
+      { phase: 'WITH_RIDER_OUTBOUND', label: 'WITH_RIDER', timestamp: new Date().toISOString(), note: 'Rider collected card and cash', actor: 'Rider ' + riderUid },
+      { phase: 'AT_EEU_HUB', label: 'AT_EEU_HUB', timestamp: new Date().toISOString(), note: 'Arrived at EEU hub', actor: 'Rider ' + riderUid }
+    ]
+  };
+  await adminDb.doc('orders/' + orphanEeuId).set({
+    ...validEeuData,
+    id: orphanEeuId,
+    status: 'PICKED_UP',
+    paymentStatus: 'COLLECTED_BY_RIDER',
+    riderId: riderUid,
+    riderName: 'rider User',
+    eeuDetails: orphanEeuDetails
+  });
+  await adminDb.doc('orders/' + orphanEeuId + '/receipts/terminal').set({
+    receiptImageUrl: 'data:image/jpeg;base64,AA==',
+    capturedBy: riderUid,
+    capturedAt: new Date()
+  });
+  await expectDenied('EEU rider cannot leave the hub with an orphan receipt and no recorded STS token', async () => {
+    await updateDoc(doc(eeuRider.db, 'orders', orphanEeuId), {
+      eeuDetails: {
+        ...orphanEeuDetails,
+        custodyPhase: 'WITH_RIDER_RETURN',
+        custodyLabel: 'WITH_RIDER',
+        custodyTimeline: [...orphanEeuDetails.custodyTimeline, {
+          phase: 'WITH_RIDER_RETURN',
+          label: 'WITH_RIDER',
+          timestamp: new Date().toISOString(),
+          note: 'Attempt to leave hub without recorded token',
+          actor: 'Rider ' + riderUid
+        }]
+      },
+      status: 'PICKED_UP',
+      updatedAt: new Date().toISOString()
+    });
+  });
+
+  async function captureTestEeuReceipt(tokenCode) {
+    const snapshot = await getDoc(eeuOrderRef);
+    const details = snapshot.data().eeuDetails;
+    const updatedDetails = {
+      ...details,
+      receiptCaptured: true,
+      receiptTimestamp: new Date().toISOString(),
+      tokenCode,
+      custodyTimeline: [...details.custodyTimeline, {
+        phase: 'AT_EEU_HUB',
+        label: 'AT_EEU_HUB',
+        timestamp: new Date().toISOString(),
+        note: 'Emulator test receipt capture',
+        actor: `Rider ${riderUid}`
+      }]
+    };
+    const batch = writeBatch(eeuRider.db);
+    batch.set(doc(eeuRider.db, 'orders', directEeuId, 'receipts', 'terminal'), {
+      receiptImageUrl: 'data:image/jpeg;base64,AA==',
+      capturedBy: riderUid,
+      capturedAt: new Date()
+    });
+    batch.update(eeuOrderRef, {
+      eeuDetails: updatedDetails,
+      updatedAt: new Date().toISOString()
+    });
+    await batch.commit();
+  }
+
+  await expectDenied('EEU rider cannot store a malformed STS token', async () => {
+    await captureTestEeuReceipt('12345');
+  });
+  await expectDenied('EEU rider cannot store an overlong STS token', async () => {
+    await captureTestEeuReceipt('123456789012345678901');
+  });
+  await captureTestEeuReceipt('12345678901234567890');
+  console.log('PASS EEU receipt and 20-digit STS token recorded atomically');
+
+  await attemptEeuPhase('WITH_RIDER_RETURN', 'WITH_RIDER', 'PICKED_UP');
+  await attemptEeuPhase('RETURNED', 'RETURNED', 'DELIVERED');
+  console.log('PASS EEU five-stage physical-card lifecycle reaches DELIVERED only after receipt and return');
+
 
   const zeroParcelId = 'zero-price-parcel-' + Date.now();
   await expectDenied('customer cannot set Parcel price to zero when tariff is nonzero', async () => {
@@ -315,14 +498,14 @@ async function main() {
     await setDoc(doc(profileWithoutActive.db, 'orders', mismatchedEeuId), {
       id: mismatchedEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga',
       batchName: 'Mismatched-price EEU recharge', mamilaId: 'eeu_hub',
-      mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+      mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
       price: 0, quantity: 1, deliveryFee: 75, totalPrice: 75, status: 'PENDING',
       paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
-      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerName: 'New Test Customer', customerPhone: '0911000000', customerCity: 'Jijiga',
       customerPlusCode: '', customerAddress: 'Kebele 04',
       eeuDetails: {
         meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-02',
-        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
         custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
         custodyTimeline: [{
           phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(),
@@ -694,7 +877,7 @@ async function main() {
     cardSerialNumber: 'EEU-TEST-01',
     rechargeAmount: 500,
     serviceFee: 75,
-    eeuHubName: 'EEU Jijiga Test Hub',
+    eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
     custodyPhase: 'AT_EEU_HUB',
     custodyLabel: 'AT_EEU_HUB',
     customerAuthorized: true,
@@ -757,7 +940,8 @@ async function main() {
     ...eeuDetailsFixture,
     receiptCaptured: true,
     receiptTimestamp,
-    tokenCode: '',
+    // Receipt capture and a valid 20-digit STS token are required atomically by the rules.
+    tokenCode: '12345678901234567890',
     custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
       phase: 'AT_EEU_HUB',
       label: 'AT_EEU_HUB',
@@ -777,7 +961,30 @@ async function main() {
     updatedAt: new Date().toISOString()
   });
   await receiptBatch.commit();
-  console.log('PASS assigned rider can atomically attach one capped receipt in the protected subcollection at AT_EEU_HUB');
+  console.log('PASS assigned rider atomically records receipt, metadata and valid 20-digit STS token at AT_EEU_HUB');
+
+  await expectDenied('rider cannot rewrite prior EEU custody timeline entries', async () => {
+    const tamperedTimeline = receiptEeuDetails.custodyTimeline.map((entry, index) =>
+      index === 0 ? { ...entry, note: 'Forged prior customer custody event' } : entry
+    );
+    tamperedTimeline.push({
+      phase: 'WITH_RIDER_RETURN',
+      label: 'WITH_RIDER',
+      timestamp: new Date().toISOString(),
+      note: 'Attempt to leave hub after rewriting the history',
+      actor: 'Rider ' + riderUid
+    });
+    await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+      eeuDetails: {
+        ...receiptEeuDetails,
+        custodyPhase: 'WITH_RIDER_RETURN',
+        custodyLabel: 'WITH_RIDER',
+        custodyTimeline: tamperedTimeline
+      },
+      status: 'PICKED_UP',
+      updatedAt: new Date().toISOString()
+    });
+  });
 
   await expectDenied('rider cannot replace an attached EEU receipt', async () => {
     await setDoc(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
@@ -892,8 +1099,8 @@ async function main() {
   }
   console.log('PASS order customer can read the protected receipt subcollection while order metadata stays image-free');
 
-  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
-  for (const ctx of [customer, profileWithoutActive, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
+  await Promise.all([signOut(customer.auth), signOut(profileWithoutActive.auth), signOut(eeuRider.auth), signOut(admin.auth), signOut(unverifiedAdmin.auth), signOut(nonallowlistedAdmin.auth), signOut(runner.auth), signOut(otherRunner.auth), signOut(rider.auth), signOut(otherRider.auth), signOut(inactive.auth), signOut(stranger.auth)]);
+  for (const ctx of [customer, profileWithoutActive, eeuRider, admin, unverifiedAdmin, nonallowlistedAdmin, runner, otherRunner, rider, otherRider, inactive, stranger]) await deleteClientApp(ctx.app);
   await deleteAdminApp(adminApp);
   console.log('All rules smoke tests passed, including pricing and protected EEU receipt subcollection tests.');
 }

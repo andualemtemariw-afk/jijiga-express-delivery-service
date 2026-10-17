@@ -67,22 +67,24 @@ service cloud.firestore {
 
     // Prefer the protected subcollection receipt; recognize existing legacy inline receipts during rollout.
     function hasEeuReceipt(orderId) {
+      let legacyDetails = orderDoc(orderId).data.eeuDetails;
       return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
         || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+          legacyDetails is map
+          && ('receiptImageUrl' in legacyDetails)
+          && legacyDetails.receiptImageUrl is string
+          && legacyDetails.receiptImageUrl != ''
         );
     }
 
     function hasEeuReceiptAfter(orderId) {
+      let legacyDetails = orderDoc(orderId).data.eeuDetails;
       return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
         || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
+          legacyDetails is map
+          && ('receiptImageUrl' in legacyDetails)
+          && legacyDetails.receiptImageUrl is string
+          && legacyDetails.receiptImageUrl != ''
         );
     }
 
@@ -160,7 +162,18 @@ service cloud.firestore {
     function validEeuOrder() {
       return request.resource.data.eeuDetails is map
         && request.resource.data.eeuDetails.meterNumber is string
-        && request.resource.data.eeuDetails.meterNumber.matches('^[0-9-]{13,16}$')
+        && request.resource.data.eeuDetails.meterNumber.matches('^([0-9]{13}|[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9])$')
+        // Service-area enforcement must use the saved profile, not only a client-controlled order field.
+        && currentUser().data.city == 'Jijiga'
+        && request.resource.data.customerCity == currentUser().data.city
+        && request.resource.data.customerAddress is string
+        && request.resource.data.customerAddress.size() > 0
+        && request.resource.data.customerPhone is string
+        && request.resource.data.customerPhone.size() > 0
+        && request.resource.data.eeuDetails.eeuHubName in [
+          'EEU Jijiga Main District Office (Keleb)',
+          'EEU Taiwan Commercial Station'
+        ]
         && request.resource.data.eeuDetails.rechargeAmount is number
         && request.resource.data.eeuDetails.rechargeAmount >= 100
         && request.resource.data.eeuDetails.rechargeAmount <= 15000
@@ -182,11 +195,36 @@ service cloud.firestore {
         && !('tokenCode' in request.resource.data.eeuDetails);
     }
 
+    function validEeuReceiptMetadata(details) {
+      return details is map
+        && ('receiptCaptured' in details)
+        && details.receiptCaptured == true
+        && ('receiptTimestamp' in details)
+        && details.receiptTimestamp is string
+        && ('tokenCode' in details)
+        && details.tokenCode is string
+        && details.tokenCode.matches('^[0-9]{20}$');
+    }
+
+    function hasValidEeuReceiptMetadataAfter(orderId) {
+      let orderAfter = getAfter(/databases/$(database)/documents/orders/$(orderId));
+      let detailsAfter = orderAfter.data.eeuDetails;
+      return detailsAfter is map
+        && detailsAfter.custodyPhase == 'AT_EEU_HUB'
+        && validEeuReceiptMetadata(detailsAfter);
+    }
+
     function validEeuDetailsUpdate(orderId) {
+      let changedKeys = request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys();
+      let timeline = request.resource.data.eeuDetails.custodyTimeline;
+      let previousTimeline = resource.data.eeuDetails.custodyTimeline;
+      let phase = request.resource.data.eeuDetails.custodyPhase;
+      let previousPhase = resource.data.eeuDetails.custodyPhase;
+      let receiptMetadataChanged = changedKeys.hasAny(['receiptCaptured', 'receiptTimestamp', 'tokenCode']);
       return resource.data.serviceType == 'EEU_RECHARGE'
         && resource.data.eeuDetails is map
         && request.resource.data.eeuDetails is map
-        && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
+        && changedKeys.hasOnly([
           'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode'
         ])
         && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
@@ -195,59 +233,64 @@ service cloud.firestore {
         && request.resource.data.eeuDetails.serviceFee == resource.data.eeuDetails.serviceFee
         && request.resource.data.eeuDetails.eeuHubName == resource.data.eeuDetails.eeuHubName
         && request.resource.data.eeuDetails.kwhUnits == resource.data.eeuDetails.kwhUnits
-        && request.resource.data.eeuDetails.custodyTimeline is list
-        && resource.data.eeuDetails.custodyTimeline is list
-        && request.resource.data.eeuDetails.custodyTimeline.size() == resource.data.eeuDetails.custodyTimeline.size() + 1
-        && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].actor == 'Rider ' + request.auth.uid
-        // Image data lives under /orders/{orderId}/receipts/terminal, outside the order list document.
-        // Metadata is attached once while at the hub, and only when a bounded receipt document exists.
+        && timeline is list
+        && previousTimeline is list
+        && previousTimeline.size() >= 1
+        && previousTimeline.size() <= 5
+        && timeline.size() <= 6
+        && timeline.size() == previousTimeline.size() + 1
+        // Keep every already-recorded handoff event unchanged and append exactly one event.
+        && timeline[0] == previousTimeline[0]
+        && (previousTimeline.size() < 2 || timeline[1] == previousTimeline[1])
+        && (previousTimeline.size() < 3 || timeline[2] == previousTimeline[2])
+        && (previousTimeline.size() < 4 || timeline[3] == previousTimeline[3])
+        && (previousTimeline.size() < 5 || timeline[4] == previousTimeline[4])
+        && timeline[previousTimeline.size()].actor == 'Rider ' + request.auth.uid
+        // Receipt evidence and its validated token metadata must be committed in the same batch.
         && (
-          !request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasAny([
-            'receiptCaptured', 'receiptTimestamp', 'tokenCode'
-          ])
+          !receiptMetadataChanged
           || (
-            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            previousPhase == 'AT_EEU_HUB'
+            && phase == 'AT_EEU_HUB'
             && (!('receiptCaptured' in resource.data.eeuDetails) || resource.data.eeuDetails.receiptCaptured != true)
-            && request.resource.data.eeuDetails.receiptCaptured == true
+            && validEeuReceiptMetadata(request.resource.data.eeuDetails)
             && hasEeuReceiptAfter(orderId)
-            && request.resource.data.eeuDetails.receiptTimestamp is string
-            && request.resource.data.eeuDetails.tokenCode is string
           )
         )
         && (
           (
-            request.resource.data.eeuDetails.custodyPhase == resource.data.eeuDetails.custodyPhase
-            && resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.receiptCaptured == true
-            && hasEeuReceiptAfter(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+            receiptMetadataChanged
+            && phase == previousPhase
+            && previousPhase == 'AT_EEU_HUB'
+            && timeline[previousTimeline.size()].phase == 'AT_EEU_HUB'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
-            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+            previousPhase == 'WITH_CUSTOMER'
+            && phase == 'WITH_RIDER_OUTBOUND'
             && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
+            && timeline[previousTimeline.size()].phase == 'WITH_RIDER_OUTBOUND'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
-            && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
+            previousPhase == 'WITH_RIDER_OUTBOUND'
+            && phase == 'AT_EEU_HUB'
             && request.resource.data.eeuDetails.custodyLabel == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'AT_EEU_HUB'
+            && timeline[previousTimeline.size()].phase == 'AT_EEU_HUB'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
+            previousPhase == 'AT_EEU_HUB'
+            && phase == 'WITH_RIDER_RETURN'
             && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
+            && validEeuReceiptMetadata(request.resource.data.eeuDetails)
             && hasEeuReceipt(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_RETURN'
+            && timeline[previousTimeline.size()].phase == 'WITH_RIDER_RETURN'
           )
           || (
-            resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
-            && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            previousPhase == 'WITH_RIDER_RETURN'
+            && phase == 'RETURNED'
             && request.resource.data.eeuDetails.custodyLabel == 'RETURNED'
+            && validEeuReceiptMetadata(request.resource.data.eeuDetails)
             && hasEeuReceipt(orderId)
-            && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'RETURNED'
+            && timeline[previousTimeline.size()].phase == 'RETURNED'
           )
         );
     }
@@ -429,39 +472,26 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    match /orders/{orderId} {
-      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
-      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
-      allow read: if signedIn() && (
-        isAdmin()
-        || resource.data.customerId == request.auth.uid
-        || (isRunner() && (
-          resource.data.runnerId == request.auth.uid
-          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
-        ))
-        || (isRider() && (
-          resource.data.riderId == request.auth.uid
-          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
-        ))
-      );
-
-      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
-      allow create: if signedIn() && validCustomerOrderCreate();
-
-      allow update: if signedIn() && (
-        (isAdmin()
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+    // Role-specific helpers cache affected keys once and dispatch avoids evaluating unrelated branches.
+    function validAdminOrderUpdate() {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return (isAdmin()
+          && !changedKeys.hasAny([
             'paymentStatus', 'paymentProvider', 'paymentReference', 'paymentVerifiedAt', 'paymentMerchantOrderId', 'paymentCheckoutPrepayId', 'paymentCheckoutCreatedAt'
           ])
-        )
-        || (
+        );
+    }
+
+    function validCustomerOrderUpdate(orderId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return isCustomer() && (
           // Customer may cancel eligible orders, rate delivered orders, and file/update a dispute.
           resource.data.customerId == request.auth.uid
           && request.resource.data.customerId == resource.data.customerId
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.deliveryFee == resource.data.deliveryFee
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
+          && changedKeys.hasOnly(['status', 'rating', 'reviewComment', 'dispute'])
           && (
             request.resource.data.status == resource.data.status
             || (
@@ -485,8 +515,12 @@ service cloud.firestore {
             )
             || (resource.data.status in ['DELIVERED', 'RATED'] && request.resource.data.status in ['DELIVERED', 'RATED'])
           )
-        )
-        || (
+        );
+    }
+
+    function validRunnerOrderUpdate() {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return (
           isRunner()
           && (
             (resource.data.runnerId == request.auth.uid && validRunnerTransition())
@@ -501,17 +535,21 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && changedKeys.hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['runnerTagId'])
+            !changedKeys.hasAny(['runnerTagId'])
             || (
               request.resource.data.runnerTagId is string
               && request.resource.data.runnerTagId.matches('^TAG-ET-[0-9]{5}$')
               && (!('runnerTagId' in resource.data) || resource.data.runnerTagId == null || request.resource.data.runnerTagId == resource.data.runnerTagId)
             )
           )
-        )
-        || (
+        );
+    }
+
+    function validRiderOrderUpdate(orderId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return (
           isRider()
           && (
             (resource.data.riderId == request.auth.uid && validRiderTransition())
@@ -526,7 +564,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && changedKeys.hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
           && (
             request.resource.data.status == 'DELIVERED'
             ? (
@@ -535,10 +573,18 @@ service cloud.firestore {
                 : resource.data.paymentStatus == 'PAID_CONFIRMED'
                   && request.resource.data.paymentStatus == 'PAID_CONFIRMED'
             )
-            : request.resource.data.paymentStatus == resource.data.paymentStatus
+            : (
+              resource.data.serviceType == 'EEU_RECHARGE'
+                && resource.data.paymentMethod == 'COD'
+                && resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+                && request.resource.data.eeuDetails is map
+                && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_OUTBOUND'
+              ? request.resource.data.paymentStatus == 'COLLECTED_BY_RIDER'
+              : request.resource.data.paymentStatus == resource.data.paymentStatus
+            )
           )
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['eeuDetails'])
+            !changedKeys.hasAny(['eeuDetails'])
             || validEeuDetailsUpdate(orderId)
           )
           && (
@@ -546,29 +592,91 @@ service cloud.firestore {
             || resource.data.serviceType != 'EEU_RECHARGE'
             || request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
           )
+          // Keep order status and physical-card custody phase aligned, including writes
+          // that attempt to bypass the dedicated five-step EEU lifecycle.
           && (
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
+            resource.data.serviceType != 'EEU_RECHARGE'
+            || (
+              request.resource.data.status == 'RIDER_ACCEPTED'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase == 'WITH_CUSTOMER'
+            )
+            || (
+              request.resource.data.status == 'PICKED_UP'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase in [
+                'WITH_RIDER_OUTBOUND', 'AT_EEU_HUB', 'WITH_RIDER_RETURN'
+              ]
+            )
+            || (
+              request.resource.data.status == 'DELIVERED'
+              && request.resource.data.eeuDetails is map
+              && request.resource.data.eeuDetails.custodyPhase == 'RETURNED'
+            )
+          )
+          && (
+            !changedKeys.hasAny(['riderCoordinates', 'riderLocationUpdatedAt'])
             || request.resource.data.riderLocationUpdatedAt is string
           )
-        )
+        );
+    }
+
+    // Dispatch by the authenticated profile role before evaluating role-specific update checks.
+    // This prevents unrelated role branches from consuming the expression budget on every write.
+    function validOrderUpdateForRole(orderId) {
+      let role = getUserRole();
+      return role == 'admin' ? validAdminOrderUpdate()
+        : role == 'customer' ? validCustomerOrderUpdate(orderId)
+        : role == 'runner' ? validRunnerOrderUpdate()
+        : role == 'rider' ? validRiderOrderUpdate(orderId)
+        : false;
+    }
+
+    function validOrderUpdate(orderId) {
+      return signedIn() && validOrderUpdateForRole(orderId);
+    }
+    match /orders/{orderId} {
+      // Customer sees only own orders; runners/riders see dispatch pools and their assigned work;
+      // admins see all orders. No generic "active order" read for arbitrary signed-in users.
+      allow read: if signedIn() && (
+        isAdmin()
+        || resource.data.customerId == request.auth.uid
+        || (isRunner() && (
+          resource.data.runnerId == request.auth.uid
+          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+        ))
+        || (isRider() && (
+          resource.data.riderId == request.auth.uid
+          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+        ))
       );
+
+      // Customer-created orders always start in PENDING state and cannot self-assign couriers.
+      allow create: if signedIn() && validCustomerOrderCreate();
+
+      allow update: if validOrderUpdate(orderId);
 
       allow delete: if isAdmin();
 
       match /receipts/{receiptId} {
         // Load the image only when an authorized participant opens the receipt.
         allow read: if isAdmin() || isOrderCustomer(orderId) || isOrderRunner(orderId) || isOrderRider(orderId);
+        // Receipt photo and its 20-digit STS metadata must be saved atomically on the parent order.
         allow create: if receiptId == 'terminal'
           && isOrderRider(orderId)
           && orderDoc(orderId).data.serviceType == 'EEU_RECHARGE'
           && orderDoc(orderId).data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
           && (!('receiptCaptured' in orderDoc(orderId).data.eeuDetails) || orderDoc(orderId).data.eeuDetails.receiptCaptured != true)
+          && hasValidEeuReceiptMetadataAfter(orderId)
           && request.resource.data.keys().hasOnly(['receiptImageUrl', 'capturedBy', 'capturedAt'])
           && request.resource.data.capturedBy == request.auth.uid
           && request.resource.data.capturedAt is timestamp
           && request.resource.data.receiptImageUrl is string
-          && request.resource.data.receiptImageUrl.size() <= 300000
-          && request.resource.data.receiptImageUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$');
+          && (
+            request.resource.data.receiptImageUrl.size() <= 300000
+              ? request.resource.data.receiptImageUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')
+              : false
+          );
         // Receipt evidence is immutable after creation.
         allow update, delete: if false;
       }
