@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Read-only coding assistant for the Jijiga Express Delivery Service repository",
   "scripts": {
-    "build": "node scripts/safety-check.mjs",
+    "build": "node scripts/build.mjs",
     "test": "node scripts/safety-check.mjs"
   },
   "devDependencies": {
