@@ -1,8 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { strict as assert } from "node:assert";
+import { Script } from "node:vm";
 
 const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const api = await readFile(new URL("../api/agent.ts", import.meta.url), "utf8");
+
+// Catch accidental duplicate/trailing HTML and malformed inline JavaScript before publishing.
+assert.equal((html.match(/<html\b/gi) || []).length, 1, "Page must contain exactly one html element");
+assert.equal((html.match(/<\/html>/gi) || []).length, 1, "Page must contain exactly one closing html tag");
+assert.match(html, /<\/html>\s*$/i, "No content may appear after the closing html tag");
+const inlineScripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+assert.equal(inlineScripts.length, 1, "Page must contain exactly one inline script block");
+new Script(inlineScripts[0][1], { filename: "ai-coding-agent/index.html inline script" });
+assert.match(html, /reportedCostUsd/, "The UI must surface reported model cost");
+assert.match(html, /Model cost was not reported; verify it in OpenRouter Activity\./, "Unknown cost must be disclosed");
 
 assert.match(html, /FREE-TIER ONLY/, "UI must state the free-tier-only intent");
 assert.match(html, /No Firebase connection/, "UI must state no Firebase access");
