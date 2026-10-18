@@ -48,6 +48,9 @@ export async function createServiceOrder(order: Record<string, unknown>): Promis
   payload.status = 'PENDING';
   payload.paymentMethod = 'COD';
   payload.paymentStatus = 'UNPAID';
+  // Explicit nulls make new orders discoverable by role-scoped availability queries.
+  payload.runnerId = null;
+  payload.riderId = null;
   payload.createdAt = serverTimestamp();
 
   // No optimistic success from this helper: Firestore must accept the write under rules.
