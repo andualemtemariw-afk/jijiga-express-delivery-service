@@ -16,7 +16,7 @@ type ResponseLike = {
 
 const OWNER = "andualemtemariw-afk";
 const REPO = "jijiga-express-delivery-service";
-const MODEL = "gemini-3.5-flash-lite";
+const MODEL = "openrouter/free";
 const MAX_TASK_CHARS = 4000;
 const MAX_OUTPUT_TOKENS = 2000;
 const MAX_SOURCE_CHARS = 6200;
@@ -200,11 +200,11 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
     return json(res, 405, { error: "Use POST for this endpoint." });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || "";
+  const apiKey = process.env.OPENROUTER_API_KEY || "";
   const expectedCode = process.env.AGENT_ACCESS_CODE || "";
   if (!apiKey || !expectedCode) {
     return json(res, 503, {
-      error: "Agent is safely locked. Configure GEMINI_API_KEY and AGENT_ACCESS_CODE in the Vercel Preview environment only. No AI request was sent."
+      error: "Agent is safely locked. Configure OPENROUTER_API_KEY and AGENT_ACCESS_CODE in the Vercel Preview environment only. No AI request was sent."
     });
   }
 
@@ -263,36 +263,80 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       context
     ].join("\n\n");
 
-    const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "X-Title": "Jijiga Express Code Lab",
+      },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: MAX_OUTPUT_TOKENS, candidateCount: 1 }
+        model: MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_INSTRUCTION },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        // Fail closed to providers that deny data collection and support zero data retention.
+        provider: { data_collection: "deny", zdr: true },
       }),
-      signal: AbortSignal.timeout(25000)
+      signal: AbortSignal.timeout(25000),
     });
 
     if (upstream.status === 429) {
-      return json(res, 429, { error: "Gemini free-tier quota or rate limit reached. Check active limits in Google AI Studio and retry later. The agent will not switch to a paid model." });
+      return json(res, 429, { error: "OpenRouter free-tier rate limit reached. The agent will not switch to a paid model. Retry after the provider's quota window resets." });
     }
     if (upstream.status === 401 || upstream.status === 403) {
-      return json(res, 502, { error: "Google AI Studio rejected the preview key or project. Verify the free-tier key in Vercel Preview variables; do not attach billing or enable a paid tier." });
+      return json(res, 502, { error: "OpenRouter rejected the preview key or request. Verify OPENROUTER_API_KEY in Vercel Preview variables; do not add credits or enable paid models for this $0 setup." });
+    }
+    if (upstream.status === 402) {
+      return json(res, 502, { error: "OpenRouter rejected the request because of account or billing restrictions. This agent is configured for free inference only; do not add credits to resolve this error." });
+    }
+    if (upstream.status === 404 || upstream.status === 503) {
+      return json(res, 502, { error: "No available free model/provider met the required privacy constraints, or the free router is temporarily unavailable. The agent fails closed and will not fall back to a paid model." });
     }
     if (!upstream.ok) {
-      return json(res, 502, { error: `Gemini free-tier request failed (HTTP ${upstream.status}). No model fallback was attempted.` });
+      return json(res, 502, { error: `OpenRouter free-model request failed (HTTP ${upstream.status}). No paid model fallback was requested.` });
     }
 
     const data = await upstream.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>;
+      choices?: Array<{
+        message?: { content?: string | Array<{ type?: string; text?: string }> };
+        finish_reason?: string;
+      }>;
+      provider?: string;
+      usage?: { cost?: number | string };
     };
-    const answer = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
-    if (!answer) return json(res, 502, { error: "Gemini returned no text. It may have hit a safety or response limit; retry with a narrower task." });
+    const rawContent = data.choices?.[0]?.message?.content;
+    const answer = typeof rawContent === "string"
+      ? rawContent.trim()
+      : Array.isArray(rawContent)
+        ? rawContent.map((part) => part.text || "").join("").trim()
+        : "";
+    const rawCost = data.usage?.cost;
+    const parsedCost = typeof rawCost === "number"
+      ? rawCost
+      : typeof rawCost === "string" && rawCost.trim()
+        ? Number(rawCost)
+        : null;
+    const reportedCostUsd = parsedCost !== null && Number.isFinite(parsedCost) ? parsedCost : null;
+
+    if (reportedCostUsd !== null && reportedCostUsd > 0) {
+      return json(res, 502, {
+        error: "OpenRouter reported a non-zero request cost. Stop using this key for the agent and review the OpenRouter activity dashboard before retrying.",
+        reportedCostUsd
+      });
+    }
+    if (!answer) {
+      return json(res, 502, { error: "OpenRouter returned no text. A free provider may have hit a safety, capacity, or response limit; retry later." });
+    }
 
     return json(res, 200, {
       answer,
       model: MODEL,
+      provider: data.provider || null,
+      reportedCostUsd,
       branch: ref,
       filesRead: available.map((entry) => entry.path),
       mode: "read-only"
