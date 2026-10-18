@@ -94,25 +94,76 @@ export function subscribeToOrdersByRole(
   onError?: (err: Error) => void
 ) {
   const ordersRef = collection(db, ORDERS_COLLECTION);
-  let q;
+  const orderFromDoc = (docSnap: { id: string; data: () => any }): Order => {
+    const data = docSnap.data();
+    return {
+      ...data,
+      id: docSnap.id,
+      createdAt: data.createdAt instanceof Timestamp
+        ? data.createdAt.toDate()
+        : new Date(data.createdAt || Date.now()),
+    } as Order;
+  };
 
-  // Structure queries so they satisfy the security rules constraints
+  // A staff query must be narrow enough that every possible result is readable under
+  // Firestore Rules. Assigned work and available work are never mixed in one query.
+  if (userRole === 'runner' || userRole === 'rider') {
+    const assignmentField = userRole === 'runner' ? 'runnerId' : 'riderId';
+    const availableStatuses = userRole === 'runner'
+      ? ['PENDING', 'TRANSACTION_PENDING']
+      : ['READY_FOR_RIDER', 'VERIFIED_READY'];
+    const assignedOrders = new Map<string, Order>();
+    const availableOrders = new Map<string, Order>();
+
+    const emitOrders = () => {
+      const merged = new Map<string, Order>();
+      assignedOrders.forEach((order, id) => merged.set(id, order));
+      availableOrders.forEach((order, id) => merged.set(id, order));
+      const loadedOrders = [...merged.values()];
+      loadedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onOrdersUpdated(loadedOrders);
+    };
+
+    const handleSubscriptionError = (err: Error) => {
+      console.warn('Firestore subscription notice:', err.message);
+      onError?.(err);
+    };
+
+    const assignedQuery = query(
+      ordersRef,
+      where(assignmentField, '==', userUid),
+      limit(50)
+    );
+    const availableQuery = query(
+      ordersRef,
+      where(assignmentField, '==', null),
+      where('status', 'in', availableStatuses),
+      limit(50)
+    );
+
+    const unsubscribeAssigned = onSnapshot(assignedQuery, (snapshot) => {
+      assignedOrders.clear();
+      snapshot.docs.forEach((docSnap) => assignedOrders.set(docSnap.id, orderFromDoc(docSnap)));
+      emitOrders();
+    }, handleSubscriptionError);
+
+    const unsubscribeAvailable = onSnapshot(availableQuery, (snapshot) => {
+      availableOrders.clear();
+      snapshot.docs.forEach((docSnap) => availableOrders.set(docSnap.id, orderFromDoc(docSnap)));
+      emitOrders();
+    }, handleSubscriptionError);
+
+    return () => {
+      unsubscribeAssigned();
+      unsubscribeAvailable();
+    };
+  }
+
+  let q;
   if (userRole === 'admin') {
     q = query(ordersRef, limit(100));
-  } else if (userRole === 'runner') {
-    q = query(
-      ordersRef,
-      where('status', 'in', ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED', 'VERIFIED_READY', 'READY_FOR_RIDER']),
-      limit(50)
-    );
-  } else if (userRole === 'rider') {
-    q = query(
-      ordersRef,
-      where('status', 'in', ['READY_FOR_RIDER', 'RIDER_DISPATCHED', 'RIDER_ACCEPTED', 'IN_TRANSIT', 'PICKED_UP', 'DELIVERED']),
-      limit(50)
-    );
   } else {
-    // Default to Customer: strictly query own orders
+    // Default to Customer: strictly query own orders.
     q = query(
       ordersRef,
       where('customerId', '==', userUid),
@@ -123,17 +174,7 @@ export function subscribeToOrdersByRole(
   return onSnapshot(
     q,
     (snapshot) => {
-      const loadedOrders: Order[] = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
-        return {
-          ...data,
-          id: docSnap.id,
-          createdAt: data.createdAt instanceof Timestamp
-            ? data.createdAt.toDate()
-            : new Date(data.createdAt || Date.now()),
-        } as Order;
-      });
-
+      const loadedOrders: Order[] = snapshot.docs.map(orderFromDoc);
       loadedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onOrdersUpdated(loadedOrders);
     },
@@ -195,6 +236,8 @@ export async function saveOrderToFirestore(order: Order): Promise<string> {
     ...order,
     id: orderId,
     customerId: user.uid,
+    runnerId: null,
+    riderId: null,
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : (order.createdAt || new Date().toISOString()),
     updatedAt: serverTimestamp(),
   };
