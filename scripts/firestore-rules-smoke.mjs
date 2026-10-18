@@ -593,6 +593,7 @@ async function main() {
   const riderAssignedQueue = await getDocs(query(
     collection(rider.db, 'orders'),
     where('riderId', '==', riderUid),
+    where('status', 'in', ['RIDER_ACCEPTED', 'PICKED_UP']),
     limit(50)
   ));
   if (!riderAssignedQueue.docs.some((entry) => entry.id === validOrder.id)) {
@@ -652,6 +653,7 @@ async function main() {
   const runnerAssignedQueue = await getDocs(query(
     collection(runner.db, 'orders'),
     where('runnerId', '==', runnerUid),
+    where('status', 'in', ['RUNNER_ASSIGNED']),
     limit(50)
   ));
   if (!runnerAssignedQueue.docs.some((entry) => entry.id === unassignedOrderId)) {
