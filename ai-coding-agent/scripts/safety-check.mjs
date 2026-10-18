@@ -13,6 +13,7 @@ assert.match(api, /OPENROUTER_API_KEY/, "OpenRouter key must be server-side env 
 assert.match(api, /openrouter\.ai\/api\/v1\/chat\/completions/, "API must call OpenRouter directly");
 assert.match(api, /data_collection:\s*"deny"/, "API must deny provider data collection");
 assert.match(api, /zdr:\s*true/, "API must require zero-data-retention providers");
+assert.match(api, /max_price:\s*\{\s*prompt:\s*0,\s*completion:\s*0,\s*request:\s*0\s*\}/, "API must reject providers with non-zero token or per-request pricing");
 assert.match(api, /reportedCostUsd/, "API must reject and surface reported non-zero cost");
 assert.match(api, /AGENT_ACCESS_CODE/, "API must fail closed without the preview access code");
 assert.match(api, /MAX_OUTPUT_TOKENS = 2000/, "Output must be bounded");
