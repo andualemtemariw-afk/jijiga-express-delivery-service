@@ -109,6 +109,9 @@ export function subscribeToOrdersByRole(
   // Firestore Rules. Assigned work and available work are never mixed in one query.
   if (userRole === 'runner' || userRole === 'rider') {
     const assignmentField = userRole === 'runner' ? 'runnerId' : 'riderId';
+    const assignedStatuses = userRole === 'runner'
+      ? ['RUNNER_ASSIGNED']
+      : ['RIDER_ACCEPTED', 'PICKED_UP'];
     const availableStatuses = userRole === 'runner'
       ? ['PENDING', 'TRANSACTION_PENDING']
       : ['READY_FOR_RIDER', 'VERIFIED_READY'];
@@ -132,6 +135,7 @@ export function subscribeToOrdersByRole(
     const assignedQuery = query(
       ordersRef,
       where(assignmentField, '==', userUid),
+      where('status', 'in', assignedStatuses),
       limit(50)
     );
     const availableQuery = query(
