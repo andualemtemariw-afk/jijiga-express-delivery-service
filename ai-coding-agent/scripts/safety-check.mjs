@@ -16,6 +16,9 @@ assert.match(html, /reportedCostUsd/, "The UI must surface reported model cost")
 assert.match(html, /Model cost was not reported; verify it in OpenRouter Activity\./, "Unknown cost must be disclosed");
 
 assert.match(html, /FREE-TIER ONLY/, "UI must state the free-tier-only intent");
+assert.match(html, /Uses the fixed OpenRouter free-model router/, "UI must name the configured OpenRouter router");
+assert.match(html, /OpenRouter providers that deny data collection and support zero data retention/, "UI must explain the active provider privacy requirements");
+assert.doesNotMatch(html, /Gemini|Google states that content/i, "UI must not display stale Gemini provider/privacy claims");
 assert.match(html, /No Firebase connection/, "UI must state no Firebase access");
 assert.match(html, /No GitHub write access/, "UI must state no repository writes");
 assert.match(html, /Do not paste API keys/, "UI must warn users not to paste secrets");
