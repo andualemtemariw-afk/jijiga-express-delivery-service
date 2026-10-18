@@ -114,17 +114,17 @@
 
       <aside class="panel">
         <h3>Safety & cost controls</h3>
-        <div class="rule"><div class="check">✓</div><div><strong>No Vercel AI Gateway</strong><p>Uses one fixed Gemini free-tier model directly. No paid-model fallback or automatic top-up path.</p></div></div>
+        <div class="rule"><div class="check">✓</div><div><strong>No Vercel AI Gateway</strong><p>Uses the fixed OpenRouter free-model router. Provider data collection is denied and zero data retention is required; no paid-model fallback is requested.</p></div></div>
         <div class="rule"><div class="check">✓</div><div><strong>No Firebase connection</strong><p>No Firestore reads/writes, live customer records, payment actions, or production credentials.</p></div></div>
         <div class="rule"><div class="check">✓</div><div><strong>No GitHub write access</strong><p>Reads selected source files from a branch. It can suggest patches, but cannot commit or open a pull request.</p></div></div>
         <div class="rule"><div class="check">✓</div><div><strong>Fail closed</strong><p>Requests are rejected if the preview key or access code is missing, or if free-tier quota is exceeded.</p></div></div>
-        <div class="warning"><strong>Free-tier privacy note:</strong> Google states that content submitted on its free Gemini API tier may be used to improve its products. Send source code only if you accept that policy. Never submit secrets or private customer/order data.</div>
+        <div class="warning"><strong>Free-tier privacy note:</strong> requests require OpenRouter providers that deny data collection and support zero data retention. Eligible free providers may be unavailable; in that case the request fails closed. Source redaction is best-effort, not a guarantee. Never submit secrets or private customer/order data.</div>
       </aside>
     </div>
 
     <footer>
       <span>Jijiga Express Delivery Service · Phase 1</span>
-      <span><a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noreferrer">Gemini pricing</a> · <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noreferrer">Free-tier limits</a></span>
+      <span><a href="https://openrouter.ai/openrouter/free" target="_blank" rel="noreferrer">OpenRouter free router</a> · <a href="https://openrouter.ai/pricing" target="_blank" rel="noreferrer">Pricing & limits</a></span>
     </footer>
   </div>
 
@@ -163,11 +163,67 @@
           body: JSON.stringify({ task, branch })
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.error || ('Request failed with status ' + response.status));
+        if (!response.ok) {
+          const message = body.error || ('Request failed with status ' + response.status);
+          if (typeof body.reportedCostUsd === 'number') {
+            throw new Error(message + ' Reported cost: 
         result.textContent = body.answer || 'The model returned no text.';
         resultSection.hidden = false;
         status.dataset.kind = 'success';
-        status.textContent = 'Analysis complete. This response is advice only; no file was modified, committed, or deployed.';
+        const costSummary = body.reportedCostUsd === 0
+          ? 'Reported model cost: $0.00.'
+          : typeof body.reportedCostUsd === 'number'
+            ? 'Reported model cost: 
+      } catch (error) {
+        status.dataset.kind = 'error';
+        status.textContent = error instanceof Error ? error.message : 'Request failed. No changes were made.';
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Analyze repository';
+      }
+    });
+  </script>
+</body>
+</html>
+ + body.reportedCostUsd.toFixed(6) + '.'
+            : 'Model cost was not reported; verify it in OpenRouter Activity.';
+        status.textContent = 'Analysis complete. ' + costSummary + ' This response is advice only; no file was modified, committed, or deployed.';
+      } catch (error) {
+        status.dataset.kind = 'error';
+        status.textContent = error instanceof Error ? error.message : 'Request failed. No changes were made.';
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Analyze repository';
+      }
+    });
+  </script>
+</body>
+</html>
+ + body.reportedCostUsd.toFixed(6) + '.');
+          }
+          throw new Error(message);
+        }
+        result.textContent = body.answer || 'The model returned no text.';
+        resultSection.hidden = false;
+        status.dataset.kind = 'success';
+        const costSummary = body.reportedCostUsd === 0
+          ? 'Reported model cost: $0.00.'
+          : typeof body.reportedCostUsd === 'number'
+            ? 'Reported model cost: 
+      } catch (error) {
+        status.dataset.kind = 'error';
+        status.textContent = error instanceof Error ? error.message : 'Request failed. No changes were made.';
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Analyze repository';
+      }
+    });
+  </script>
+</body>
+</html>
+ + body.reportedCostUsd.toFixed(6) + '.'
+            : 'Model cost was not reported; verify it in OpenRouter Activity.';
+        status.textContent = 'Analysis complete. ' + costSummary + ' This response is advice only; no file was modified, committed, or deployed.';
       } catch (error) {
         status.dataset.kind = 'error';
         status.textContent = error instanceof Error ? error.message : 'Request failed. No changes were made.';
