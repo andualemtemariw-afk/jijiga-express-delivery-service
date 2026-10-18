@@ -5,7 +5,8 @@
   "description": "Read-only coding assistant for the Jijiga Express Delivery Service repository",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/safety-check.mjs"
+    "test": "node scripts/safety-check.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
