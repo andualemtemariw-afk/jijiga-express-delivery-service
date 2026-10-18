@@ -279,7 +279,7 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
         temperature: 0.2,
         max_tokens: MAX_OUTPUT_TOKENS,
         // Fail closed to providers that deny data collection and support zero data retention.
-        provider: { data_collection: "deny", zdr: true },
+        provider: { data_collection: "deny", zdr: true, max_price: { prompt: 0, completion: 0, request: 0 } },
       }),
       signal: AbortSignal.timeout(25000),
     });
