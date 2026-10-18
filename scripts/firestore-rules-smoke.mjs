@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where, runTransaction, writeBatch } from 'firebase/firestore';
 
 import { createRequire } from 'node:module';
 const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -590,6 +590,19 @@ async function main() {
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
 
+  const riderAssignedQueue = await getDocs(query(
+    collection(rider.db, 'orders'),
+    where('riderId', '==', riderUid),
+    limit(50)
+  ));
+  if (!riderAssignedQueue.docs.some((entry) => entry.id === validOrder.id)) {
+    throw new Error('FAIL rider cannot list their own assigned orders');
+  }
+  console.log('PASS rider can list their own assigned orders');
+  await expectDenied('rider cannot list another rider assigned orders', async () => {
+    await getDocs(query(collection(otherRider.db, 'orders'), where('riderId', '==', riderUid), limit(50)));
+  });
+
   const unassignedOrderId = 'test-unassigned-order-' + Date.now();
   await adminDb.doc(`orders/${unassignedOrderId}`).set({
     id: unassignedOrderId,
@@ -612,8 +625,21 @@ async function main() {
     customerCity: 'Jijiga',
     customerPlusCode: '',
     customerAddress: 'Kebele 04',
+    runnerId: null,
+    riderId: null,
     createdAt: new Date().toISOString()
   });
+
+  const runnerAvailableQueue = await getDocs(query(
+    collection(runner.db, 'orders'),
+    where('runnerId', '==', null),
+    where('status', 'in', ['PENDING', 'TRANSACTION_PENDING']),
+    limit(50)
+  ));
+  if (!runnerAvailableQueue.docs.some((entry) => entry.id === unassignedOrderId)) {
+    throw new Error('FAIL runner cannot list explicitly-unassigned eligible orders');
+  }
+  console.log('PASS runner can list explicitly-unassigned eligible orders');
 
   // Runner can claim an unassigned pending order with RUNNER_ASSIGNED status
   await updateDoc(doc(runner.db, 'orders', unassignedOrderId), {
@@ -622,6 +648,53 @@ async function main() {
     status: 'RUNNER_ASSIGNED'
   });
   console.log('PASS runner can claim unassigned order with RUNNER_ASSIGNED status');
+
+  const runnerAssignedQueue = await getDocs(query(
+    collection(runner.db, 'orders'),
+    where('runnerId', '==', runnerUid),
+    limit(50)
+  ));
+  if (!runnerAssignedQueue.docs.some((entry) => entry.id === unassignedOrderId)) {
+    throw new Error('FAIL runner cannot list their own assigned order');
+  }
+  console.log('PASS runner can list their own assigned orders');
+
+  const otherRunnerAssignedOrderId = 'test-other-runner-assigned-' + Date.now();
+  await adminDb.doc(`orders/${otherRunnerAssignedOrderId}`).set({
+    ...validOrder,
+    id: otherRunnerAssignedOrderId,
+    status: 'RUNNER_ASSIGNED',
+    runnerId: otherRunnerUid,
+    runnerName: 'other-runner User',
+    riderId: null
+  });
+  await expectDenied('runner cannot list another runner assigned orders', async () => {
+    await getDocs(query(collection(runner.db, 'orders'), where('runnerId', '==', otherRunnerUid), limit(50)));
+  });
+
+  // A concurrent claim race must have exactly one winner, even if both clients read first.
+  const runnerRaceOrderId = 'test-runner-claim-race-' + Date.now();
+  await adminDb.doc(`orders/${runnerRaceOrderId}`).set({
+    ...validOrder,
+    id: runnerRaceOrderId,
+    status: 'PENDING',
+    runnerId: null,
+    riderId: null
+  });
+  const attemptRunnerClaim = (client, uid, displayName) => runTransaction(client.db, async (tx) => {
+    const orderRef = doc(client.db, 'orders', runnerRaceOrderId);
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists()) throw new Error('runner race fixture missing');
+    tx.update(orderRef, { runnerId: uid, runnerName: displayName, status: 'RUNNER_ASSIGNED' });
+  });
+  const runnerRaceResults = await Promise.allSettled([
+    attemptRunnerClaim(runner, runnerUid, 'runner User'),
+    attemptRunnerClaim(otherRunner, otherRunnerUid, 'other-runner User')
+  ]);
+  if (runnerRaceResults.filter((result) => result.status === 'fulfilled').length !== 1) {
+    throw new Error('FAIL concurrent runner claims did not produce exactly one winner');
+  }
+  console.log('PASS concurrent runners cannot both claim the same order');
 
   // Competing runner cannot claim an already claimed order
   await expectDenied('competing runner cannot steal already claimed order', async () => {
@@ -647,6 +720,42 @@ async function main() {
     runnerTagId: validTag
   });
   console.log('PASS runner can seal and hand over with valid TAG-ET-##### tag');
+
+  const riderAvailableQueue = await getDocs(query(
+    collection(rider.db, 'orders'),
+    where('riderId', '==', null),
+    where('status', 'in', ['READY_FOR_RIDER', 'VERIFIED_READY']),
+    limit(50)
+  ));
+  if (!riderAvailableQueue.docs.some((entry) => entry.id === unassignedOrderId)) {
+    throw new Error('FAIL rider cannot list eligible orders waiting for dispatch');
+  }
+  console.log('PASS rider can list explicitly-unassigned dispatch-ready orders');
+
+  // A concurrent rider race must have exactly one winner.
+  const riderRaceOrderId = 'test-rider-claim-race-' + Date.now();
+  await adminDb.doc(`orders/${riderRaceOrderId}`).set({
+    ...validOrder,
+    id: riderRaceOrderId,
+    status: 'READY_FOR_RIDER',
+    runnerId: runnerUid,
+    runnerName: 'runner User',
+    riderId: null
+  });
+  const attemptRiderClaim = (client, uid, displayName) => runTransaction(client.db, async (tx) => {
+    const orderRef = doc(client.db, 'orders', riderRaceOrderId);
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists()) throw new Error('rider race fixture missing');
+    tx.update(orderRef, { riderId: uid, riderName: displayName, status: 'RIDER_ACCEPTED' });
+  });
+  const riderRaceResults = await Promise.allSettled([
+    attemptRiderClaim(rider, riderUid, 'rider User'),
+    attemptRiderClaim(otherRider, otherRiderUid, 'other-rider User')
+  ]);
+  if (riderRaceResults.filter((result) => result.status === 'fulfilled').length !== 1) {
+    throw new Error('FAIL concurrent rider claims did not produce exactly one winner');
+  }
+  console.log('PASS concurrent riders cannot both claim the same order');
 
   // Tag immutability: Runner cannot overwrite or change existing tag
   await expectDenied('runner cannot overwrite or mutate an existing saved tag', async () => {
