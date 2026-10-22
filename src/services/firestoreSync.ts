@@ -4,7 +4,7 @@ import {
   setDoc, 
   onSnapshot, 
   getDocs, 
-  getDocFromServer,
+  getDoc,
   query, 
   where,
   limit,
@@ -21,16 +21,9 @@ import { INITIAL_BATCHES, MAMILAS } from '../data';
  */
 export async function testConnection(): Promise<void> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDoc(doc(db, 'test', 'connection'));
   } catch (error: any) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('the client is offline') ||
-       error.message.includes('unavailable') ||
-       (error as any).code === 'unavailable')
-    ) {
-      console.info("Firestore client is offline or connecting. Local IndexedDB persistence is active.");
-    }
+    console.info("Firestore connection probe deferred; local IndexedDB persistence active.");
   }
 }
 testConnection();

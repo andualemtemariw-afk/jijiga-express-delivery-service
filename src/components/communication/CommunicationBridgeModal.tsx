@@ -34,7 +34,13 @@ import {
   FileText,
   AlertCircle,
   MessageCircle,
-  ExternalLink
+  ExternalLink,
+  Bell,
+  VolumeX,
+  RefreshCw,
+  Sliders,
+  CheckCircle,
+  BellRing
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -43,6 +49,22 @@ import {
   generateCustomerUpdateMessage,
   formatPhoneForWhatsApp 
 } from '../../utils/whatsappDispatch';
+import { 
+  getNotificationPermission,
+  requestNotificationPermission,
+  getNotificationSettings,
+  updateNotificationSettings,
+  triggerTestNotification,
+  getNotificationLogs,
+  clearNotificationLogs,
+  generateAutomatedSmsPayload,
+  generateAutomatedWhatsAppPayload,
+  NotificationSettings,
+  NotificationLog,
+  isPushSupported
+} from '../../services/notificationService';
+
+export type ModalTab = 'chat' | 'whatsapp' | 'notifications' | 'call' | 'sms' | 'ussd';
 
 interface Props {
   isOpen: boolean;
@@ -54,9 +76,8 @@ interface Props {
   targetPhone: string;
   messages: ChatMessage[];
   onSendMessage: (orderId: string, message: Omit<ChatMessage, 'id' | 'orderId'>) => void;
+  initialTab?: ModalTab;
 }
-
-type ModalTab = 'chat' | 'whatsapp' | 'call' | 'sms' | 'ussd';
 
 export function CommunicationBridgeModal({
   isOpen,
@@ -67,11 +88,18 @@ export function CommunicationBridgeModal({
   targetName,
   targetPhone,
   messages,
-  onSendMessage
+  onSendMessage,
+  initialTab
 }: Props) {
-  const [activeTab, setActiveTab] = useState<ModalTab>('chat');
+  const [activeTab, setActiveTab] = useState<ModalTab>(initialTab || 'chat');
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('so');
   const [inputText, setInputText] = useState('');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
   
   // Voice note playback state
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
@@ -89,6 +117,42 @@ export function CommunicationBridgeModal({
 
   // Auto-scroll chat to bottom
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Automated Notification & Web Push State
+  const [notifPermission, setNotifPermission] = useState<string>(() => getNotificationPermission());
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>(() => getNotificationSettings());
+  const [notifLogs, setNotifLogs] = useState<NotificationLog[]>(() => getNotificationLogs());
+  const [isTestingNotif, setIsTestingNotif] = useState(false);
+  const [testNotifResult, setTestNotifResult] = useState<'success' | 'blocked' | null>(null);
+
+  const handleRequestPushPermission = async () => {
+    const res = await requestNotificationPermission();
+    setNotifPermission(res);
+    setNotifSettings(getNotificationSettings());
+  };
+
+  const handleToggleSetting = (key: keyof NotificationSettings) => {
+    const updated = updateNotificationSettings({ [key]: !notifSettings[key] });
+    setNotifSettings(updated);
+  };
+
+  const handleTriggerTestNotification = async () => {
+    setIsTestingNotif(true);
+    setTestNotifResult(null);
+    try {
+      const ok = await triggerTestNotification();
+      setTestNotifResult(ok ? 'success' : 'blocked');
+      setNotifLogs(getNotificationLogs());
+    } finally {
+      setIsTestingNotif(false);
+      setTimeout(() => setTestNotifResult(null), 4000);
+    }
+  };
+
+  const handleClearLogs = () => {
+    clearNotificationLogs();
+    setNotifLogs([]);
+  };
 
   useEffect(() => {
     if (activeTab === 'chat' && chatScrollRef.current) {
@@ -314,6 +378,24 @@ export function CommunicationBridgeModal({
             >
               <MessageCircle className="w-3.5 h-3.5" />
               <span>WhatsApp Dispatch</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab('notifications');
+                setNotifLogs(getNotificationLogs());
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                activeTab === 'notifications' 
+                  ? 'bg-blue-600 text-white shadow-xs' 
+                  : 'text-blue-700 hover:text-blue-900 bg-blue-50'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Automated Alerts</span>
+              {notifPermission === 'granted' && notifSettings.webPushEnabled && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
             </button>
 
             <button
@@ -826,6 +908,236 @@ export function CommunicationBridgeModal({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: AUTOMATED NOTIFICATIONS & ALERTS BRIDGE */}
+        {activeTab === 'notifications' && (
+          <div className="p-6 space-y-6 bg-slate-50 flex-1 overflow-y-auto">
+            {/* Top Banner */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-start justify-between gap-3.5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900">Automated Dispatch & Web Push Alert System</h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Real-time notifications sent to customer and courier devices when order progresses from Mamila stall to doorstep.
+                  </p>
+                </div>
+              </div>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 border ${
+                notifPermission === 'granted'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : notifPermission === 'denied'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}>
+                {notifPermission === 'granted' ? '● Push Active' : notifPermission === 'denied' ? '✕ Push Blocked' : '○ Permission Needed'}
+              </span>
+            </div>
+
+            {/* BROWSER WEB PUSH SETTINGS CARD */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">Browser Push Notifications</span>
+                  <span className="text-[11px] text-slate-500">
+                    Receive system alerts even when the app is in the background or device screen is locked.
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {notifPermission !== 'granted' ? (
+                    <button
+                      type="button"
+                      onClick={handleRequestPushPermission}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                    >
+                      <BellRing className="w-3.5 h-3.5" />
+                      <span>Enable Web Push</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleTriggerTestNotification}
+                      disabled={isTestingNotif}
+                      className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isTestingNotif ? 'animate-spin' : ''}`} />
+                      <span>Test Push Alert</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {testNotifResult && (
+                <div className={`p-3 rounded-xl text-xs flex items-center gap-2 font-medium ${
+                  testNotifResult === 'success' 
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    {testNotifResult === 'success'
+                      ? 'Test notification sent! Check your device notification tray & sound.'
+                      : 'Browser notification blocked. Please allow notifications in browser site settings.'}
+                  </span>
+                </div>
+              )}
+
+              {/* Toggles Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-900 block">Push Alerts</span>
+                    <span className="text-[10px] text-slate-500">Order state changes</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={notifSettings.webPushEnabled}
+                    onChange={() => handleToggleSetting('webPushEnabled')}
+                    className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-900 block">Sound Chime</span>
+                    <span className="text-[10px] text-slate-500">Walkie audio alert</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={notifSettings.soundEnabled}
+                    onChange={() => handleToggleSetting('soundEnabled')}
+                    className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-900 block">Vibration</span>
+                    <span className="text-[10px] text-slate-500">Haptic phone pulse</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={notifSettings.vibrateEnabled}
+                    onChange={() => handleToggleSetting('vibrateEnabled')}
+                    className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* AUTOMATED SMS & WHATSAPP MULTI-STAGE DISPATCH */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 shadow-2xs">
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">
+                  Automated SMS & WhatsApp Dispatch Alerts for Order #{order.id}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Pre-composed alerts ready to send instantly to customer ({order.customerPhone || 'Customer'}) or courier fleet.
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {[
+                  { stage: 'PLACED', title: '1. Order Placed & Confirmed', desc: 'Alerts customer that order is registered and awaiting runner inspection' },
+                  { stage: 'RUNNER', title: '2. Runner at Store (Inspection)', desc: 'Alerts customer that runner is verifying quality and applying tamper-seal' },
+                  { stage: 'TRANSIT', title: '3. Out for Delivery (Rider)', desc: 'Alerts customer with rider name, phone, and estimated doorstep arrival time' },
+                  { stage: 'DELIVERED', title: '4. Order Delivered', desc: 'Alerts customer that package is at doorstep, with thank-you receipt note' },
+                ].map((item) => {
+                  const smsData = generateAutomatedSmsPayload(order, item.stage as any);
+                  const waData = generateAutomatedWhatsAppPayload(order, item.stage as any);
+
+                  return (
+                    <div key={item.stage} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900">{item.title}</span>
+                        <span className="text-[10px] font-mono text-slate-400 font-semibold">{item.stage}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-mono bg-white p-2.5 rounded-lg border border-slate-200/80 leading-relaxed">
+                        {smsData.body}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <a
+                          href={smsData.smsUrl}
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Dispatch via SMS</span>
+                        </a>
+
+                        <a
+                          href={waData.waUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Dispatch via WhatsApp</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(smsData.body, `auto_${item.stage}`)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ml-auto"
+                        >
+                          <Copy className="w-3 h-3 text-slate-400" />
+                          <span>{copiedKey === `auto_${item.stage}` ? 'Copied!' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* NOTIFICATION LOGS & AUDIT HISTORY */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">Recent Dispatch Logs</span>
+                  <span className="text-[11px] text-slate-500">Audit trail of automated notifications sent during this session</span>
+                </div>
+                {notifLogs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearLogs}
+                    className="text-[11px] text-slate-500 hover:text-rose-600 font-semibold cursor-pointer"
+                  >
+                    Clear Logs
+                  </button>
+                )}
+              </div>
+
+              {notifLogs.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  No automated alerts dispatched yet. Test or advance an order status to trigger live alerts.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {notifLogs.map((log) => (
+                    <div key={log.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{log.title}</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">
+                            {log.channel}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600">{log.body}</p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

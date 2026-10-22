@@ -1,8 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Batch, Order, PaymentMethod, ChatMessage } from '../types';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Batch, Order, PaymentMethod, ChatMessage, OrderStatus } from '../types';
 import { CITIES, MAMILAS } from '../data';
-import { OrderSearchFilterBar, OrderFilterState } from '../components/orders/OrderSearchFilterBar';
-import { extractAvailableCities, applyOrderFilters } from '../utils/orderFilterUtils';
 import { 
   MapPin, 
   Clock, 
@@ -39,7 +37,10 @@ import {
   Leaf,
   LogIn,
   Save,
-  Check
+  Check,
+  Mic,
+  Bell,
+  BellRing
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadOrderReceiptToDrive } from '../services/googleDrive';
@@ -54,7 +55,15 @@ import { BookEeuModal } from '../components/eeu/BookEeuModal';
 import { KhatMarketplaceModal } from '../components/khat/KhatMarketplaceModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { MamilaGallery, MamilaGalleryItem } from '../components/mamila/MamilaGallery';
-import { CommunicationBridgeModal } from '../components/communication/CommunicationBridgeModal';
+import { CommunicationBridgeModal, ModalTab } from '../components/communication/CommunicationBridgeModal';
+import { OrderHistory } from '../components/orders/OrderHistory';
+import { OrderProgressStepper } from '../components/orders/OrderProgressStepper';
+import { 
+  notifyOrderStatusChange, 
+  getNotificationPermission, 
+  requestNotificationPermission, 
+  isPushSupported 
+} from '../services/notificationService';
 import { LatLng, DEFAULT_CUSTOMER_COORDINATES, CITY_COORDINATES } from '../utils/geo';
 import { AppUserProfile } from '../types';
 
@@ -155,29 +164,7 @@ export function CustomerView({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelToast, setCancelToast] = useState<string | null>(null);
   
-  // History filters
-  const [historyServiceFilter, setHistoryServiceFilter] = useState<'ALL' | 'FOOD' | 'PARCEL' | 'RIDE' | 'EEU_RECHARGE' | 'KHAT'>('ALL');
-  const [historyFilter, setHistoryFilter] = useState<'ALL' | 'DELIVERED' | 'ACTIVE' | 'CANCELLED' | 'DEFECT_REJECTED'>('ALL');
-  const [customerOrderFilters, setCustomerOrderFilters] = useState<OrderFilterState>({
-    searchQuery: '',
-    status: 'ALL',
-    city: 'ALL',
-    startDate: '',
-    endDate: '',
-  });
 
-  const availableCustomerCities = useMemo(() => extractAvailableCities(myOrders), [myOrders]);
-
-  const handleResetCustomerFilters = () => {
-    setCustomerOrderFilters({
-      searchQuery: '',
-      status: 'ALL',
-      city: 'ALL',
-      startDate: '',
-      endDate: '',
-    });
-    setHistoryServiceFilter('ALL');
-  };
 
   const handleSelectFromGallery = (galleryItem: MamilaGalleryItem) => {
     const matching = inventory.find(b => b.name === galleryItem.batchName) || {
@@ -211,9 +198,11 @@ export function CustomerView({
     name: string;
     phone: string;
     order: Order;
+    initialTab?: ModalTab;
   } | null>(null);
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
+  const [notificationPermissionState, setNotificationPermissionState] = useState<string>(() => getNotificationPermission());
 
   // Sync profile fields from authenticated profile
   useMemo(() => {
@@ -267,6 +256,65 @@ export function CustomerView({
   const activeOrder = myOrders.find(
     o => o.status !== 'RATED' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED'
   );
+
+  // Automated Web Push & Audio chime on order status transitions
+  const previousStatusRef = useRef<OrderStatus | undefined>(activeOrder?.status);
+  const previousOrderIdRef = useRef<string | undefined>(activeOrder?.id);
+
+  useEffect(() => {
+    if (!activeOrder) {
+      previousStatusRef.current = undefined;
+      previousOrderIdRef.current = undefined;
+      return;
+    }
+
+    // New active order initialized
+    if (previousOrderIdRef.current !== activeOrder.id) {
+      previousOrderIdRef.current = activeOrder.id;
+      previousStatusRef.current = activeOrder.status;
+      notifyOrderStatusChange(activeOrder, undefined);
+      return;
+    }
+
+    // Active order advanced stage
+    if (previousStatusRef.current !== activeOrder.status) {
+      const prev = previousStatusRef.current;
+      previousStatusRef.current = activeOrder.status;
+      notifyOrderStatusChange(activeOrder, prev);
+    }
+  }, [activeOrder?.id, activeOrder?.status]);
+
+  const handleOpenNotificationCenter = async () => {
+    if (isPushSupported() && Notification.permission === 'default') {
+      const res = await requestNotificationPermission();
+      setNotificationPermissionState(res);
+    }
+
+    const targetOrder = activeOrder || myOrders[0] || ({
+      id: 'SYS-NOTIF',
+      batchId: 'BATCH-01',
+      batchName: 'Jijiga Express Delivery Hub',
+      mamilaId: 'MAMILA-01',
+      mamilaName: 'Central Dispatch Hub',
+      mamilaLocation: 'Taiwan Market, Jijiga',
+      price: 0,
+      totalPrice: 0,
+      paymentMethod: 'COD',
+      status: 'PENDING',
+      placedAt: new Date().toISOString(),
+      customerPhone: customerProfile?.phone || '0911234567',
+      customerCity: selectedCity,
+      customerAddress: address,
+    } as unknown as Order);
+
+    setCommunicationTarget({
+      role: targetOrder.riderId ? 'RIDER' : 'RUNNER',
+      name: targetOrder.riderName || targetOrder.runnerName || 'Central Courier Dispatch',
+      phone: targetOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+      order: targetOrder,
+      initialTab: 'notifications'
+    });
+  };
 
   const handleOpenCheckout = (batch: Batch) => {
     setSelectedBatch(batch);
@@ -368,17 +416,6 @@ export function CustomerView({
   // Categories list
   const categories = ['ALL', 'Khat Marketplace', 'Hotel & Restaurant', 'Fresh Farm Produce', 'Bakery & Pastries', 'Dairy & Eggs', 'Restaurant & Drinks'];
 
-  // History filtering
-  const filteredHistory = useMemo(() => {
-    let result = applyOrderFilters(myOrders, customerOrderFilters);
-
-    // Also filter by service type if selected
-    if (historyServiceFilter !== 'ALL') {
-      result = result.filter(o => (o.serviceType || 'FOOD') === historyServiceFilter);
-    }
-
-    return result;
-  }, [myOrders, customerOrderFilters, historyServiceFilter]);
 
   return (
     <div className="space-y-6">
@@ -491,6 +528,23 @@ export function CustomerView({
               <span>EEU Card Recharge</span>
             </button>
           )}
+
+          {/* Automated Notifications & Push Alerts Center Button */}
+          <button
+            onClick={handleOpenNotificationCenter}
+            title={`Live Alerts & Web Push (${notificationPermissionState})`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all cursor-pointer whitespace-nowrap border border-slate-300 shadow-2xs"
+          >
+            {notificationPermissionState === 'granted' ? (
+              <div className="relative">
+                <BellRing className="w-3.5 h-3.5 text-blue-600" />
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+            ) : (
+              <Bell className="w-3.5 h-3.5 text-slate-600" />
+            )}
+            <span>Alerts</span>
+          </button>
 
           <div className="hidden md:flex items-center gap-2 px-3 text-xs text-slate-500 border-l border-slate-200">
             <MapPin className="w-3.5 h-3.5 text-blue-600" />
@@ -627,7 +681,7 @@ export function CustomerView({
                   <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                     <button
                       onClick={() => setBatchDisplayMode('grid')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer active:scale-95 ${
                         batchDisplayMode === 'grid'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
@@ -638,7 +692,7 @@ export function CustomerView({
                     </button>
                     <button
                       onClick={() => setBatchDisplayMode('gallery')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer active:scale-95 ${
                         batchDisplayMode === 'gallery'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
@@ -669,7 +723,7 @@ export function CustomerView({
                   <button
                     key={cat}
                     onClick={() => setCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 cursor-pointer ${
                       categoryFilter === cat 
                         ? 'bg-slate-900 text-white shadow-xs' 
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -1159,73 +1213,43 @@ export function CustomerView({
                   </div>
                 )}
 
-                {/* Visual Step-Bar or EEU Chain of Custody Stepper */}
-                {activeOrder.serviceType === 'EEU_RECHARGE' ? (
-                  <EeuCustodyStepper order={activeOrder} />
-                ) : (
-                  (() => {
-                    let activeIndex = 0;
-                    switch (activeOrder.status) {
-                      case 'RUNNER_ASSIGNED':
-                      case 'READY_FOR_RIDER':
-                        activeIndex = 0;
-                        break;
-                      case 'RIDER_ACCEPTED':
-                        activeIndex = 1;
-                        break;
-                      case 'PICKED_UP':
-                        activeIndex = 2;
-                        break;
-                      case 'DELIVERED':
-                      case 'RATED':
-                        activeIndex = 3;
-                        break;
-                      default:
-                        activeIndex = 0;
-                    }
-
-                    const steps = [
-                      { key: 'PREPARING', label: 'Preparing', icon: Package },
-                      { key: 'PICKUP', label: 'Pickup', icon: Store },
-                      { key: 'TRANSIT', label: 'Transit', icon: Bike },
-                      { key: 'DELIVERED', label: 'Delivered', icon: CheckCircle2 }
-                    ];
-
-                    return (
-                      <div className="relative flex justify-between items-center px-2 md:px-8 py-4">
-                        <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-slate-100 rounded-full" />
-                        
-                        <div 
-                          className="absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-blue-600 rounded-full transition-all duration-500 ease-in-out"
-                          style={{ width: `calc(${(activeIndex / (steps.length - 1)) * 100}% - 4rem)` }} 
-                        />
-
-                        {steps.map((step, idx) => {
-                          const isPast = idx <= activeIndex;
-                          const isCurrent = idx === activeIndex;
-                          const Icon = step.icon;
-                          
-                          return (
-                            <div key={step.key} className="relative z-10 flex flex-col items-center gap-3 w-20">
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 ${
-                                isPast 
-                                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                                  : 'bg-white border-2 border-slate-200 text-slate-400'
-                              } ${isCurrent ? 'ring-4 ring-blue-100' : ''}`}>
-                                <Icon className="w-5 h-5" />
-                              </div>
-                              <span className={`text-xs md:text-sm font-semibold text-center transition-colors duration-500 ${
-                                isPast ? 'text-slate-900' : 'text-slate-400'
-                              }`}>
-                                {step.label}
-                              </span>
-                            </div>
-                          );
-                        })}
+                {/* Courier Voice Delivery Note */}
+                {activeOrder.courierDeliveryNote && (
+                  <div className="p-3 bg-indigo-50/90 border border-indigo-200 rounded-xl flex items-start gap-2.5 text-xs text-indigo-950">
+                    <span className="p-1 rounded-md bg-indigo-600 text-white mt-0.5 shadow-2xs shrink-0">
+                      <Mic className="w-3.5 h-3.5" />
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-indigo-900 text-[11px] uppercase tracking-wider">
+                          Courier Audio Delivery Note ({activeOrder.courierNoteAuthor || 'Courier'})
+                        </span>
+                        {activeOrder.courierNoteUpdatedAt && (
+                          <span className="text-[10px] text-indigo-500 font-mono">
+                            {new Date(activeOrder.courierNoteUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
                       </div>
-                    );
-                  })()
+                      <p className="mt-0.5 text-indigo-900 italic font-medium">"{activeOrder.courierDeliveryNote}"</p>
+                    </div>
+                  </div>
                 )}
+
+                {/* 4-Stage Intuitive Fulfillment Progress Stepper (Pending, Runner, Rider, Delivered) */}
+                <div className="space-y-4">
+                  <OrderProgressStepper order={activeOrder} variant="expanded" />
+
+                  {/* Supplemental EEU Custody Stepper if EEU Recharge */}
+                  {activeOrder.serviceType === 'EEU_RECHARGE' && (
+                    <div className="pt-2">
+                      <div className="text-xs font-bold text-amber-900 mb-2 flex items-center gap-1.5">
+                        <Zap className="w-4 h-4 text-amber-600" />
+                        <span>Prepaid Card Physical Custody Chain:</span>
+                      </div>
+                      <EeuCustodyStepper order={activeOrder} />
+                    </div>
+                  )}
+                </div>
 
                 {/* Interactive Google Maps Order Map Preview */}
                 <div className="space-y-3">
@@ -1333,18 +1357,36 @@ export function CustomerView({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setCommunicationTarget({
-                        role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
-                        name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                        phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
-                        order: activeOrder
-                      })}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      Open Quick-Chat & Audio
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setCommunicationTarget({
+                          role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
+                          name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
+                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          order: activeOrder,
+                          initialTab: 'chat'
+                        })}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Quick-Chat & Audio</span>
+                      </button>
+
+                      <button
+                        onClick={() => setCommunicationTarget({
+                          role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
+                          name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
+                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          order: activeOrder,
+                          initialTab: 'notifications'
+                        })}
+                        className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                        title="Configure Web Push, SMS & WhatsApp automated dispatch alerts"
+                      >
+                        <BellRing className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Push & SMS Alerts</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Latest Message Preview snippet */}
@@ -1437,339 +1479,23 @@ export function CustomerView({
 
       {/* TAB 3: ORDER HISTORY & RECEIPTS */}
       {activeTab === 'history' && (
-        <div className="max-w-4xl mx-auto space-y-6">
-          {!currentUser ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-4 shadow-xs">
-              <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-                <History className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Sign In to View Order History</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
-                  Persistent order receipts, dispute tracking, and proof-of-delivery milestones are stored securely in Cloud Firestore for your account.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onSignIn}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-xs inline-flex items-center gap-2"
-              >
-                <LogIn className="w-4 h-4" />
-                Sign In with Google
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Delivery & Order History</h2>
-                  <p className="text-slate-500 dark:text-slate-400 text-xs">Past orders, parcel tracking, rides, dispute claims & receipts.</p>
-                </div>
-
-                {/* Service Filter Segmented Control */}
-                <div className="flex bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
-                  {[
-                    { id: 'ALL', label: 'All Services' },
-                    { id: 'FOOD', label: 'Food & Groceries' },
-                    { id: 'PARCEL', label: 'Express Parcels' },
-                    { id: 'RIDE', label: 'Rides' },
-                    { id: 'EEU_RECHARGE', label: 'EEU Recharge' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setHistoryServiceFilter(tab.id as any)}
-                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                        historyServiceFilter === tab.id
-                          ? 'bg-slate-900 dark:bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Customer Search & Filter Bar */}
-              <OrderSearchFilterBar
-                filters={customerOrderFilters}
-                onFilterChange={(newF) => setCustomerOrderFilters(prev => ({ ...prev, ...newF }))}
-                onReset={handleResetCustomerFilters}
-                availableCities={availableCustomerCities}
-                totalOrders={myOrders.length}
-                filteredOrdersCount={filteredHistory.length}
-                title="Search Your Orders & Deliveries"
-              />
-
-              <div className="space-y-4">
-            {filteredHistory.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center text-slate-500 dark:text-slate-400 space-y-2">
-                <p className="font-semibold text-sm">No orders found matching your search or filters.</p>
-                <button
-                  onClick={handleResetCustomerFilters}
-                  className="px-4 py-2 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold text-xs rounded-xl border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-colors cursor-pointer"
-                >
-                  Clear All Filters
-                </button>
-              </div>
-            ) : (
-              filteredHistory.map(order => (
-                <div key={order.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">
-                          {order.serviceType === 'KHAT' ? '🌿' : order.serviceType === 'PARCEL' ? '📦' : order.serviceType === 'RIDE' ? '🚖' : order.serviceType === 'EEU_RECHARGE' ? '⚡' : '🍱'}
-                        </span>
-                        <h4 className="font-bold text-slate-900 text-base">{order.batchName}</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          order.status === 'DELIVERED' || order.status === 'RATED'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : order.status === 'CANCELLED' || order.status === 'DEFECT_REJECTED'
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-blue-50 text-blue-700 border-blue-200'
-                        }`}>
-                          {order.status === 'DEFECT_REJECTED' ? 'Declined' : order.status.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">
-                        Order #{order.id} · {new Date(order.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-
-                    <div className="text-left sm:text-right">
-                      <span className="text-base font-extrabold text-slate-900 font-mono tabular-nums">{order.totalPrice || order.price} ETB</span>
-                      <span className="text-xs text-slate-500 block font-medium">{order.paymentMethod}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600">
-                    <div>
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Store / Hub</span>
-                      <span className="font-semibold text-slate-800">{order.mamilaName}</span>
-                      <span className="text-slate-500 block text-[11px]">{order.mamilaLocation}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Destination</span>
-                      <span className="font-semibold text-slate-800">{order.customerCity || 'Jijiga'}</span>
-                      <span className="text-slate-500 block text-[11px]">{order.customerAddress || order.customerPlusCode}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Cost Breakdown</span>
-                      <span className="font-mono tabular-nums">{order.price} ETB (items) + {order.deliveryFee || 0} ETB (tariff)</span>
-                      <span className="text-slate-500 block text-[11px]">Qty: {order.quantity || 1} unit</span>
-                    </div>
-                  </div>
-
-                  {/* Parcel Details display if applicable */}
-                  {order.parcelDetails && (
-                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs space-y-1.5">
-                      <div className="flex items-center justify-between font-bold text-blue-900">
-                        <span className="flex items-center gap-1.5">
-                          <Package className="w-4 h-4 text-blue-600" />
-                          Tracking: {order.parcelDetails.trackingCode}
-                        </span>
-                        <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-[10px]">
-                          {order.parcelDetails.parcelCategory} • {order.parcelDetails.weightCategory}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1">
-                        <div><strong>Sender:</strong> {order.parcelDetails.senderName} ({order.parcelDetails.senderCity})</div>
-                        <div><strong>Receiver:</strong> {order.parcelDetails.receiverName} ({order.parcelDetails.receiverCity})</div>
-                      </div>
-                      <p className="text-slate-600 italic">"{order.parcelDetails.description}"</p>
-                    </div>
-                  )}
-
-                  {/* Ride Details display if applicable */}
-                  {order.rideDetails && (
-                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs space-y-1.5">
-                      <div className="flex items-center justify-between font-bold text-indigo-900">
-                        <span className="flex items-center gap-1.5">
-                          <Bike className="w-4 h-4 text-indigo-600" />
-                          {order.rideDetails.vehicleType === 'MARHABA_TAXI' ? 'Jijiga Express Taxi' : 'Jijiga Express Moto'} • {order.rideDetails.city}
-                        </span>
-                        <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded text-[10px]">
-                          Plate: {order.rideDetails.licensePlate || 'SL-88492'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1">
-                        <div><strong>Pickup:</strong> {order.rideDetails.pickupLocation}</div>
-                        <div><strong>Dropoff:</strong> {order.rideDetails.dropoffLocation}</div>
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        Driver: <strong>{order.rideDetails.driverName}</strong> ({order.rideDetails.vehicleModel})
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Khat Marketplace Details display */}
-                  {order.khatDetails && (
-                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs space-y-1.5">
-                      <div className="flex items-center justify-between font-bold text-emerald-950">
-                        <span className="flex items-center gap-1.5">
-                          <Leaf className="w-4 h-4 text-emerald-600" />
-                          <span>Preferred Mamila: {order.khatDetails.mamilaName}</span>
-                        </span>
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px]">
-                          {order.khatDetails.grade} • {order.khatDetails.origin}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1">
-                        <div><strong>Quantity:</strong> {order.khatDetails.bundlesCount} bundles ({order.khatDetails.bundleWrapType})</div>
-                        <div><strong>Landmark:</strong> {order.khatDetails.deliveryLandmark}</div>
-                      </div>
-                      {order.khatDetails.preferredMamilaCustomerNote && (
-                        <p className="text-emerald-800 italic">"Note for Mamila: {order.khatDetails.preferredMamilaCustomerNote}"</p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Cooking Instruction (from walkthrough video at 01:04) */}
-                  {order.cookingInstruction && (
-                    <div className="text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-amber-900 flex items-start gap-2">
-                      <MessageSquare className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-bold text-amber-950">Cooking / Prep Instruction: </span>
-                        <span className="italic font-medium">"{order.cookingInstruction}"</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Special Note */}
-                  {order.specialInstructions && (
-                    <div className="text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-slate-700">
-                      <span className="font-semibold text-slate-900">Note: </span>
-                      "{order.specialInstructions}"
-                    </div>
-                  )}
-
-                  {/* Declined / Defect Reason (matching video at 00:15) */}
-                  {order.defectReason && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-950 space-y-1">
-                      <div className="font-bold text-rose-900 flex items-center gap-1.5">
-                        <XCircle className="w-4 h-4 text-rose-600" />
-                        Declined by Quality Inspector / Runner
-                      </div>
-                      <p className="text-rose-800">{order.defectReason}</p>
-                    </div>
-                  )}
-
-                  {/* Rating / Dispute Status Display */}
-                  {order.rating && (
-                    <div className="flex items-center gap-2 p-2.5 bg-amber-50/70 border border-amber-200/60 rounded-xl text-xs text-amber-900">
-                      <div className="flex items-center text-amber-500">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star 
-                            key={i} 
-                            className={`w-3.5 h-3.5 ${i < order.rating! ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} 
-                          />
-                        ))}
-                      </div>
-                      <span className="font-semibold font-mono tabular-nums">Rated {order.rating}/5</span>
-                      {order.reviewComment && <span className="text-slate-600 italic ml-1">"{order.reviewComment}"</span>}
-                    </div>
-                  )}
-
-                  {order.dispute && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-950 space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold flex items-center gap-1.5 text-rose-900">
-                          <ShieldAlert className="w-4 h-4 text-rose-600" />
-                          Dispute: {order.dispute.reason}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          order.dispute.status === 'RESOLVED' 
-                            ? 'bg-emerald-100 text-emerald-800' 
-                            : order.dispute.status === 'REFUNDED'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {order.dispute.status}
-                        </span>
-                      </div>
-                      <p className="text-rose-800">{order.dispute.comment}</p>
-                      {order.dispute.resolutionNote && (
-                        <p className="text-emerald-800 font-semibold pt-1 border-t border-rose-200">
-                          Resolution: {order.dispute.resolutionNote}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Action Buttons for Orders */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setWhatsAppOrder(order)}
-                      className="px-3.5 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                      title="Share Order or Notify Courier via WhatsApp"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>WhatsApp Dispatch</span>
-                    </button>
-
-                    {onOpenMapPreview && (
-                      <button
-                        onClick={() => onOpenMapPreview(order)}
-                        className="px-3.5 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold hover:bg-blue-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <MapIcon className="w-3.5 h-3.5 text-blue-600" />
-                        Map Preview
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => setReceiptOrder(order)}
-                      className="px-3.5 py-1.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-slate-500" />
-                      View Receipt
-                    </button>
-
-                    {(order.status === 'DELIVERED' || order.status === 'RATED') && (
-                      <>
-                        {!order.rating && (
-                          <button
-                            onClick={() => setRatingOrder(order)}
-                            className="px-3.5 py-1.5 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                          >
-                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                            Rate Experience
-                          </button>
-                        )}
-
-                        {!order.dispute && (
-                          <button
-                            onClick={() => setDisputeOrder(order)}
-                            className="px-3.5 py-1.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                          >
-                            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
-                            Report Issue
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => {
-                            const matchedBatch = inventory.find(b => b.id === order.batchId);
-                            if (matchedBatch) {
-                              handleOpenCheckout(matchedBatch);
-                              setActiveTab('batches');
-                            }
-                          }}
-                          className="px-3.5 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
-                        >
-                          Re-Order
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-            </>
-          )}
+        <div className="max-w-4xl mx-auto">
+          <OrderHistory
+            currentUser={currentUser}
+            fallbackOrders={myOrders}
+            inventory={inventory}
+            onOpenReceipt={(order) => setReceiptOrder(order)}
+            onOpenWhatsApp={(order) => setWhatsAppOrder(order)}
+            onOpenMapPreview={onOpenMapPreview}
+            onRateOrder={(order) => setRatingOrder(order)}
+            onDisputeOrder={(order) => setDisputeOrder(order)}
+            onReOrder={(batch) => {
+              handleOpenCheckout(batch);
+              setActiveTab('batches');
+            }}
+            onCancelOrder={onCancelOrder}
+            onSignIn={onSignIn}
+          />
         </div>
       )}
 
@@ -2194,7 +1920,7 @@ export function CustomerView({
       </AnimatePresence>
 
       {/* DRIVER & RUNNER VERNACULAR COMMUNICATION BRIDGE MODAL */}
-      {communicationTarget && onSendMessage && (
+      {communicationTarget && (
         <CommunicationBridgeModal
           isOpen={!!communicationTarget}
           onClose={() => setCommunicationTarget(null)}
@@ -2204,7 +1930,8 @@ export function CustomerView({
           targetName={communicationTarget.name}
           targetPhone={communicationTarget.phone}
           messages={(orderMessages && orderMessages[communicationTarget.order.id]) || []}
-          onSendMessage={onSendMessage}
+          onSendMessage={onSendMessage || (() => {})}
+          initialTab={communicationTarget.initialTab}
         />
       )}
       {/* BOOK PARCEL MODAL */}

@@ -98,3 +98,65 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// 4. Web Push Notification Event
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'Jijiga Express Delivery Update',
+    body: 'Your delivery status has been updated.',
+    data: { url: '/' },
+  };
+
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload.body = event.data.text();
+    }
+  }
+
+  const notificationOptions = {
+    body: payload.body,
+    icon: payload.icon || '/icon-192.png',
+    badge: '/icon.svg',
+    vibrate: [200, 100, 200],
+    tag: payload.tag || 'jijiga-delivery-alert',
+    renotify: true,
+    data: payload.data || { url: '/' },
+    actions: [
+      { action: 'track', title: '📍 Track Live' },
+      { action: 'dismiss', title: 'Close' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, notificationOptions)
+  );
+});
+
+// 5. Notification Click Action Handler
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'dismiss') {
+    return;
+  }
+
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Focus existing window if open
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise open new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

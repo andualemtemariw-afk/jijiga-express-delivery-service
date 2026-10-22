@@ -22,6 +22,10 @@ export default defineConfig(() => {
               const parts = packagePath.split('/');
               const packageName = parts[0];
 
+              if (packageName === 'react' || packageName === 'react-dom' || packageName === 'scheduler') {
+                return 'vendor-react';
+              }
+
               if (packageName === '@firebase' && parts[1]) {
                 return `vendor-firebase-${parts[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
               }
@@ -49,9 +53,25 @@ export default defineConfig(() => {
       },
     },
     resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, '.') },
+        { find: /^react$/, replacement: path.resolve(__dirname, 'node_modules/react') },
+        { find: /^react-dom$/, replacement: path.resolve(__dirname, 'node_modules/react-dom') },
+      ],
+      dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        '@vis.gl/react-google-maps',
+        'motion/react',
+        'recharts',
+        'lucide-react',
+      ],
     },
     server: {
       host: '0.0.0.0',

@@ -1,8 +1,8 @@
-import { lazy, Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
-const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry')[] = ['marker', 'places', 'routes', 'geometry'];
+const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry' | 'visualization')[] = ['marker', 'places', 'routes', 'geometry', 'visualization'];
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
@@ -55,21 +55,11 @@ import {
 } from 'lucide-react';
 
 
-const CustomerView = lazy(() =>
-  import('./roles/CustomerView').then(m => ({ default: m.CustomerView }))
-);
-const RunnerView = lazy(() =>
-  import('./roles/RunnerView').then(m => ({ default: m.RunnerView }))
-);
-const RiderView = lazy(() =>
-  import('./roles/RiderView').then(m => ({ default: m.RiderView }))
-);
-const AdminView = lazy(() =>
-  import('./roles/AdminView').then(m => ({ default: m.AdminView }))
-);
-const MamilaView = lazy(() =>
-  import('./roles/MamilaView').then(m => ({ default: m.MamilaView }))
-);
+import { CustomerView } from './roles/CustomerView';
+import { RunnerView } from './roles/RunnerView';
+import { RiderView } from './roles/RiderView';
+import { AdminView } from './roles/AdminView';
+import { MamilaView } from './roles/MamilaView';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -103,6 +93,13 @@ export default function App() {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
   });
   const [justReconnected, setJustReconnected] = useState(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+
+  useEffect(() => {
+    const handleQuota = () => setIsQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handleQuota);
+    return () => window.removeEventListener('gmp-quota-exceeded', handleQuota);
+  }, []);
 
   useEffect(() => {
     let wasOffline = false;
@@ -866,7 +863,24 @@ export default function App() {
       onError={(e) => console.warn('Google Maps Provider warning:', e)}
     >
       <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 pb-16">
-        
+        {/* Google Maps Quota Exhaustion Banner */}
+        {isQuotaExceeded && (
+          <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+            <span>
+              Google Maps Platform quota reached. If you are the app owner, visit{' '}
+              <a
+                href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-semibold text-amber-950 hover:text-amber-800"
+              >
+                maps developer site
+              </a>{' '}
+              for instructions to update your account.
+            </span>
+          </div>
+        )}
+
         {/* Floating User-Facing Alert Banner */}
         {alertNotice && (
           <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-lg w-full px-4 animate-in fade-in slide-in-from-top-4 duration-200">
@@ -1155,17 +1169,26 @@ export default function App() {
           )}
           {activeRole === 'RUNNER' && (
             <RunnerView 
-              orders={runnerOrders} 
+              orders={orders} 
               currentRunnerId={currentUser?.uid}
               currentRunnerName={userProfile?.displayName || currentUser?.displayName || 'Verified Staff Runner'}
               orderMessages={orderMessages}
               onSendMessage={handleSendMessage}
               onClaimOrder={handleClaimRunnerJob}
-              onUpdateStatus={(id, status) => handleUpdateOrder(id, { 
+              onUpdateStatus={(id, status, tag) => handleUpdateOrder(id, { 
                 status, 
-                runnerTagId: 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000) 
-              })} 
+                ...(tag ? { runnerTagId: tag } : {})
+              })}
+              onHandoverOrder={async (id, tag) => {
+                await handleUpdateOrder(id, {
+                  status: 'READY_FOR_RIDER',
+                  runnerTagId: tag,
+                  handoverToRiderAt: new Date().toISOString()
+                });
+                return true;
+              }}
               onRejectDefect={handleRejectDefect}
+              onUpdateOrder={(id, updates) => handleUpdateOrder(id, updates)}
             />
           )}
           {activeRole === 'RIDER' && (

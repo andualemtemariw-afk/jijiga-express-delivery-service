@@ -33,6 +33,7 @@ import {
   Check,
   Receipt
 } from 'lucide-react';
+import { OrderDensityHeatmap } from '../components/map/OrderDensityHeatmap';
 
 const AdminDashboard = lazy(() => import('../components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
@@ -225,6 +226,14 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
       }>
         <AdminDashboard orders={orders} inventory={inventory} />
       </Suspense>
+
+      {/* CITY ORDER DENSITY & DEMAND HOTSPOT HEATMAP */}
+      <OrderDensityHeatmap 
+        orders={orders} 
+        portalRole="ADMIN"
+        heightClass="h-[460px]"
+        showControls={true}
+      />
 
       {/* DISPUTES & QUALITY RESOLUTION SECTION */}
       {disputedOrders.length > 0 && (

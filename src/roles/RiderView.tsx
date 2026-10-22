@@ -32,6 +32,8 @@ import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
 import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
+import { CourierVoiceButton } from '../components/voice/CourierVoiceButton';
+import { CourierVoiceToTextModal } from '../components/voice/CourierVoiceToTextModal';
 
  
 
@@ -104,6 +106,21 @@ export function RiderView({
 
   // Cash change calculator state
   const [tenderedAmount, setTenderedAmount] = useState<Record<string, number>>({});
+
+  // Voice-to-Text modal state for audio delivery notes & status updates
+  const [voiceModalOrder, setVoiceModalOrder] = useState<Order | null>(null);
+
+  const handleSaveVoiceNote = async (orderId: string, note: string, newStatus?: Order['status']) => {
+    const updates: Partial<Order> = {
+      courierDeliveryNote: note,
+      courierNoteUpdatedAt: new Date().toISOString(),
+      courierNoteAuthor: currentRiderName || 'Rider'
+    };
+    if (newStatus) {
+      updates.status = newStatus;
+    }
+    onUpdateOrder(orderId, updates, true);
+  };
 
   // EEU Prepaid Card State Machine & Camera Receipt Intent State
   const [cameraOrder, setCameraOrder] = useState<Order | null>(null);
@@ -352,9 +369,25 @@ export function RiderView({
                           <Phone className="w-3.5 h-3.5 text-emerald-600" />
                           Call
                         </button>
+
+                        {/* Quick Voice Note Button */}
+                        <CourierVoiceButton 
+                          order={order}
+                          courierRole="RIDER"
+                          variant="button"
+                          onOpenVoiceModal={(o) => setVoiceModalOrder(o)}
+                        />
                       </div>
                     </div>
                   </div>
+
+                  {/* Courier Voice Delivery Note & Status Update Section */}
+                  <CourierVoiceButton 
+                    order={order}
+                    courierRole="RIDER"
+                    variant="full"
+                    onOpenVoiceModal={(o) => setVoiceModalOrder(o)}
+                  />
 
                   {/* Vernacular 1-Tap Quick-Pills for Courier */}
                   <div className="p-3 bg-gradient-to-r from-emerald-50/70 to-teal-50/70 rounded-xl border border-emerald-200/80 space-y-2">
@@ -783,6 +816,17 @@ export function RiderView({
         isOpen={Boolean(whatsAppOrder)}
         onClose={() => setWhatsAppOrder(null)}
         order={whatsAppOrder}
+      />
+
+      {/* Voice-to-Text Speech Recognition Modal for Rider */}
+      <CourierVoiceToTextModal
+        isOpen={Boolean(voiceModalOrder)}
+        onClose={() => setVoiceModalOrder(null)}
+        order={voiceModalOrder}
+        courierRole="RIDER"
+        courierName={currentRiderName || 'Rider'}
+        onSaveNote={handleSaveVoiceNote}
+        onSendMessage={onSendMessage}
       />
     </div>
   );

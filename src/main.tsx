@@ -2,10 +2,12 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
+import { AppErrorBoundary } from './components/AppErrorBoundary.tsx';
 import './index.css';
 
-// Global Google Maps Authentication Error Handler
+// Global Google Maps Authentication & Quota Error Handler
 (window as any).gm_authFailure = () => {
+  window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
   window.dispatchEvent(
     new CustomEvent('gmp-auth-failed', { detail: { error: 'Authentication failed (InvalidKeyMapError or BillingNotEnabled).' } })
   );
@@ -14,6 +16,9 @@ import './index.css';
 const originalConsoleError = console.error;
 console.error = (...args: unknown[]) => {
   const msg = args.map((a) => String(a)).join(' ');
+  if (msg.includes('OverQuotaMapError') || msg.includes('QuotaExceededError')) {
+    window.dispatchEvent(new CustomEvent('gmp-quota-exceeded'));
+  }
   if (
     msg.includes('Google Maps JavaScript API error: InvalidKeyMapError') ||
     msg.includes('Google Maps JavaScript API error: BillingNotEnabledMapError') ||
@@ -28,9 +33,11 @@ console.error = (...args: unknown[]) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
+    <AppErrorBoundary>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 );
 

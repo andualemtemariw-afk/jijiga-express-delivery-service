@@ -51,6 +51,9 @@
         "runnerTagId": { "type": "string" },
         "riderProofUrl": { "type": "string" },
         "defectReason": { "type": "string" },
+        "courierDeliveryNote": { "type": "string" },
+        "courierNoteUpdatedAt": { "type": "string" },
+        "courierNoteAuthor": { "type": "string" },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "price", "totalPrice", "status", "customerId"]

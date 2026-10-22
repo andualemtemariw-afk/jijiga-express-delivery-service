@@ -3,6 +3,9 @@ import { Camera, MapPin, PackageCheck, User, MessageSquare, ShieldAlert, XCircle
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { isValidRunnerTag, generateRunnerTag } from '../utils/tagGenerator';
+import { OrderDensityHeatmap } from '../components/map/OrderDensityHeatmap';
+import { CourierVoiceButton } from '../components/voice/CourierVoiceButton';
+import { CourierVoiceToTextModal } from '../components/voice/CourierVoiceToTextModal';
 
 interface Props {
   orders: Order[];
@@ -14,6 +17,7 @@ interface Props {
   onHandoverOrder?: (orderId: string, tag: string) => Promise<boolean>;
   onRejectDefect?: (orderId: string, reason: string) => void;
   onClaimOrder?: (orderId: string) => Promise<void>;
+  onUpdateOrder?: (orderId: string, updates: Partial<Order>) => Promise<void> | void;
 }
 
 export function RunnerView({ 
@@ -25,7 +29,8 @@ export function RunnerView({
   onUpdateStatus, 
   onHandoverOrder,
   onRejectDefect,
-  onClaimOrder 
+  onClaimOrder,
+  onUpdateOrder
 }: Props) {
   const [activeTab, setActiveTab] = useState<'unassigned' | 'my_inspections'>('unassigned');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
@@ -45,6 +50,25 @@ export function RunnerView({
   // Defect reporting modal
   const [defectOrderId, setDefectOrderId] = useState<string | null>(null);
   const [defectReason, setDefectReason] = useState('Substandard freshness or damaged packaging');
+
+  // Voice-to-Text modal state for audio delivery notes & status updates
+  const [voiceModalOrder, setVoiceModalOrder] = useState<Order | null>(null);
+
+  const handleSaveVoiceNote = async (orderId: string, note: string, newStatus?: Order['status']) => {
+    const updates: Partial<Order> = {
+      courierDeliveryNote: note,
+      courierNoteUpdatedAt: new Date().toISOString(),
+      courierNoteAuthor: currentRunnerName || 'Runner'
+    };
+    if (newStatus) {
+      updates.status = newStatus;
+    }
+    if (onUpdateOrder) {
+      await onUpdateOrder(orderId, updates);
+    } else if (onUpdateStatus && newStatus) {
+      await onUpdateStatus(orderId, newStatus);
+    }
+  };
 
   // Filter orders:
   // 1. Strictly unassigned orders awaiting a runner to claim
@@ -165,6 +189,14 @@ export function RunnerView({
           </button>
         </div>
       </div>
+
+      {/* CITY DEMAND HOTSPOTS & ORDER DENSITY HEATMAP */}
+      <OrderDensityHeatmap 
+        orders={orders}
+        portalRole="RUNNER"
+        heightClass="h-[380px]"
+        showControls={true}
+      />
 
       {/* SECTION 1: UNASSIGNED ORDERS TO CLAIM */}
       {activeTab === 'unassigned' && (
@@ -301,6 +333,13 @@ export function RunnerView({
                         </div>
                       </div>
                     )}
+
+                    {/* Courier Voice Delivery Note & Status Update Action */}
+                    <CourierVoiceButton 
+                      order={order}
+                      courierRole="RUNNER"
+                      onOpenVoiceModal={(o) => setVoiceModalOrder(o)}
+                    />
 
                     {verifyingId === order.id ? (
                       <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-5">
@@ -497,6 +536,17 @@ export function RunnerView({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Voice-to-Text Speech Recognition Modal for Runner */}
+      <CourierVoiceToTextModal
+        isOpen={Boolean(voiceModalOrder)}
+        onClose={() => setVoiceModalOrder(null)}
+        order={voiceModalOrder}
+        courierRole="RUNNER"
+        courierName={currentRunnerName || 'Runner'}
+        onSaveNote={handleSaveVoiceNote}
+        onSendMessage={onSendMessage}
+      />
     </div>
   );
 }

@@ -198,6 +198,10 @@ export interface Order {
   reviewComment?: string;
   dispute?: Dispute;
   defectReason?: string;
+  handoverToRiderAt?: string;
+  courierDeliveryNote?: string;
+  courierNoteUpdatedAt?: string;
+  courierNoteAuthor?: string;
   createdAt: Date;
 }
 

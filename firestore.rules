@@ -501,7 +501,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'runnerId', 'runnerName', 'runnerTagId', 'defectReason', 'courierDeliveryNote', 'courierNoteUpdatedAt', 'courierNoteAuthor', 'updatedAt'])
           && (
             !request.resource.data.diff(resource.data).affectedKeys().hasAny(['runnerTagId'])
             || (
@@ -526,7 +526,7 @@ service cloud.firestore {
           && request.resource.data.price == resource.data.price
           && request.resource.data.totalPrice == resource.data.totalPrice
           && request.resource.data.customerId == resource.data.customerId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'riderId', 'riderName', 'riderProofUrl', 'riderCoordinates', 'riderLocationUpdatedAt', 'paymentStatus', 'eeuDetails', 'courierDeliveryNote', 'courierNoteUpdatedAt', 'courierNoteAuthor', 'updatedAt'])
           && (
             request.resource.data.status == 'DELIVERED'
             ? (
