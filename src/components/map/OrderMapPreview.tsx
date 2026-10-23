@@ -22,6 +22,7 @@ import { RoutePolyline } from './RoutePolyline';
 import { MapBoundsFitter } from './MapBoundsFitter';
 import { VectorRouteMapFallback } from './VectorRouteMapFallback';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { getGoogleMapsMapId } from '../../services/mapsConfig';
 import { lazy, Suspense } from 'react';
 
 const UpdateApiKeyModal = lazy(() => import('./UpdateApiKeyModal').then(m => ({ default: m.UpdateApiKeyModal })));
@@ -213,7 +214,7 @@ function LiveGoogleMap({
         <Map
           defaultCenter={mamilaPos}
           defaultZoom={14}
-          mapId="DEMO_MAP_ID"
+          mapId={getGoogleMapsMapId()}
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
           gestureHandling="greedy"
           disableDefaultUI={false}

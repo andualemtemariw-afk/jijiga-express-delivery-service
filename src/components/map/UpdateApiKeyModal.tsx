@@ -15,6 +15,9 @@ export function UpdateApiKeyModal({
   onSaveKey,
 }: UpdateApiKeyModalProps) {
   const [keyInput, setKeyInput] = useState(currentKey);
+  const [mapIdInput, setMapIdInput] = useState(() => {
+    return localStorage.getItem('user_google_maps_map_id') || '';
+  });
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   if (!isOpen) return null;
@@ -22,6 +25,11 @@ export function UpdateApiKeyModal({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     onSaveKey(keyInput.trim());
+    if (mapIdInput.trim()) {
+      localStorage.setItem('user_google_maps_map_id', mapIdInput.trim());
+    } else {
+      localStorage.removeItem('user_google_maps_map_id');
+    }
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -89,17 +97,36 @@ export function UpdateApiKeyModal({
             </p>
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 block">
+              Google Maps Map ID (Optional)
+            </label>
+            <input
+              type="text"
+              value={mapIdInput}
+              onChange={(e) => setMapIdInput(e.target.value)}
+              placeholder="e.g. bf51a910020fa25a (Default)"
+              autoComplete="off"
+              className="w-full text-xs font-mono p-3 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+            <p className="text-[11px] text-slate-500">
+              Required for custom Cloud-based Map Styling and Advanced Markers. Defaults to Google's verified sample Map ID if blank.
+            </p>
+          </div>
+
           <div className="flex items-center justify-between pt-2">
             <button
               type="button"
               onClick={() => {
                 setKeyInput('');
+                setMapIdInput('');
+                localStorage.removeItem('user_google_maps_map_id');
                 onSaveKey('');
                 onClose();
               }}
               className="text-xs text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
             >
-              Clear Key (Use Vector Map)
+              Clear Key & ID (Use Vector Map)
             </button>
 
             <div className="flex items-center gap-2">

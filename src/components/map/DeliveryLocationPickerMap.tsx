@@ -11,6 +11,7 @@ import {
 import { LatLng, CITY_COORDINATES, calculateDistanceKm, MAMILA_COORDINATES } from '../../utils/geo';
 import { MapPin, Navigation, Crosshair, Check, Layers } from 'lucide-react';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { getGoogleMapsMapId } from '../../services/mapsConfig';
 
 interface DeliveryLocationPickerMapProps {
   city: string;
@@ -196,7 +197,7 @@ export function DeliveryLocationPickerMap({
               <Map
                 defaultCenter={markerPos}
                 defaultZoom={15}
-                mapId="DEMO_MAP_ID"
+                mapId={getGoogleMapsMapId()}
                 internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
                 gestureHandling="greedy"
                 disableDefaultUI={false}

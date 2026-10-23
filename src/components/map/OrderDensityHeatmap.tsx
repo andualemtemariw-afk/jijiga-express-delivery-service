@@ -17,6 +17,7 @@ import {
   LatLng 
 } from '../../utils/geo';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { getGoogleMapsMapId } from '../../services/mapsConfig';
 import { 
   Flame, 
   Layers, 
@@ -468,7 +469,7 @@ export function OrderDensityHeatmap({
             <Map
               defaultCenter={centerCoordinates}
               defaultZoom={13}
-              mapId="DEMO_MAP_ID"
+              mapId={getGoogleMapsMapId()}
               internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
               gestureHandling="greedy"
               disableDefaultUI={false}
