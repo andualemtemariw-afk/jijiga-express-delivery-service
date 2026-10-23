@@ -127,6 +127,7 @@ export function CustomerView({
   const [quantity, setQuantity] = useState(1);
   const [selectedCity, setSelectedCity] = useState(customerProfile?.city || 'Jijiga');
   const [address, setAddress] = useState(customerProfile?.address || 'Kebele 04, Jijiga');
+  const addressEditedRef = useRef(false);
   const [plusCode, setPlusCode] = useState(customerProfile?.plusCode || '8F2P+5H Jijiga');
   const [customerCoords, setCustomerCoords] = useState<LatLng>(DEFAULT_CUSTOMER_COORDINATES);
   const [showCheckoutMap, setShowCheckoutMap] = useState(true);
@@ -204,24 +205,30 @@ export function CustomerView({
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [notificationPermissionState, setNotificationPermissionState] = useState<string>(() => getNotificationPermission());
 
-  // Sync profile fields from authenticated profile
-  useMemo(() => {
-    if (customerProfile) {
-      if (customerProfile.phone) setEditPhone(customerProfile.phone);
-      if (customerProfile.city) {
-        setEditCity(customerProfile.city);
-        setSelectedCity(customerProfile.city);
-      }
-      if (customerProfile.address) {
-        setEditAddress(customerProfile.address);
-        setAddress(customerProfile.address);
-      }
-      if (customerProfile.plusCode) {
-        setEditPlusCode(customerProfile.plusCode);
-        setPlusCode(customerProfile.plusCode);
-      }
+  // Sync profile fields only when the actual profile values change.
+  // A new profile object identity alone must not overwrite checkout edits.
+  useEffect(() => {
+    if (!customerProfile) return;
+
+    if (customerProfile.phone) setEditPhone(customerProfile.phone);
+    if (customerProfile.city) {
+      setEditCity(customerProfile.city);
+      setSelectedCity(customerProfile.city);
     }
-  }, [customerProfile]);
+    if (customerProfile.address) {
+      setEditAddress(customerProfile.address);
+      if (!addressEditedRef.current) setAddress(customerProfile.address);
+    }
+    if (customerProfile.plusCode) {
+      setEditPlusCode(customerProfile.plusCode);
+      setPlusCode(customerProfile.plusCode);
+    }
+  }, [
+    customerProfile?.phone,
+    customerProfile?.city,
+    customerProfile?.address,
+    customerProfile?.plusCode,
+  ]);
 
   const requireAuth = (callback: () => void) => {
     if (!currentUser && onSignIn) {
@@ -964,7 +971,10 @@ export function CustomerView({
                     <input
                       type="text"
                       value={address}
-                      onChange={(e) => setAddress(e.target.value)}
+                      onChange={(e) => {
+                        addressEditedRef.current = true;
+                        setAddress(e.target.value);
+                      }}
                       placeholder="Street address / landmark"
                       className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
                     />
@@ -989,9 +999,16 @@ export function CustomerView({
                         <DeliveryLocationPickerMap
                           city={selectedCity}
                           initialCoordinates={customerCoords}
-                          onLocationSelect={(coords, derivedCode) => {
+                          onLocationSelect={(coords, derivedCode, userSelected) => {
                             setCustomerCoords(coords);
                             setPlusCode(derivedCode);
+
+                            // If the user chooses a map pin before editing the landmark field,
+                            // replace the stale default address with an honest coordinate label.
+                            // Users can then type a nearby street, building, or other landmark.
+                            if (userSelected && !addressEditedRef.current) {
+                              setAddress(`Pinned map location (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`);
+                            }
                           }}
                           heightClass="h-[180px]"
                         />
