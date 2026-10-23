@@ -5,28 +5,35 @@ import {
   onSnapshot, 
   getDocs, 
   getDoc,
+  getDocFromServer,
   query, 
   where,
   limit,
   serverTimestamp,
   Timestamp,
-  addDoc
+  addDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { auth, db } from './googleAuth';
 import { Order, Batch, Mamila, ChatMessage, DeliveryEvent, Role } from '../types';
 import { INITIAL_BATCHES, MAMILAS } from '../data';
 
 /**
- * Validates connection to Cloud Firestore upon initial boot.
+ * Validates connection to Cloud Firestore if invoked explicitly.
  */
 export async function testConnection(): Promise<void> {
   try {
-    await getDoc(doc(db, 'test', 'connection'));
-  } catch (error: any) {
-    console.info("Firestore connection probe deferred; local IndexedDB persistence active.");
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    console.info(`[FirestoreSync] Connection validated successfully.`);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('the client is offline')) {
+      console.warn('[FirestoreSync] Operating in offline cache mode until connection handshake completes:', msg);
+    } else {
+      console.warn('[FirestoreSync] Initial connection notice:', msg);
+    }
   }
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',
@@ -170,7 +177,9 @@ export function removeUndefinedFields<T>(val: T): T {
 }
 
 /**
- * Saves a new order to Cloud Firestore using an auto-generated or collision-resistant ID.
+ * Saves a new order to Cloud Firestore.
+ * For FOOD and KHAT orders with active Firestore batch tracking, performs the
+ * atomic inventory reservation and stock decrement required by security rules.
  */
 export async function saveOrderToFirestore(order: Order): Promise<string> {
   const user = auth.currentUser;
@@ -194,11 +203,109 @@ export async function saveOrderToFirestore(order: Order): Promise<string> {
 
   const serializedOrder = removeUndefinedFields(rawOrder);
 
-  try {
-    await setDoc(docRef, serializedOrder);
-    return orderId;
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `orders/${orderId}`);
+  if (order.serviceType === 'FOOD' || order.serviceType === 'KHAT') {
+    const batchRef = doc(db, BATCHES_COLLECTION, order.batchId);
+    const reservationRef = doc(db, 'inventoryReservations', orderId);
+
+    try {
+      await runTransaction(db, async (tx) => {
+        const batchSnap = await tx.get(batchRef);
+
+        if (batchSnap.exists()) {
+          const batchData = batchSnap.data();
+          const availableStock = batchData.available || 0;
+          const requestedQty = order.quantity || 1;
+
+          if (availableStock < requestedQty) {
+            throw new Error(`Insufficient stock for ${order.batchName}: ${availableStock} available, ${requestedQty} requested.`);
+          }
+
+          tx.update(batchRef, {
+            available: availableStock - requestedQty,
+            lastReservationId: orderId,
+            updatedAt: new Date().toISOString(),
+          });
+
+          tx.set(reservationRef, {
+            orderId,
+            batchId: order.batchId,
+            customerId: user.uid,
+            quantity: requestedQty,
+            action: 'RESERVE',
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        tx.set(docRef, serializedOrder);
+      });
+      return orderId;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `orders/${orderId}`);
+    }
+  } else {
+    try {
+      await setDoc(docRef, serializedOrder);
+      return orderId;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `orders/${orderId}`);
+    }
+  }
+}
+
+/**
+ * Cancels an order in Firestore, atomically releasing reserved batch inventory per security rules.
+ */
+export async function cancelOrderInFirestore(order: Order): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('User must be authenticated to cancel an order.');
+  }
+
+  const orderRef = doc(db, ORDERS_COLLECTION, order.id);
+
+  if (order.serviceType === 'FOOD' || order.serviceType === 'KHAT') {
+    const batchRef = doc(db, BATCHES_COLLECTION, order.batchId);
+    const releaseReservationRef = doc(db, 'inventoryReservations', `${order.id}-release`);
+
+    try {
+      await runTransaction(db, async (tx) => {
+        const batchSnap = await tx.get(batchRef);
+        const orderSnap = await tx.get(orderRef);
+
+        if (!orderSnap.exists()) {
+          throw new Error(`Order #${order.id} not found.`);
+        }
+
+        const requestedQty = order.quantity || 1;
+
+        if (batchSnap.exists()) {
+          const currentAvailable = batchSnap.data().available || 0;
+          tx.update(batchRef, {
+            available: currentAvailable + requestedQty,
+            lastReservationId: `${order.id}-release`,
+            updatedAt: new Date().toISOString(),
+          });
+
+          tx.set(releaseReservationRef, {
+            orderId: order.id,
+            batchId: order.batchId,
+            customerId: user.uid,
+            quantity: requestedQty,
+            action: 'RELEASE',
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        tx.update(orderRef, {
+          status: 'CANCELLED',
+          updatedAt: serverTimestamp(),
+        });
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `orders/${order.id}`);
+    }
+  } else {
+    await updateOrderInFirestore(order.id, { status: 'CANCELLED' });
   }
 }
 

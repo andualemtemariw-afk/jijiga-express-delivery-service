@@ -22,7 +22,6 @@ service cloud.firestore {
 
     function isAllowlistedAdminEmail() {
       return signedIn()
-        && request.auth.token.email_verified == true
         && request.auth.token.email in [
           'andualemawraris4@gmail.com',
           'andualemawraris104@gmail.com',
@@ -31,22 +30,26 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isActiveUser()
-        && getUserRole() == 'admin'
-        && isAllowlistedAdminEmail();
+      return signedIn()
+        && isAllowlistedAdminEmail()
+        && (
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || !('active' in currentUser().data)
+          || currentUser().data.active == true
+        );
     }
 
     function isCustomer() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && getUserRole() == 'customer'
+        && (getUserRole() == 'customer' || isAdmin())
         && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
 
     function isActiveUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && currentUser().data.active == true;
+        && (!('active' in currentUser().data) || currentUser().data.active == true);
     }
 
     function isRunner() {
@@ -279,26 +282,44 @@ service cloud.firestore {
         (
           request.resource.data.serviceType == 'FOOD'
           && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
-          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
-          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price * request.resource.data.quantity
-          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
-          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+          && (
+            (
+              exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
+              && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+              && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price * request.resource.data.quantity
+              && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+              && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+            )
+            ||
+            (
+              !exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
+            )
+          )
         )
         || (
           request.resource.data.serviceType == 'KHAT'
           && request.resource.data.totalPrice == request.resource.data.price * request.resource.data.quantity + request.resource.data.deliveryFee
-          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
-          && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price
-          && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
-          && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
-          && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+          && (
+            (
+              exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
+              && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price is number
+              && request.resource.data.price == getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.price
+              && getAfter(/databases/$(database)/documents/batches/$(request.resource.data.batchId)).data.mamilaId == request.resource.data.mamilaId
+              && existsAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id))
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.action == 'RESERVE'
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.customerId == request.auth.uid
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
+              && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
+            )
+            ||
+            (
+              !exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
+            )
+          )
         )
         || (request.resource.data.serviceType == 'PARCEL' && validParcelOrder())
         || (request.resource.data.serviceType == 'RIDE' && validRideOrder())
@@ -331,10 +352,10 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.uid == uid
-        && request.resource.data.role == 'customer'
+        && (request.resource.data.role == 'customer' || (isAllowlistedAdminEmail() && request.resource.data.role in ['admin', 'customer']))
         && request.resource.data.keys().hasOnly([
           'uid', 'displayName', 'email', 'photoURL', 'phone', 'city',
-          'address', 'plusCode', 'role', 'createdAt'
+          'address', 'plusCode', 'role', 'active', 'createdAt'
         ]);
 
       allow update: if signedIn() && (
@@ -471,14 +492,18 @@ service cloud.firestore {
               && (
                 resource.data.serviceType in ['FOOD', 'KHAT']
                 ? (
-                  existsAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release'))
-                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.action == 'RELEASE'
-                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.orderId == orderId
-                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.customerId == request.auth.uid
-                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.batchId == resource.data.batchId
-                  && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.quantity == resource.data.quantity
-                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available == get(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available + resource.data.quantity
-                  && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.lastReservationId == orderId + '-release'
+                  exists(/databases/$(database)/documents/batches/$(resource.data.batchId))
+                  ? (
+                    existsAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release'))
+                    && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.action == 'RELEASE'
+                    && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.orderId == orderId
+                    && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.customerId == request.auth.uid
+                    && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.batchId == resource.data.batchId
+                    && getAfter(/databases/$(database)/documents/inventoryReservations/$(orderId + '-release')).data.quantity == resource.data.quantity
+                    && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available == get(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.available + resource.data.quantity
+                    && getAfter(/databases/$(database)/documents/batches/$(resource.data.batchId)).data.lastReservationId == orderId + '-release'
+                  )
+                  : true
                 )
                 : true
               )

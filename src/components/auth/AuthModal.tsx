@@ -12,12 +12,10 @@ import {
   Loader2
 } from 'lucide-react';
 import { 
-  signInWithEmail, 
-  registerWithEmail, 
-  appSignInWithGoogle, 
   isCapacitorAndroid,
   isCapacitorNative
 } from '../../services/googleAuth';
+import { useAuth } from '../../context/AuthContext';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -32,6 +30,7 @@ export function AuthModal({
   onSuccess,
   defaultTab = 'signin',
 }: AuthModalProps) {
+  const { signInWithGoogle, signInWithEmail, registerWithEmail } = useAuth();
   const isAndroid = isCapacitorAndroid();
   const isNative = isCapacitorNative();
   const [tab, setTab] = useState<'signin' | 'register'>(defaultTab);
@@ -103,7 +102,7 @@ export function AuthModal({
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      await appSignInWithGoogle();
+      await signInWithGoogle();
       resetForm();
       onSuccess?.();
       onClose();

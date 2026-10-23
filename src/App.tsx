@@ -3,7 +3,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry' | 'visualization')[] = ['marker', 'places', 'routes', 'geometry', 'visualization'];
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
@@ -12,8 +12,8 @@ import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
 import { GoogleDriveSyncModal } from './components/drive/GoogleDriveSyncModal';
 import { GmailNotificationModal } from './components/gmail/GmailNotificationModal';
 import { AuthModal } from './components/auth/AuthModal';
-import { auth, appSignInWithGoogle, logout, subscribeToNetworkStatus, isCapacitorAndroid } from './services/googleAuth';
-import { syncUserProfile, updateUserProfile } from './services/userService';
+import { subscribeToNetworkStatus, isCapacitorAndroid } from './services/googleAuth';
+import { useAuth } from './context/AuthContext';
 import { 
   claimOrderAsRunner, 
   claimOrderAsRider, 
@@ -23,6 +23,7 @@ import {
   subscribeToOrdersByRole, 
   saveOrderToFirestore, 
   updateOrderInFirestore, 
+  cancelOrderInFirestore,
   saveChatMessageToFirestore, 
   logDeliveryEventToFirestore, 
   generateOrderId,
@@ -62,9 +63,15 @@ import { AdminView } from './roles/AdminView';
 import { MamilaView } from './roles/MamilaView';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<AppUserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { 
+    currentUser, 
+    userProfile, 
+    authLoading, 
+    isAuthReady, 
+    logout: contextLogout, 
+    updateProfile: contextUpdateProfile 
+  } = useAuth();
+
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
     return localStorage.getItem('jijiga_mode') === 'demo';
   });
@@ -123,29 +130,9 @@ export default function App() {
     }, 6000);
   };
 
-  // 1. Firebase Auth Observer & User Profile Synchronization
+  // Seed Firestore catalog on initial boot
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setAuthLoading(true);
-      if (user) {
-        setCurrentUser(user);
-        try {
-          const profile = await syncUserProfile(user);
-          setUserProfile(profile);
-        } catch (err: any) {
-          console.warn('User profile sync notice:', err);
-        }
-      } else {
-        setCurrentUser(null);
-        setUserProfile(null);
-      }
-      setAuthLoading(false);
-    });
-
-    // Seed Firestore catalog on initial boot
     seedCatalogIfEmpty().catch(console.warn);
-
-    return () => unsubscribe();
   }, []);
 
   // 2. Real-time synchronization with Cloud Firestore or Demo fallback
@@ -211,7 +198,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
-      await logout();
+      await contextLogout();
       showAlert('Signed out of Jijiga Express.', 'info');
       setActiveRole('CUSTOMER');
     } catch (err: any) {
@@ -518,8 +505,7 @@ export default function App() {
       return;
     }
     try {
-      await updateUserProfile(currentUser.uid, updates);
-      setUserProfile(prev => prev ? { ...prev, ...updates } : null);
+      await contextUpdateProfile(updates);
       showAlert('Delivery profile and saved addresses successfully updated in Cloud Firestore!', 'success');
     } catch (err: any) {
       showAlert(`Could not update profile: ${err.message}`, 'error');
@@ -589,7 +575,25 @@ export default function App() {
         b.id === targetOrder.batchId ? { ...b, available: b.available + qty } : b
       ));
 
-      handleUpdateOrder(orderId, { status: 'CANCELLED' });
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'CANCELLED' } : o));
+
+      if (!isDemoMode && currentUser) {
+        try {
+          await cancelOrderInFirestore(targetOrder);
+          await logDeliveryEventToFirestore({
+            orderId,
+            status: 'CANCELLED',
+            timestamp: new Date().toISOString(),
+            actorRole: activeRole,
+            actorId: currentUser.uid,
+            actorName: userProfile?.displayName || 'Customer',
+            note: `Order #${orderId.slice(-6)} cancelled by customer. Stock restored.`
+          });
+          showAlert(`Order #${orderId.slice(-6)} cancelled and stock restored to store.`, 'info');
+        } catch (err: any) {
+          showAlert(`Could not cancel order: ${err.message}`, 'error');
+        }
+      }
     }
   };
 

@@ -26,12 +26,8 @@ export default defineConfig(() => {
                 return 'vendor-react';
               }
 
-              if (packageName === '@firebase' && parts[1]) {
-                return `vendor-firebase-${parts[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-              }
-
-              if (packageName === 'firebase' && parts[1]) {
-                return `vendor-firebase-${parts[1].replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+              if (packageName === '@firebase' || packageName === 'firebase') {
+                return 'vendor-firebase';
               }
 
               if (packageName === 'recharts') {
@@ -58,7 +54,7 @@ export default defineConfig(() => {
         { find: /^react$/, replacement: path.resolve(__dirname, 'node_modules/react') },
         { find: /^react-dom$/, replacement: path.resolve(__dirname, 'node_modules/react-dom') },
       ],
-      dedupe: ['react', 'react-dom'],
+      dedupe: ['react', 'react-dom', 'firebase', '@firebase/app', '@firebase/auth', '@firebase/firestore', '@firebase/component'],
     },
     optimizeDeps: {
       include: [
@@ -71,6 +67,9 @@ export default defineConfig(() => {
         'motion/react',
         'recharts',
         'lucide-react',
+        'firebase/app',
+        'firebase/auth',
+        'firebase/firestore',
       ],
     },
     server: {

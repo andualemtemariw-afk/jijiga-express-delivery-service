@@ -1,5 +1,5 @@
 // Jijiga Express Delivery Service - Offline Service Worker
-const CACHE_NAME = 'jijiga-express-v1.0';
+const CACHE_NAME = 'jijiga-express-v1.2';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -32,7 +32,7 @@ self.addEventListener('activate', (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_NAME)
+            .filter((name) => name.startsWith('jijiga-express-') && name !== CACHE_NAME)
             .map((name) => caches.delete(name))
         );
       })

@@ -244,6 +244,7 @@ export interface AppUserProfile {
   plusCode?: string;
   role: UserRole;
   mamilaId?: string;
+  active?: boolean;
   createdAt: string;
   updatedAt?: string;
 }

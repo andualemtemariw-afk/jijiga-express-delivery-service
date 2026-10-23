@@ -1,7 +1,4 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getAuth, 
-  connectAuthEmulator,
   signInWithPopup, 
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -12,65 +9,91 @@ import {
   User 
 } from 'firebase/auth';
 import { 
-  connectFirestoreEmulator, 
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  enableIndexedDbPersistence,
-  Firestore
-} from 'firebase/firestore';
-import { Capacitor } from '@capacitor/core';
-import firebaseConfig from '../../firebase-applet-config.json';
+  app, 
+  auth, 
+  db, 
+  firebaseConfig, 
+  isCapacitorNative, 
+  isCapacitorAndroid, 
+  usingFirebaseEmulators,
+  getFirebaseEnvironmentInfo 
+} from './firebaseConfig';
+
+// Re-export core Firebase singletons and environment helpers
+export { 
+  app, 
+  auth, 
+  db, 
+  firebaseConfig, 
+  isCapacitorNative, 
+  isCapacitorAndroid, 
+  usingFirebaseEmulators,
+  getFirebaseEnvironmentInfo 
+};
 
 // Standard scopes only; broad Gmail/Drive scopes removed to prevent Google OAuth verification review
 export const WORKSPACE_SCOPES: string[] = [];
 
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+// ============================================================================
+// Consistent Auth State Handling & Readiness Synchronization
+// ============================================================================
 
-/**
- * Checks whether the app is executing inside a native Capacitor shell (Android / iOS).
- */
-export const isCapacitorNative = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return Capacitor.isNativePlatform();
-};
+let isInitialAuthResolved = false;
+let authReadyResolve: (user: User | null) => void;
+const authReadyPromise = new Promise<User | null>((resolve) => {
+  authReadyResolve = resolve;
+});
 
-/**
- * Specifically checks for native Android Capacitor environment.
- */
-export const isCapacitorAndroid = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
-};
+const authSubscribers = new Set<(user: User | null) => void>();
 
-const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
-
-// Initialize Cloud Firestore with IndexedDB multi-tab offline persistence
-// and experimentalForceLongPolling for robust iframe / proxy connectivity
-export const db: Firestore = (() => {
-  if (typeof window !== 'undefined') {
-    try {
-      return initializeFirestore(app, {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager()
-        }),
-        experimentalForceLongPolling: true,
-      }, firestoreDbId);
-    } catch (err: any) {
-      console.warn('Firestore persistentLocalCache initialization notice:', err?.message || err);
-      const fallbackDb = getFirestore(app, firestoreDbId);
-      try {
-        enableIndexedDbPersistence(fallbackDb).catch((persistErr) => {
-          console.warn('Firestore enableIndexedDbPersistence fallback notice:', persistErr?.code || persistErr?.message);
-        });
-      } catch {}
-      return fallbackDb;
-    }
+// Attach singleton listener immediately upon module load
+onAuthStateChanged(auth, (user: User | null) => {
+  if (!isInitialAuthResolved) {
+    isInitialAuthResolved = true;
+    authReadyResolve(user);
   }
-  return getFirestore(app, firestoreDbId);
-})();
+  authSubscribers.forEach((callback) => {
+    try {
+      callback(user);
+    } catch (err) {
+      console.warn('[GoogleAuth] Auth subscriber notification notice:', err);
+    }
+  });
+});
+
+/**
+ * Returns whether the initial Firebase auth check has resolved.
+ */
+export const isAuthReady = (): boolean => isInitialAuthResolved;
+
+/**
+ * Resolves as soon as Firebase Auth has determined initial session state from
+ * IndexedDB cache or network. Prevents race conditions during cold-start.
+ */
+export const waitForAuthReady = (): Promise<User | null> => authReadyPromise;
+
+/**
+ * Synchronously returns auth.currentUser if already resolved, or awaits waitForAuthReady.
+ */
+export const getCurrentUser = async (): Promise<User | null> => {
+  if (isInitialAuthResolved) {
+    return auth.currentUser;
+  }
+  return authReadyPromise;
+};
+
+/**
+ * Subscribes to auth state changes across any module with instant replay if already resolved.
+ */
+export const subscribeToAuthState = (callback: (user: User | null) => void): (() => void) => {
+  authSubscribers.add(callback);
+  if (isInitialAuthResolved) {
+    callback(auth.currentUser);
+  }
+  return () => {
+    authSubscribers.delete(callback);
+  };
+};
 
 /**
  * Utility helper to subscribe to browser online/offline status changes.
@@ -86,17 +109,6 @@ export function subscribeToNetworkStatus(callback: (isOnline: boolean) => void):
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
   };
-}
-
-export const usingFirebaseEmulators =
-  typeof import.meta !== 'undefined' &&
-  import.meta.env &&
-  import.meta.env.DEV &&
-  import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
-
-if (usingFirebaseEmulators) {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
 }
 
 // 1. Basic Google Auth Provider for App Login (Clean, instant, no unnecessary Workspace prompts)
@@ -126,17 +138,17 @@ export const appSignInWithGoogle = async (): Promise<User> => {
   } catch (error: any) {
     // If auth/network-request-failed occurs due to iframe handshake delay, retry once with backoff
     if (error?.code === 'auth/network-request-failed' || error?.message?.includes('network-request-failed')) {
-      console.warn('Network request failed during Google sign-in handshake, attempting retry in 800ms...');
+      console.warn('[GoogleAuth] Network request failed during Google sign-in handshake, attempting retry in 800ms...');
       await new Promise(r => setTimeout(r, 800));
       try {
         const retryResult = await signInWithPopup(auth, basicProvider);
         return retryResult.user;
       } catch (retryErr: any) {
-        console.error('Google Sign-in retry failed:', retryErr);
+        console.error('[GoogleAuth] Google Sign-in retry failed:', retryErr);
         throw retryErr;
       }
     }
-    console.error('Google Sign-in error:', error);
+    console.error('[GoogleAuth] Google Sign-in error:', error);
     throw error;
   } finally {
     isSigningIn = false;
@@ -156,7 +168,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
     return { user: result.user, accessToken: cachedAccessToken || '' };
   } catch (error: any) {
-    console.error('Workspace Google Sign in error:', error);
+    console.error('[GoogleAuth] Workspace Google Sign in error:', error);
     throw error;
   } finally {
     isSigningIn = false;
@@ -224,7 +236,7 @@ export const signInWithEmail = async (email: string, pass: string): Promise<User
     const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
     return cred.user;
   } catch (error: any) {
-    console.error('Email sign-in error:', error?.code || error);
+    console.error('[GoogleAuth] Email sign-in error:', error?.code || error);
     throw new Error(mapAuthError(error));
   }
 };
@@ -250,12 +262,12 @@ export const registerWithEmail = async (
       try {
         await updateProfile(cred.user, { displayName: displayName.trim() });
       } catch (profileErr) {
-        console.warn('Profile name update notice:', profileErr);
+        console.warn('[GoogleAuth] Profile name update notice:', profileErr);
       }
     }
     return cred.user;
   } catch (error: any) {
-    console.error('Email registration error:', error?.code || error);
+    console.error('[GoogleAuth] Email registration error:', error?.code || error);
     throw new Error(mapAuthError(error));
   }
 };

@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
+import { AuthProvider } from './context/AuthContext.tsx';
 import { AppErrorBoundary } from './components/AppErrorBoundary.tsx';
 import './index.css';
 
@@ -35,31 +36,57 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppErrorBoundary>
       <ThemeProvider>
-        <App />
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </ThemeProvider>
     </AppErrorBoundary>
   </StrictMode>,
 );
 
-// Register service worker for offline app shell and asset caching
+// Register service worker in production; clear caches in development to prevent stale module caching
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        reg.onupdatefound = () => {
-          const installingWorker = reg.installing;
-          if (installingWorker) {
-            installingWorker.onstatechange = () => {
-              if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.info('[SW] New version available for Jijiga Express.');
-              }
-            };
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            if (installingWorker) {
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.info('[SW] New version available for Jijiga Express.');
+                }
+              };
+            }
+          };
+        })
+        .catch((err) => {
+          console.warn('[SW] Service worker registration notice:', err);
+        });
+    });
+  } else {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        const scriptUrl =
+          registration.active?.scriptURL ||
+          registration.installing?.scriptURL ||
+          registration.waiting?.scriptURL ||
+          '';
+        if (scriptUrl.endsWith('/sw.js') || scriptUrl.includes('/sw.js')) {
+          registration.unregister();
+        }
+      }
+    });
+    if ('caches' in window) {
+      caches.keys().then((keys) => {
+        for (const key of keys) {
+          if (key.startsWith('jijiga-express-')) {
+            caches.delete(key);
           }
-        };
-      })
-      .catch((err) => {
-        console.warn('[SW] Service worker registration notice:', err);
+        }
       });
-  });
+    }
+  }
 }
