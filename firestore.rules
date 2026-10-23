@@ -263,7 +263,7 @@ service cloud.firestore {
         'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
         'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
         'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
-        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt', 'updatedAt'
+        'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt', 'updatedAt', 'runnerId', 'riderId'
       ])
       && isCustomer()
       && request.resource.data.customerId == request.auth.uid
@@ -271,6 +271,8 @@ service cloud.firestore {
       && request.resource.data.serviceType in ['FOOD', 'KHAT', 'PARCEL', 'RIDE', 'EEU_RECHARGE']
       && request.resource.data.paymentMethod == 'COD'
       && request.resource.data.paymentStatus == 'UNPAID'
+      && (!('runnerId' in request.resource.data) || request.resource.data.runnerId == null)
+      && (!('riderId' in request.resource.data) || request.resource.data.riderId == null)
       && request.resource.data.price is number
       && request.resource.data.price >= 0
       && request.resource.data.quantity is number
@@ -458,11 +460,11 @@ service cloud.firestore {
         || resource.data.customerId == request.auth.uid
         || (isRunner() && (
           resource.data.runnerId == request.auth.uid
-          || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
+          || ((!('runnerId' in resource.data) || resource.data.runnerId == null) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
         ))
         || (isRider() && (
           resource.data.riderId == request.auth.uid
-          || (!('riderId' in resource.data) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
+          || ((!('riderId' in resource.data) || resource.data.riderId == null) && resource.data.status in ['READY_FOR_RIDER', 'VERIFIED_READY'])
         ))
       );
 
