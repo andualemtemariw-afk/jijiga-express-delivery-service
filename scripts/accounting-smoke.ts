@@ -13,6 +13,16 @@ assert.equal(calculateCollectedOrderValue({ ...base, paymentStatus: 'UNPAID' }),
 assert.equal(calculateCollectedOrderValue({ ...base, paymentStatus: 'PAYMENT_PENDING' }), 0);
 assert.equal(calculateCollectedOrderValue({ ...base, paymentStatus: 'FAILED' }), 0);
 assert.equal(calculateCollectedOrderValue({ ...base, paymentStatus: 'REFUNDED' }), 0);
+assert.equal(calculateCollectedOrderValue({
+  ...base,
+  dispute: {
+    reason: 'Test refund',
+    comment: 'Refund status recorded by admin',
+    filedAt: new Date(),
+    status: 'REFUNDED',
+    resolutionNote: 'Test refund'
+  }
+}), 0);
 assert.equal(calculateCollectedOrderValue({ ...base, status: 'CANCELLED', paymentStatus: 'PAID_CONFIRMED' }), 0);
 assert.equal(calculateCollectedOrderValue({ ...base, paymentStatus: 'PAID_CONFIRMED' }), 570);
 assert.equal(calculateCollectedOrderValue({ ...base, serviceType: 'PARCEL', paymentStatus: 'PAID_CONFIRMED', totalPrice: 200 }), 200);
