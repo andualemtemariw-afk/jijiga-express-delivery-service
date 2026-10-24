@@ -31,6 +31,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn()
+        && request.auth.token.email_verified == true
         && isAllowlistedAdminEmail()
         && (
           !exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -142,6 +143,8 @@ service cloud.firestore {
       return request.resource.data.parcelDetails is map
         && request.resource.data.parcelDetails.senderCity == 'Jijiga'
         && request.resource.data.parcelDetails.receiverCity == 'Jijiga'
+        && currentUser().data.city == 'Jijiga'
+        && request.resource.data.customerCity == 'Jijiga'
         && request.resource.data.parcelDetails.weightCategory in ['< 1 kg', '1 - 3 kg', '3 - 5 kg', '5 - 10 kg']
         && request.resource.data.parcelDetails.tamperSealRequested is bool
         && request.resource.data.quantity == 1
@@ -153,6 +156,13 @@ service cloud.firestore {
 
     function validRideOrder() {
       return request.resource.data.rideDetails is map
+        && currentUser().data.city == 'Jijiga'
+        && request.resource.data.customerCity == 'Jijiga'
+        && request.resource.data.rideDetails.city == 'Jijiga'
+        && request.resource.data.rideDetails.pickupLocation is string
+        && request.resource.data.rideDetails.pickupLocation.size() > 0
+        && request.resource.data.rideDetails.dropoffLocation is string
+        && request.resource.data.rideDetails.dropoffLocation.size() > 0
         && request.resource.data.rideDetails.vehicleType in ['MARHABA_TAXI', 'MARHABA_MOTO']
         && request.resource.data.quantity == 1
         && request.resource.data.deliveryFee == 0
@@ -262,7 +272,7 @@ service cloud.firestore {
         );
     }
 
-    function validCustomerOrderCreate() {
+    function validCustomerOrderCreate(orderId) {
       return request.resource.data.keys().hasOnly([
         'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
         'mamilaLocation', 'price', 'quantity', 'deliveryFee', 'totalPrice',
@@ -273,6 +283,9 @@ service cloud.firestore {
         'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt', 'updatedAt'
       ])
       && isCustomer()
+      && request.resource.data.id == orderId
+      && currentUser().data.city == 'Jijiga'
+      && request.resource.data.customerCity == 'Jijiga'
       && request.resource.data.customerId == request.auth.uid
       && request.resource.data.status == 'PENDING'
       && request.resource.data.serviceType in ['FOOD', 'KHAT', 'PARCEL', 'RIDE', 'EEU_RECHARGE']
@@ -301,10 +314,7 @@ service cloud.firestore {
               && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
               && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
             )
-            ||
-            (
-              !exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
-            )
+
           )
         )
         || (
@@ -322,10 +332,7 @@ service cloud.firestore {
               && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.batchId == request.resource.data.batchId
               && getAfter(/databases/$(database)/documents/inventoryReservations/$(request.resource.data.id)).data.quantity == request.resource.data.quantity
             )
-            ||
-            (
-              !exists(/databases/$(database)/documents/batches/$(request.resource.data.batchId))
-            )
+
           )
         )
         || (request.resource.data.serviceType == 'PARCEL' && validParcelOrder())
@@ -462,7 +469,7 @@ service cloud.firestore {
       // admins see all orders. No generic "active order" read for arbitrary signed-in users.
       allow read: if signedIn() && (
         isAdmin()
-        || resource.data.customerId == request.auth.uid
+        || (isCustomer() && resource.data.customerId == request.auth.uid)
         || (isRunner() && (
           resource.data.runnerId == request.auth.uid
           || (!('runnerId' in resource.data) && resource.data.status in ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED'])
@@ -474,7 +481,7 @@ service cloud.firestore {
       );
 
       // Customer-created orders always start in PENDING state and cannot self-assign couriers.
-      allow create: if signedIn() && validCustomerOrderCreate();
+      allow create: if signedIn() && validCustomerOrderCreate(orderId);
 
       allow update: if signedIn() && (
         (isAdmin()
