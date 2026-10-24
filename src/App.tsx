@@ -27,7 +27,6 @@ import {
   saveChatMessageToFirestore, 
   logDeliveryEventToFirestore, 
   generateOrderId,
-  seedCatalogIfEmpty,
   subscribeToFirestoreBatches,
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
@@ -78,8 +77,8 @@ export default function App() {
 
   const [activeRole, setActiveRole] = useState<Role>('CUSTOMER');
   const [orders, setOrders] = useState<Order[]>([]);
-  const [inventory, setInventory] = useState<Batch[]>(INITIAL_BATCHES);
-  const [mamilasList, setMamilasList] = useState<Mamila[]>(MAMILAS);
+  const [inventory, setInventory] = useState<Batch[]>(() => isDemoMode ? INITIAL_BATCHES : []);
+  const [mamilasList, setMamilasList] = useState<Mamila[]>(() => isDemoMode ? MAMILAS : []);
   const [orderMessages, setOrderMessages] = useState<Record<string, ChatMessage[]>>(INITIAL_ORDER_CHATS);
   const [globalModalOrder, setGlobalModalOrder] = useState<Order | null>(null);
   const [alertNotice, setAlertNotice] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
@@ -130,11 +129,6 @@ export default function App() {
     }, 6000);
   };
 
-  // Seed Firestore catalog on initial boot
-  useEffect(() => {
-    seedCatalogIfEmpty().catch(console.warn);
-  }, []);
-
   // 2. Real-time synchronization with Cloud Firestore or Demo fallback
   useEffect(() => {
     if (isDemoMode) {
@@ -145,10 +139,10 @@ export default function App() {
 
     // Subscribe to Firestore Batches & Mamilas
     const unsubBatches = subscribeToFirestoreBatches((liveBatches) => {
-      if (liveBatches && liveBatches.length > 0) setInventory(liveBatches);
+      setInventory(liveBatches || []);
     });
     const unsubMamilas = subscribeToFirestoreMamilas((liveMamilas) => {
-      if (liveMamilas && liveMamilas.length > 0) setMamilasList(liveMamilas);
+      setMamilasList(liveMamilas || []);
     });
 
     // Subscribe to Orders based on role & UID
@@ -380,8 +374,9 @@ export default function App() {
 
   const handleBookRide = async (rideOrder: Partial<Order>) => {
     if (!currentUser) {
-      showAlert('Please sign in with Google to request an express ride.', 'error');
-      return;
+      const error = new Error('Please sign in with Google to request an express ride.');
+      showAlert(error.message, 'error');
+      throw error;
     }
     const orderDocId = generateOrderId();
     const effectiveCustomerId = currentUser.uid;
@@ -397,23 +392,40 @@ export default function App() {
     };
 
     setOrders(prev => [fullOrder, ...prev]);
+    let orderSaved = false;
 
     try {
       await saveOrderToFirestore(fullOrder);
-      await logDeliveryEventToFirestore({
-        orderId: fullOrder.id,
-        status: fullOrder.status,
-        timestamp: new Date().toISOString(),
-        actorRole: 'CUSTOMER',
-        actorId: currentUser.uid,
-        actorName: fullOrder.customerName,
-        note: `Express Bajaj ride requested.`
-      });
-      showAlert(`Ride #${fullOrder.id.slice(-6)} recorded in Cloud Firestore!`, 'success');
+      orderSaved = true;
+
+      let eventLogged = true;
+      try {
+        await logDeliveryEventToFirestore({
+          orderId: fullOrder.id,
+          status: fullOrder.status,
+          timestamp: new Date().toISOString(),
+          actorRole: 'CUSTOMER',
+          actorId: currentUser.uid,
+          actorName: fullOrder.customerName,
+          note: 'Ride request submitted; awaiting authorized driver assignment.'
+        });
+      } catch (eventError) {
+        eventLogged = false;
+        console.warn('Ride was saved, but its delivery event could not be recorded:', eventError);
+      }
+
+      if (eventLogged) {
+        showAlert(`Ride request #${fullOrder.id.slice(-6)} saved. Waiting for dispatch; no driver has been assigned yet.`, 'success');
+      } else {
+        showAlert('Ride request was saved, but its activity event could not be recorded. No driver has been assigned.', 'error');
+      }
     } catch (err: any) {
-      // Rollback state on persistence failure
-      setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
-      showAlert(`Could not record ride: ${err.message}`, 'error');
+      if (!orderSaved) {
+        setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      showAlert(`Could not save ride request: ${message}`, 'error');
+      throw new Error(message);
     }
   };
 
