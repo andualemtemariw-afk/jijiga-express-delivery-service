@@ -64,7 +64,7 @@ import {
   requestNotificationPermission, 
   isPushSupported 
 } from '../services/notificationService';
-import { LatLng, DEFAULT_CUSTOMER_COORDINATES, CITY_COORDINATES } from '../utils/geo';
+import { LatLng, CITY_COORDINATES } from '../utils/geo';
 import { AppUserProfile } from '../types';
 
 interface Props {
@@ -213,7 +213,7 @@ export function CustomerView({
       if (customerProfile.phone) setEditPhone(customerProfile.phone);
       if (customerProfile.city) {
         setEditCity(customerProfile.city);
-        setSelectedCity(customerProfile.city);
+        
       }
       if (customerProfile.address) {
         setEditAddress(customerProfile.address);
@@ -246,7 +246,7 @@ export function CustomerView({
         plusCode: editPlusCode.trim(),
       });
       setAddress(editAddress.trim());
-      setSelectedCity(editCity);
+      
       setPlusCode(editPlusCode.trim());
       setProfileSaveSuccess(true);
       setTimeout(() => setProfileSaveSuccess(false), 3000);
@@ -937,32 +937,20 @@ export function CustomerView({
                     />
                   </div>
 
-                  {/* Destination City & Plus Code */}
+                  {/* Jijiga-only delivery location. Coordinates are recorded only after the customer selects a pin. */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                      Delivery City & Plus Code
+                      Delivery Location
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {CITIES.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCity(c.name);
-                            setPlusCode(`${c.defaultPlusCode} ${c.name}`);
-                          }}
-                          className={`p-2 rounded-xl text-left border text-xs font-semibold transition-all cursor-pointer ${
-                            selectedCity === c.name 
-                              ? 'border-blue-600 bg-blue-50 text-blue-900' 
-                              : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div>{c.name}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{c.region}</div>
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-xs rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-700">
+                      Service area: <strong>Jijiga, Somali Region</strong>. Enter the actual delivery address below. Map coordinates are optional and are saved only after an explicit pin selection.
+                    </p>
+                    {!isJijigaProfile && (
+                      <p role="alert" className="text-xs text-rose-700">
+                        Your saved profile city must be exactly Jijiga before you can place an order.
+                      </p>
+                    )}
                     <input
                       type="text"
                       value={address}
@@ -1030,40 +1018,40 @@ export function CustomerView({
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>Delivery Fee ({selectedCity}):</span>
-                      <span className="font-semibold font-mono tabular-nums">{selectedCity === 'Hargeisa' ? 200 : 150} ETB</span>
+                      <span className="font-semibold font-mono tabular-nums">{150} ETB</span>
                     </div>
                     <div className="flex justify-between text-slate-900 font-bold text-sm pt-2 border-t border-slate-200">
                       <span>Total Amount:</span>
                       <span className="text-blue-600 font-mono tabular-nums">
-                        {(selectedBatch.price * quantity) + (selectedCity === 'Hargeisa' ? 200 : 150)} ETB
+                        {(selectedBatch.price * quantity) + (150)} ETB
                       </span>
                     </div>
                   </div>
 
-                  {/* Transaction Terminal Logs or Place Order Button */}
+                  {checkoutMessage && (
+                    <p role="status" aria-live="polite" className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                      {checkoutMessage}
+                    </p>
+                  )}
                   {isProcessing ? (
-                    <div className="bg-slate-950 text-emerald-400 p-3.5 rounded-xl font-mono text-[11px] overflow-hidden h-44 flex flex-col justify-end border border-slate-800">
-                      {txLogs.map((log, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}>
-                          <span className="text-slate-500">&gt;</span> {log}
-                        </motion.div>
-                      ))}
-                      <div className="animate-pulse text-emerald-500 mt-1">_ executing atomic reservation...</div>
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900" role="status" aria-live="polite">
+                      Submitting the order request…
                     </div>
                   ) : (
                     <div>
                       {currentUser ? (
-                        <button 
-                          onClick={handleCheckout} 
-                          className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
+                        <button
+                          onClick={handleCheckout}
+                          disabled={!isJijigaProfile || !address.trim() || (isDemoMode && !!checkoutMessage?.startsWith('Demo Sandbox only'))}
+                          className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
                         >
                           <ShoppingBag className="w-4 h-4" />
-                          Confirm Order • {((selectedBatch.price * quantity) + (selectedCity === 'Hargeisa' ? 200 : 150))} ETB
+                          Confirm Order • {((selectedBatch.price * quantity) + 150)} ETB
                         </button>
                       ) : (
-                        <button 
+                        <button
                           type="button"
-                          onClick={onSignIn} 
+                          onClick={onSignIn}
                           className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
                         >
                           <LogIn className="w-4 h-4" />
@@ -1071,10 +1059,11 @@ export function CustomerView({
                         </button>
                       )}
                       <p className="text-[11px] text-slate-500 text-center font-medium mt-2">
-                        To request custom delivery features, ask support.
+                        Cash on Delivery only. The order remains pending until an authorized runner or rider acts.
                       </p>
                     </div>
                   )}
+
                 </motion.div>
               ) : (
                 <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-300 text-center text-slate-500 space-y-3">
