@@ -141,6 +141,7 @@ export function CustomerView({
   const [address, setAddress] = useState(customerProfile?.address || 'Kebele 04, Jijiga');
   const [plusCode, setPlusCode] = useState(customerProfile?.plusCode || '8F2P+5H Jijiga');
   const [customerCoords, setCustomerCoords] = useState<LatLng>(() => {
+    if (!isTelegramMiniApp) return DEFAULT_CUSTOMER_COORDINATES;
     const saved = customerProfile?.deliveryCoordinates;
     return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng)
       ? { lat: saved.lat, lng: saved.lng }
@@ -239,7 +240,7 @@ export function CustomerView({
         setEditPlusCode(customerProfile.plusCode);
         setPlusCode(customerProfile.plusCode);
       }
-      if (customerProfile.deliveryCoordinates
+      if (isTelegramMiniApp && customerProfile.deliveryCoordinates
         && Number.isFinite(customerProfile.deliveryCoordinates.lat)
         && Number.isFinite(customerProfile.deliveryCoordinates.lng)) {
         setCustomerCoords({ lat: customerProfile.deliveryCoordinates.lat, lng: customerProfile.deliveryCoordinates.lng });
