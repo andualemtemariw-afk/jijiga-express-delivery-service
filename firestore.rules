@@ -163,12 +163,14 @@ service cloud.firestore {
     function validEeuOrder() {
       return request.resource.data.eeuDetails is map
         && request.resource.data.eeuDetails.meterNumber is string
-        && request.resource.data.eeuDetails.meterNumber.matches('^[0-9-]{13,16}$')
+        && request.resource.data.eeuDetails.meterNumber.matches('^[0-9]{13}$')
         && request.resource.data.eeuDetails.rechargeAmount is number
         && request.resource.data.eeuDetails.rechargeAmount >= 100
         && request.resource.data.eeuDetails.rechargeAmount <= 15000
         && request.resource.data.eeuDetails.rechargeAmount % 50 == 0
         && request.resource.data.eeuDetails.serviceFee == 75
+        && currentUser().data.city == 'Jijiga'
+        && request.resource.data.eeuDetails.eeuHubName in ['EEU Jijiga Main District Office (Keleb)', 'EEU Taiwan Market Commercial Station']
         && request.resource.data.price == request.resource.data.eeuDetails.rechargeAmount
         && request.resource.data.deliveryFee == 75
         && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
@@ -216,6 +218,7 @@ service cloud.firestore {
             && hasEeuReceiptAfter(orderId)
             && request.resource.data.eeuDetails.receiptTimestamp is string
             && request.resource.data.eeuDetails.tokenCode is string
+            && request.resource.data.eeuDetails.tokenCode.matches('^[0-9]{20}$')
           )
         )
         && (
@@ -243,6 +246,10 @@ service cloud.firestore {
             && request.resource.data.eeuDetails.custodyPhase == 'WITH_RIDER_RETURN'
             && request.resource.data.eeuDetails.custodyLabel == 'WITH_RIDER'
             && hasEeuReceipt(orderId)
+            && request.resource.data.eeuDetails.receiptCaptured == true
+            && request.resource.data.eeuDetails.receiptTimestamp is string
+            && request.resource.data.eeuDetails.tokenCode is string
+            && request.resource.data.eeuDetails.tokenCode.matches('^[0-9]{20}$')
             && request.resource.data.eeuDetails.custodyTimeline[resource.data.eeuDetails.custodyTimeline.size()].phase == 'WITH_RIDER_RETURN'
           )
           || (
