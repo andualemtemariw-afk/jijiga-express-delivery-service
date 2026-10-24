@@ -289,31 +289,20 @@ export function CustomerView({
 
   const handleOpenNotificationCenter = async () => {
     if (isPushSupported() && Notification.permission === 'default') {
-      const res = await requestNotificationPermission();
-      setNotificationPermissionState(res);
+      const permission = await requestNotificationPermission();
+      setNotificationPermissionState(permission);
     }
-
-    const targetOrder = activeOrder || myOrders[0] || ({
-      id: 'SYS-NOTIF',
-      batchId: 'BATCH-01',
-      batchName: 'Jijiga Express Delivery Hub',
-      mamilaId: 'MAMILA-01',
-      mamilaName: 'Central Dispatch Hub',
-      mamilaLocation: 'Taiwan Market, Jijiga',
-      price: 0,
-      totalPrice: 0,
-      paymentMethod: 'COD',
-      status: 'PENDING',
-      placedAt: new Date().toISOString(),
-      customerPhone: customerProfile?.phone || '0911234567',
-      customerCity: selectedCity,
-      customerAddress: address,
-    } as unknown as Order);
-
+    const targetOrder = activeOrder || myOrders[0];
+    if (!targetOrder) return;
+    const role = targetOrder.riderId ? 'RIDER' : targetOrder.runnerId ? 'RUNNER' : null;
+    if (!role) {
+      setActiveTab('tracking');
+      return;
+    }
     setCommunicationTarget({
-      role: targetOrder.riderId ? 'RIDER' : 'RUNNER',
-      name: targetOrder.riderName || targetOrder.runnerName || 'Central Courier Dispatch',
-      phone: targetOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+      role,
+      name: targetOrder.riderName || targetOrder.runnerName || 'Assigned courier',
+      phone: '',
       order: targetOrder,
       initialTab: 'notifications'
     });
@@ -656,7 +645,7 @@ export function CustomerView({
             order,
             role: 'RIDER',
             name: order.riderName || 'Staff Rider',
-            phone: order.customerPhone || '+251 91 123 4567',
+            phone: '',
           });
         }}
       />
@@ -1234,7 +1223,7 @@ export function CustomerView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <Navigation className="w-4 h-4 text-blue-600" />
-                      Live Route Map Preview & Courier Telemetry
+                      Delivery Location Map Preview
                     </span>
                     {onOpenMapPreview && (
                       <button
@@ -1270,7 +1259,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({ 
                           role: 'RUNNER', 
                           name: activeOrder.runnerName || 'Staff Runner', 
-                          phone: '+251 92 888 7766',
+                          phone: '',
                           order: activeOrder
                         })}
                         className="p-2 bg-white rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
@@ -1299,7 +1288,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({ 
                           role: 'RIDER', 
                           name: activeOrder.riderName || 'Staff Rider', 
-                          phone: '+251 94 555 4433',
+                          phone: '',
                           order: activeOrder
                         })}
                         className="p-2 bg-white rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
@@ -1326,7 +1315,7 @@ export function CustomerView({
                           <h4 className="text-xs font-bold text-slate-900">Driver Vernacular Quick-Chat & SMS Bridge</h4>
                           <span className="text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Live Bridge
+                            In-app messaging
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-600 mt-0.5">
@@ -1340,7 +1329,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({
                           role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
                           name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          phone: '',
                           order: activeOrder,
                           initialTab: 'chat'
                         })}
@@ -1354,7 +1343,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({
                           role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
                           name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          phone: '',
                           order: activeOrder,
                           initialTab: 'notifications'
                         })}
@@ -1377,7 +1366,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({
                           role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
                           name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          phone: '',
                           order: activeOrder
                         })}
                         className="p-2.5 bg-white/95 rounded-xl border border-blue-200/80 flex items-center justify-between gap-3 text-xs hover:border-blue-400 transition-colors cursor-pointer"
@@ -1546,7 +1535,7 @@ export function CustomerView({
                       type="text"
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
-                      placeholder="+251 91 123 4567"
+                      placeholder="Enter your phone number"
                       className="w-full text-xs font-mono p-3 rounded-xl border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />
                   </div>
