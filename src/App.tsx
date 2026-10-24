@@ -4,7 +4,7 @@ import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry' | 'visualization')[] = ['marker', 'places', 'routes', 'geometry', 'visualization'];
 import { User } from 'firebase/auth';
-import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
+import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
 import { MapPreviewModal } from './components/map/MapPreviewModal';
@@ -31,7 +31,6 @@ import {
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
-import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
   Users, 
@@ -609,68 +608,37 @@ export default function App() {
     }
   };
 
-  // Step-through simulation helper (Available exclusively in Demo Sandbox or for Admin diagnostics)
+  // Step-through simulation is strictly a Demo Sandbox feature.
+  // EEU custody, terminal receipts, and STS tokens must never be simulated.
   const handleSimulateNextStep = (orderId: string) => {
-    if (!isDemoMode && userProfile?.role !== 'admin') {
-      showAlert('Dispatch progression in production is managed exclusively by verified couriers.', 'error');
+    if (!isDemoMode) {
+      showAlert('Step-through simulation is only available in Demo Sandbox. Production fulfillment requires authorized staff actions.', 'error');
       return;
     }
+
     const target = orders.find(o => o.id === orderId);
     if (!target) return;
 
-    if (target.serviceType === 'EEU_RECHARGE' && target.eeuDetails) {
-      const nextPhase = getNextEeuPhase(target.eeuDetails.custodyPhase);
-      if (nextPhase) {
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const stepConfig = EEU_STATE_CHAIN.find(s => s.phase === nextPhase);
-        const isReturned = nextPhase === 'RETURNED';
-
-        const updatedEeuDetails: EeuRechargeDetails = {
-          ...target.eeuDetails,
-          custodyPhase: nextPhase,
-          custodyLabel: stepConfig ? stepConfig.label : (nextPhase as any),
-          custodyTimeline: [
-            ...target.eeuDetails.custodyTimeline,
-            {
-              phase: nextPhase,
-              label: stepConfig ? stepConfig.label : nextPhase,
-              timestamp: nowTime,
-              note: `Step advanced to ${stepConfig ? stepConfig.title : nextPhase}.`,
-              actor: 'Custody Dispatch'
-            }
-          ],
-          receiptImageUrl: target.eeuDetails.receiptImageUrl || (nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED'
-            ? '/src/assets/images/dairy_farm_essentials_1790430944133.jpg'
-            : undefined),
-          receiptTimestamp: target.eeuDetails.receiptTimestamp || (nextPhase === 'WITH_RIDER_RETURN' ? `${new Date().toISOString().slice(0, 10)} ${nowTime}` : undefined),
-          tokenCode: target.eeuDetails.tokenCode || '4920-1928-4820-9182-3849'
-        };
-
-        handleUpdateOrder(orderId, {
-          eeuDetails: updatedEeuDetails,
-          status: isReturned ? 'DELIVERED' : 'PICKED_UP',
-          riderId: target.riderId || currentUser?.uid || 'simulated-rider',
-          riderName: target.riderName || userProfile?.displayName || 'Staff Rider'
-        });
-        return;
-      }
+    if (target.serviceType === 'EEU_RECHARGE') {
+      showAlert('EEU custody cannot be simulated. A real terminal receipt and the actual STS token are required.', 'error');
+      return;
     }
 
     if (target.status === 'RUNNER_ASSIGNED' || target.status === 'PENDING' || target.status === 'TRANSACTION_PENDING') {
-      handleUpdateOrder(orderId, { 
-        status: 'READY_FOR_RIDER', 
-        runnerTagId: 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000) 
+      handleUpdateOrder(orderId, {
+        status: 'READY_FOR_RIDER',
+        runnerTagId: 'TAG-ET-' + Math.floor(10000 + Math.random() * 90000)
       });
     } else if (target.status === 'READY_FOR_RIDER' || target.status === 'VERIFIED_READY') {
-      handleUpdateOrder(orderId, { 
-        status: 'RIDER_ACCEPTED', 
-        riderId: currentUser?.uid || 'simulated-rider', 
-        riderName: userProfile?.displayName || 'Staff Rider' 
+      handleUpdateOrder(orderId, {
+        status: 'RIDER_ACCEPTED',
+        riderId: currentUser?.uid || 'demo-rider',
+        riderName: userProfile?.displayName || 'Demo Staff Rider'
       });
     } else if (target.status === 'RIDER_ACCEPTED' || target.status === 'RIDER_DISPATCHED') {
       handleUpdateOrder(orderId, { status: 'PICKED_UP' });
     } else if (target.status === 'PICKED_UP' || target.status === 'IN_TRANSIT') {
-      handleUpdateOrder(orderId, { 
+      handleUpdateOrder(orderId, {
         status: 'DELIVERED',
         paymentStatus: target.paymentMethod === 'COD' ? 'COLLECTED_BY_RIDER' : 'PAID_CONFIRMED'
       });
@@ -1167,7 +1135,7 @@ export default function App() {
               onCancelOrder={handleCancelOrder}
               onRateOrder={handleRateOrder}
               onDisputeOrder={handleDisputeOrder}
-              onSimulateNextStep={isDemoMode || userProfile?.role === 'admin' ? handleSimulateNextStep : undefined}
+              onSimulateNextStep={isDemoMode ? handleSimulateNextStep : undefined}
               onOpenMapPreview={(order) => setGlobalModalOrder(order)}
               onBookParcel={handleBookParcel}
               onBookRide={handleBookRide}
