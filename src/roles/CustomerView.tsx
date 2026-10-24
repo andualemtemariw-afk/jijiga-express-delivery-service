@@ -224,6 +224,19 @@ export function CustomerView({
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [notificationPermissionState, setNotificationPermissionState] = useState<string>(() => getNotificationPermission());
 
+  // Initialize the location bridge ahead of an explicit user request.
+  // Telegram's LocationManager.init callback signals completion; it does not return a boolean.
+  useEffect(() => {
+    if (!isTelegramMiniApp) return;
+    const locationManager = (window as any).Telegram?.WebApp?.LocationManager;
+    if (!locationManager || locationManager.isInited) return;
+    try {
+      locationManager.init();
+    } catch {
+      // Location is optional; the button below will show a safe fallback.
+    }
+  }, [isTelegramMiniApp]);
+
   // Sync profile fields from authenticated profile
   useMemo(() => {
     if (customerProfile) {
@@ -258,7 +271,7 @@ export function CustomerView({
 
   const handleUseTelegramLocation = () => {
     const locationManager = (window as any).Telegram?.WebApp?.LocationManager;
-    if (!isTelegramMiniApp || !locationManager) {
+    if (!isTelegramMiniApp || !locationManager || typeof locationManager.getLocation !== 'function') {
       setTelegramLocationNotice('Location sharing is available when this page is opened inside a supported Telegram Mini App.');
       return;
     }
@@ -266,35 +279,34 @@ export function CustomerView({
       setTelegramLocationNotice('Profile saving is unavailable right now. Please try again later.');
       return;
     }
+    // getLocation must be invoked directly from the user's tap so Telegram can show its permission prompt.
+    // If initialization has not finished yet, ask the customer to tap again rather than calling it asynchronously.
+    if (!locationManager.isInited) {
+      setTelegramLocationNotice('Telegram location access is still initializing. Please tap again in a moment.');
+      return;
+    }
     setIsSavingTelegramLocation(true);
     setTelegramLocationNotice(null);
     try {
-      locationManager.init((initialized: boolean) => {
-        if (!initialized) {
+      locationManager.getLocation(async (location: any) => {
+        if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)
+          || location.latitude < -90 || location.latitude > 90 || location.longitude < -180 || location.longitude > 180) {
           setIsSavingTelegramLocation(false);
-          setTelegramLocationNotice('Telegram could not initialize location access. Check your device location settings and try again.');
+          setTelegramLocationNotice('Location was not shared. You can try again or enter your address manually.');
           return;
         }
-        locationManager.getLocation(async (location: any) => {
-          if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)
-            || location.latitude < -90 || location.latitude > 90 || location.longitude < -180 || location.longitude > 180) {
-            setIsSavingTelegramLocation(false);
-            setTelegramLocationNotice('Location was not shared. You can try again or enter your address manually.');
-            return;
-          }
-          const coordinates = { lat: location.latitude, lng: location.longitude };
-          try {
-            await onUpdateProfile({ deliveryCoordinates: {
-              ...coordinates,
-              ...(Number.isFinite(location.horizontal_accuracy) && location.horizontal_accuracy >= 0
-                ? { accuracyMeters: location.horizontal_accuracy } : {}),
-            } });
-            setCustomerCoords(coordinates);
-            setTelegramLocationNotice('Your delivery coordinates have been saved to your customer profile.');
-          } catch {
-            setTelegramLocationNotice('We could not save your location. Please try again or enter your address manually.');
-          } finally { setIsSavingTelegramLocation(false); }
-        });
+        const coordinates = { lat: location.latitude, lng: location.longitude };
+        try {
+          await onUpdateProfile({ deliveryCoordinates: {
+            ...coordinates,
+            ...(Number.isFinite(location.horizontal_accuracy) && location.horizontal_accuracy >= 0
+              ? { accuracyMeters: location.horizontal_accuracy } : {}),
+          } });
+          setCustomerCoords(coordinates);
+          setTelegramLocationNotice('Your delivery coordinates have been saved to your customer profile.');
+        } catch {
+          setTelegramLocationNotice('We could not save your location. Please try again or enter your address manually.');
+        } finally { setIsSavingTelegramLocation(false); }
       });
     } catch {
       setIsSavingTelegramLocation(false);
