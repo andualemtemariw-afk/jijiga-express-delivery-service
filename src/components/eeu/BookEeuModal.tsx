@@ -35,8 +35,8 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   onSubmit,
   customerProfile
 }) => {
-  const [meterInput, setMeterInput] = useState<string>('0142883910293');
-  const [cardSerial, setCardSerial] = useState<string>('EEU-SM-99482');
+  const [meterInput, setMeterInput] = useState<string>('');
+  const [cardSerial, setCardSerial] = useState<string>('');
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
@@ -44,6 +44,8 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
+  const [formError, setFormError] = useState('');
+  const isJijigaProfile = customerProfile?.city?.trim().toLowerCase() === 'jijiga';
 
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
   const totalDue = rechargeAmount + serviceFee;
@@ -61,16 +63,35 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meterValidation.isValid) return;
+    setFormError('');
+    if (!isJijigaProfile) {
+      setFormError('EEU prepaid-card service is available only to customers whose saved profile city is Jijiga. Update your profile before continuing.');
+      return;
+    }
+    if (!meterValidation.isValid) {
+      setFormError('Enter exactly 13 meter digits. Spaces and hyphens are accepted for display only.');
+      return;
+    }
+    if (!Number.isFinite(rechargeAmount) || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0) {
+      setFormError('Recharge amount must be ETB 100–15,000 in increments of ETB 50.');
+      return;
+    }
+    if (!customerAuthorized) {
+      setFormError('Confirm authorization before submitting this physical-card request.');
+      return;
+    }
 
-    const hub = EEU_HUBS.find(h => h.id === selectedHubId) || EEU_HUBS[0];
-    const nowIso = new Date().toISOString();
+    const hub = EEU_HUBS.find(h => h.id === selectedHubId);
+    if (!hub) {
+      setFormError('Choose one of the approved Jijiga EEU service points.');
+      return;
+    }
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const customerDisplayName = customerProfile?.displayName || 'Customer';
 
     const initialCustody: EeuRechargeDetails = {
-      meterNumber: meterValidation.formatted,
+      meterNumber: meterValidation.cleaned,
       cardSerialNumber: cardSerial.trim() || undefined,
       rechargeAmount: Number(rechargeAmount),
       customerAuthorized: true,
@@ -108,7 +129,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       customerId: customerProfile?.uid || '',
       customerName: customerDisplayName,
       customerPhone: customerPhone,
-      customerCity: customerProfile?.city || 'Jijiga',
+      customerCity: customerProfile!.city!.trim(),
       customerAddress: customerAddress,
       customerPlusCode: customerProfile?.plusCode || '8F2P+5H Jijiga',
       specialInstructions: specialNote ? `EEU Note: ${specialNote}` : '',
@@ -166,6 +187,11 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 text-xs">
+          {!isJijigaProfile && (
+            <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-900">
+              EEU prepaid-card service requires your saved profile city to be Jijiga. No order has been created.
+            </div>
+          )}
           {/* 13-Digit Meter Number Field */}
           <div>
             <div className="flex justify-between items-center mb-1">
@@ -188,7 +214,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               required
               value={meterInput}
               onChange={handleMeterChange}
-              placeholder="e.g. 0142 8839 1029 3"
+              placeholder="Enter your 13-digit meter number"
               className={`w-full p-2.5 rounded-xl border font-mono text-sm tracking-wide focus:outline-hidden focus:ring-2 ${
                 meterValidation.isValid
                   ? 'border-emerald-300 focus:ring-emerald-500/20 bg-emerald-50/20'
@@ -359,15 +385,16 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!meterValidation.isValid || rechargeAmount <= 0}
+                disabled={!isJijigaProfile || !meterValidation.isValid || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0 || !customerAuthorized}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition"
               >
                 <span>Dispatch Rider for Card Pickup</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {formError && <p role="alert" className="text-[11px] text-rose-700 text-center font-medium">{formError}</p>}
             <p className="text-[11px] text-slate-500 text-center font-medium">
-              To request custom delivery features, ask support.
+              Only the two approved Jijiga EEU service points are available. Meter number is stored as digits only.
             </p>
           </div>
         </form>
