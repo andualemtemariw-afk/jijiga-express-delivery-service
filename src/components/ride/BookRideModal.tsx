@@ -28,8 +28,8 @@ export function BookRideModal({
 }: BookRideModalProps) {
   const selectedCity = 'Jijiga';
   const [vehicleType, setVehicleType] = useState<'MARHABA_TAXI' | 'MARHABA_MOTO'>('MARHABA_TAXI');
-  const [pickup, setPickup] = useState('Kebele 04, Central Plaza');
-  const [dropoff, setDropoff] = useState('Taiwan Commercial Market');
+  const [pickup, setPickup] = useState('');
+  const [dropoff, setDropoff] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -77,7 +77,7 @@ export function BookRideModal({
       customerName: customerProfile.name,
       customerPhone: customerProfile.phone,
       customerCity: selectedCity,
-      customerPlusCode: '8F2P+5H Jijiga',
+      customerPlusCode: '',
       customerAddress: pickup.trim(),
       specialInstructions: 'Pickup: ' + pickup.trim() + '. Destination: ' + dropoff.trim()
         + '. Waiting for dispatcher assignment; no driver has been assigned yet.',
