@@ -360,6 +360,8 @@ export default function App() {
       customerName: effectiveCustomerName,
       customerPhone: userProfile?.phone || parcelOrder.customerPhone || '',
       customerCity: 'Jijiga',
+      runnerId: null,
+      riderId: null,
       customerAddress: parcelOrder.customerAddress?.trim() || '',
       paymentMethod: 'COD',
       paymentStatus: 'UNPAID',
