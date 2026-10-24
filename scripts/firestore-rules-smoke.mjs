@@ -34,7 +34,7 @@ async function createUser(key, role, active = true, emailVerified = role === 'ad
     emailVerified
   });
   await adminDb.doc(`users/${user.uid}`).set({
-    uid: user.uid, displayName: `${key} User`, email, role, active, createdAt: new Date().toISOString()
+    uid: user.uid, displayName: `${key} User`, email, role, active, city: 'Jijiga', createdAt: new Date().toISOString()
   });
   users[key] = { uid: user.uid, email, password, role };
   return user.uid;
@@ -183,6 +183,25 @@ async function main() {
       customerId: strangerUid
     });
   });
+
+  await expectDenied('customer cannot create an order when payload ID differs from document path', async () => {
+    await setDoc(doc(customer.db, 'orders', 'ride-actual-path-id'), {
+      ...validCustomerOrder,
+      id: 'different-payload-id',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID'
+    });
+  });
+  await expectDenied('customer cannot create a ride outside Jijiga', async () => {
+    await setDoc(doc(customer.db, 'orders', 'ride-outside-jijiga'), {
+      ...validCustomerOrder,
+      id: 'ride-outside-jijiga',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      rideDetails: { ...validCustomerOrder.rideDetails, city: 'Hargeisa' }
+    });
+  });
+
   await expectDenied('customer cannot create an already-paid service order directly', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
       ...validCustomerOrder,
