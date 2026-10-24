@@ -268,7 +268,7 @@ export function OrderDensityHeatmap({
           lat: dest.lat,
           lng: dest.lng,
           weight: 2.2,
-          label: `Delivery: ${order.customerCity || 'Jijiga'} (${order.customerAddress || order.customerPlusCode})`,
+          label: `Delivery location (${order.customerCity || 'Jijiga'})`,
           category: 'order_delivery'
         });
       }
@@ -317,7 +317,7 @@ export function OrderDensityHeatmap({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <div className="px-3 py-1.5 bg-white/10 rounded-xl border border-white/10 backdrop-blur-xs flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-slate-300">Hotspot Points:</span>
+            <span className="text-slate-300">Recorded points:</span>
             <span className="font-bold font-mono text-white">{heatmapPoints.length}</span>
           </div>
           <div className="px-3 py-1.5 bg-white/10 rounded-xl border border-white/10 backdrop-blur-xs flex items-center gap-1.5">
@@ -364,7 +364,7 @@ export function OrderDensityHeatmap({
                   statusFilter === 'ACTIVE' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Active Transit
+                Open Orders
               </button>
               <button
                 type="button"
