@@ -39,13 +39,13 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [cardSerial, setCardSerial] = useState<string>('');
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
-  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
+  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
   const [formError, setFormError] = useState('');
-  const isJijigaProfile = customerProfile?.city?.trim().toLowerCase() === 'jijiga';
+  const isJijigaProfile = customerProfile?.city?.trim() === 'Jijiga';
 
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
   const totalDue = rechargeAmount + serviceFee;
@@ -131,7 +131,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       customerPhone: customerPhone,
       customerCity: customerProfile!.city!.trim(),
       customerAddress: customerAddress,
-      customerPlusCode: customerProfile?.plusCode || '8F2P+5H Jijiga',
+      customerPlusCode: customerProfile?.plusCode?.trim() || '',
       specialInstructions: specialNote ? `EEU Note: ${specialNote}` : '',
       eeuDetails: initialCustody,
       createdAt: new Date()
