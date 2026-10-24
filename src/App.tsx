@@ -583,7 +583,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
+  const handleUpdateOrder = async (orderId: string, updates: Partial<Order>, persistToFirestore = true) => {
     if (activeRole === 'CUSTOMER' && userProfile?.role !== 'admin') {
       const protectedKeys = ['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl'];
       const hasProtected = Object.keys(updates).some(key => protectedKeys.includes(key));
@@ -595,7 +595,7 @@ export default function App() {
     }
 
     // Persist first in production so a rejected write cannot masquerade as a successful local update.
-    if (!isDemoMode && currentUser) {
+    if (persistToFirestore && !isDemoMode && currentUser) {
       try {
         await updateOrderInFirestore(orderId, updates);
       } catch (error) {
@@ -607,7 +607,7 @@ export default function App() {
 
     setOrders(prev => prev.map(order => order.id === orderId ? { ...order, ...updates } : order));
 
-    if (!isDemoMode && currentUser && updates.status) {
+    if (persistToFirestore && !isDemoMode && currentUser && updates.status) {
       try {
         await logDeliveryEventToFirestore({
           orderId,
