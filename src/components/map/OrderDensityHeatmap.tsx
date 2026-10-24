@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Map, 
-  AdvancedMarker, 
   useMap, 
   useMapsLibrary,
   useApiLoadingStatus, 
@@ -9,8 +8,6 @@ import {
 } from '@vis.gl/react-google-maps';
 import { Order } from '../../types';
 import { 
-  MAMILA_COORDINATES, 
-  DEFAULT_CUSTOMER_COORDINATES, 
   CITY_COORDINATES, 
   LatLng 
 } from '../../utils/geo';
@@ -19,14 +16,9 @@ import { getGoogleMapsMapId } from '../../services/mapsConfig';
 import { 
   Flame, 
   Layers, 
-  Sliders, 
-  MapPin, 
   Activity, 
-  Store, 
-  Bike, 
   TrendingUp, 
-  Info, 
-  Maximize2, 
+  Flame, 
   Eye, 
   EyeOff,
   Crosshair,
@@ -36,7 +28,7 @@ import {
 export interface HotspotPoint extends LatLng {
   weight: number;
   label?: string;
-  category?: 'order_pickup' | 'order_delivery' | 'high_demand_hub';
+  category?: 'order_pickup' | 'order_delivery';
 }
 
 interface OrderDensityHeatmapProps {
@@ -47,18 +39,6 @@ interface OrderDensityHeatmapProps {
   showControls?: boolean;
   className?: string;
 }
-
-// Key municipal demand clusters in Jijiga to combine with live order points
-const JIJIGA_DEMAND_HUBS: HotspotPoint[] = [
-  { lat: 9.3580, lng: 42.7980, weight: 3.8, label: 'Taiwan Market Commercial Sector', category: 'high_demand_hub' },
-  { lat: 9.3562, lng: 42.8002, weight: 3.2, label: 'Kebele 04 Central Residential', category: 'high_demand_hub' },
-  { lat: 9.3510, lng: 42.7915, weight: 3.0, label: 'Piassa & Arada Commercial Hub', category: 'high_demand_hub' },
-  { lat: 9.3620, lng: 42.8020, weight: 2.4, label: 'Bole Greenbelt Farm Corridor', category: 'high_demand_hub' },
-  { lat: 9.3547, lng: 42.7955, weight: 2.7, label: 'Keleb Regional Administrative Sector', category: 'high_demand_hub' },
-  { lat: 9.3470, lng: 42.8045, weight: 2.1, label: 'Kazanchis & Sheger Dairy Hub', category: 'high_demand_hub' },
-  { lat: 9.3490, lng: 42.8120, weight: 2.5, label: 'Jijiga University Campus District', category: 'high_demand_hub' },
-  { lat: 9.3380, lng: 42.7920, weight: 1.9, label: 'Garaad Wiilwaal Airport Road Entrance', category: 'high_demand_hub' },
-];
 
 /**
  * Native Google Maps Heatmap Layer sub-component
