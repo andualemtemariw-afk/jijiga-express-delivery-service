@@ -174,7 +174,7 @@ export default function App() {
     const isDemo = mode === 'demo';
     setIsDemoMode(isDemo);
     localStorage.setItem('jijiga_mode', isDemo ? 'demo' : 'prod');
-    showAlert(`Switched to ${isDemo ? 'DEMO Mode (bundled data)' : 'PRODUCTION Mode (live Cloud Firestore)'}`, 'info');
+    showAlert(`Switched to ${isDemo ? 'DEMO Mode (bundled data)' : 'PRODUCTION Mode (Cloud Firestore configured)'}`, 'info');
   };
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -985,7 +985,7 @@ export default function App() {
               {!isDemoMode ? (
                 <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Live Production</span>
+                  <span>Production Mode</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
@@ -1142,7 +1142,7 @@ export default function App() {
                 <div>
                   <h4 className="font-bold text-sm text-blue-950">Customer Authentication Required for Orders</h4>
                   <p className="text-xs text-blue-800 mt-0.5">
-                    Sign in with email/password or Google to place verified orders, book express parcels, and track live deliveries.
+                    Sign in with email/password or Google to place orders and view delivery status; rider GPS appears only when a recent location update is available.
                   </p>
                 </div>
               </div>
@@ -1312,7 +1312,7 @@ export default function App() {
                 className="text-emerald-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
               >
                 <Flame className="w-3.5 h-3.5" />
-                Return to Live Production
+                Return to Production Mode
               </button>
             ) : (
               <button
