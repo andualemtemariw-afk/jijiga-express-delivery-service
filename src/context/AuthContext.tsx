@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         displayName: user.displayName || user.email?.split('@')[0] || 'Customer',
         email: user.email || '',
         photoURL: user.photoURL || undefined,
-        role: (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) ? 'admin' : 'customer',
+        role: (user.emailVerified && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim())) ? 'admin' : 'customer',
         active: true,
         createdAt: new Date().toISOString()
       };
@@ -153,8 +153,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAdmin = Boolean(
-    userProfile?.role === 'admin' ||
-    (currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase().trim()))
+    currentUser?.emailVerified
+    && currentUser.email
+    && ADMIN_EMAILS.includes(currentUser.email.toLowerCase().trim())
+    && userProfile?.role === 'admin'
   );
 
   const value: AuthContextValue = {

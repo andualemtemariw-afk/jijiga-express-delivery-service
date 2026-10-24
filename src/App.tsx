@@ -72,14 +72,17 @@ export default function App() {
     updateProfile: contextUpdateProfile 
   } = useAuth();
 
+  const isTelegramMiniApp = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('tg') === '1';
+
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    return localStorage.getItem('jijiga_mode') === 'demo';
+    return !isTelegramMiniApp && localStorage.getItem('jijiga_mode') === 'demo';
   });
 
   const [activeRole, setActiveRole] = useState<Role>('CUSTOMER');
   const [orders, setOrders] = useState<Order[]>([]);
-  const [inventory, setInventory] = useState<Batch[]>(INITIAL_BATCHES);
-  const [mamilasList, setMamilasList] = useState<Mamila[]>(MAMILAS);
+  const [inventory, setInventory] = useState<Batch[]>(isTelegramMiniApp ? [] : INITIAL_BATCHES);
+  const [mamilasList, setMamilasList] = useState<Mamila[]>(isTelegramMiniApp ? [] : MAMILAS);
   const [orderMessages, setOrderMessages] = useState<Record<string, ChatMessage[]>>(INITIAL_ORDER_CHATS);
   const [globalModalOrder, setGlobalModalOrder] = useState<Order | null>(null);
   const [alertNotice, setAlertNotice] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
@@ -130,10 +133,12 @@ export default function App() {
     }, 6000);
   };
 
-  // Seed Firestore catalog on initial boot
+  // Never seed example catalog data from a Telegram Mini App session.
+  // The Mini App consumes the live catalog without write side effects.
   useEffect(() => {
+    if (isTelegramMiniApp) return;
     seedCatalogIfEmpty().catch(console.warn);
-  }, []);
+  }, [isTelegramMiniApp]);
 
   // 2. Real-time synchronization with Cloud Firestore or Demo fallback
   useEffect(() => {
@@ -997,7 +1002,7 @@ export default function App() {
               })}
 
               {/* Discreet Staff Access for Courier / Admin Login */}
-              {!isDemoMode && (!userProfile || userProfile.role === 'customer') && (
+              {!isTelegramMiniApp && !isDemoMode && (!userProfile || userProfile.role === 'customer') && (
                 <button
                   onClick={() => {
                     if (!currentUser) {
@@ -1018,22 +1023,26 @@ export default function App() {
 
             {/* Zone 3: Authentication & Workspace Tools */}
             <div className="flex items-center justify-between sm:justify-end gap-2 text-xs">
-              <button
-                onClick={() => setShowDriveModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer shadow-2xs"
-                title="Google Drive Receipts Vault"
-              >
-                <HardDrive className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Drive</span>
-              </button>
-              <button
-                onClick={() => setShowGmailModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 transition-colors cursor-pointer shadow-2xs"
-                title="Gmail Dispatch Alerts"
-              >
-                <Mail className="w-3.5 h-3.5 text-red-600" />
-                <span className="hidden sm:inline">Gmail</span>
-              </button>
+              {!isTelegramMiniApp && (
+                <button
+                  onClick={() => setShowDriveModal(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer shadow-2xs"
+                  title="Google Drive Receipts Vault"
+                >
+                  <HardDrive className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="hidden sm:inline">Drive</span>
+                </button>
+              )}
+              {!isTelegramMiniApp && (
+                <button
+                  onClick={() => setShowGmailModal(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 transition-colors cursor-pointer shadow-2xs"
+                  title="Gmail Dispatch Alerts"
+                >
+                  <Mail className="w-3.5 h-3.5 text-red-600" />
+                  <span className="hidden sm:inline">Gmail</span>
+                </button>
+              )}
 
               {/* Real Firebase Authentication Button / Profile Avatar */}
               {authLoading ? (
@@ -1061,13 +1070,15 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-                  <button
-                    onClick={handleSignOut}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+                  {!isTelegramMiniApp && (
+                    <button
+                      onClick={handleSignOut}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      title="Sign Out"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -1270,6 +1281,7 @@ export default function App() {
               Verified local batch deliveries, regional parcels & prepaid utilities across Eastern Ethiopia & Somaliland.
             </p>
           </div>
+          {!isTelegramMiniApp && (
           <div className="flex items-center gap-3 text-[11px]">
             {isDemoMode ? (
               <button
@@ -1298,6 +1310,8 @@ export default function App() {
               Maps Config
             </button>
           </div>
+          )}
+
         </footer>
       </div>
     </APIProvider>

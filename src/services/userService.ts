@@ -21,10 +21,15 @@ export async function syncUserProfile(user: User): Promise<AppUserProfile> {
   const userRef = doc(db, USERS_COLLECTION, user.uid);
   const snap = await getDoc(userRef);
 
-  const isAdminEmail = Boolean(user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()));
+  const isAdminEmail = Boolean(user.emailVerified && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()));
 
   if (snap.exists()) {
     const existing = snap.data() as AppUserProfile;
+    if (!isAdminEmail && existing.role === 'admin') {
+      // Do not present an unverified or non-allowlisted account as admin in the UI.
+      // Firestore rules independently enforce the same boundary.
+      return { ...existing, role: 'customer' };
+    }
     if (isAdminEmail && existing.role !== 'admin') {
       try {
         await updateDoc(userRef, { role: 'admin', active: true, updatedAt: new Date().toISOString() });

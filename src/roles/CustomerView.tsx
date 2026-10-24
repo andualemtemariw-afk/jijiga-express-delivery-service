@@ -122,13 +122,33 @@ export function CustomerView({
   onBookEeu,
   onBookKhat,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<TabType>('batches');
+  const isTelegramMiniApp = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('tg') === '1';
+  const telegramParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const telegramCommand = telegramParams.get('tgCommand') || 'start';
+  const dispatcherUsername = (import.meta.env.VITE_TELEGRAM_DISPATCHER_USERNAME || '').replace(/^@/, '').trim();
+  const hasTelegramDispatcher = /^[A-Za-z0-9_]{5,32}$/.test(dispatcherUsername);
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (!isTelegramMiniApp) return 'batches';
+    if (telegramCommand === 'orders' || telegramCommand === 'cancel') return 'history';
+    if (telegramCommand === 'status') return 'tracking';
+    if (telegramCommand === 'location') return 'profile';
+    return 'batches';
+  });
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedCity, setSelectedCity] = useState(customerProfile?.city || 'Jijiga');
   const [address, setAddress] = useState(customerProfile?.address || 'Kebele 04, Jijiga');
   const [plusCode, setPlusCode] = useState(customerProfile?.plusCode || '8F2P+5H Jijiga');
-  const [customerCoords, setCustomerCoords] = useState<LatLng>(DEFAULT_CUSTOMER_COORDINATES);
+  const [customerCoords, setCustomerCoords] = useState<LatLng>(() => {
+    if (!isTelegramMiniApp) return DEFAULT_CUSTOMER_COORDINATES;
+    const saved = customerProfile?.deliveryCoordinates;
+    return saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng)
+      ? { lat: saved.lat, lng: saved.lng }
+      : DEFAULT_CUSTOMER_COORDINATES;
+  });
+  const [isSavingTelegramLocation, setIsSavingTelegramLocation] = useState(false);
+  const [telegramLocationNotice, setTelegramLocationNotice] = useState<string | null>(null);
   const [showCheckoutMap, setShowCheckoutMap] = useState(true);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [cookingInstruction, setCookingInstruction] = useState('Please cook it well done, no pink inside.');
@@ -204,6 +224,19 @@ export function CustomerView({
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
   const [notificationPermissionState, setNotificationPermissionState] = useState<string>(() => getNotificationPermission());
 
+  // Initialize the location bridge ahead of an explicit user request.
+  // Telegram's LocationManager.init callback signals completion; it does not return a boolean.
+  useEffect(() => {
+    if (!isTelegramMiniApp) return;
+    const locationManager = (window as any).Telegram?.WebApp?.LocationManager;
+    if (!locationManager || locationManager.isInited) return;
+    try {
+      locationManager.init();
+    } catch {
+      // Location is optional; the button below will show a safe fallback.
+    }
+  }, [isTelegramMiniApp]);
+
   // Sync profile fields from authenticated profile
   useMemo(() => {
     if (customerProfile) {
@@ -220,6 +253,11 @@ export function CustomerView({
         setEditPlusCode(customerProfile.plusCode);
         setPlusCode(customerProfile.plusCode);
       }
+      if (isTelegramMiniApp && customerProfile.deliveryCoordinates
+        && Number.isFinite(customerProfile.deliveryCoordinates.lat)
+        && Number.isFinite(customerProfile.deliveryCoordinates.lng)) {
+        setCustomerCoords({ lat: customerProfile.deliveryCoordinates.lat, lng: customerProfile.deliveryCoordinates.lng });
+      }
     }
   }, [customerProfile]);
 
@@ -229,6 +267,51 @@ export function CustomerView({
       return;
     }
     callback();
+  };
+
+  const handleUseTelegramLocation = () => {
+    const locationManager = (window as any).Telegram?.WebApp?.LocationManager;
+    if (!isTelegramMiniApp || !locationManager || typeof locationManager.getLocation !== 'function') {
+      setTelegramLocationNotice('Location sharing is available when this page is opened inside a supported Telegram Mini App.');
+      return;
+    }
+    if (!onUpdateProfile) {
+      setTelegramLocationNotice('Profile saving is unavailable right now. Please try again later.');
+      return;
+    }
+    // getLocation must be invoked directly from the user's tap so Telegram can show its permission prompt.
+    // If initialization has not finished yet, ask the customer to tap again rather than calling it asynchronously.
+    if (!locationManager.isInited) {
+      setTelegramLocationNotice('Telegram location access is still initializing. Please tap again in a moment.');
+      return;
+    }
+    setIsSavingTelegramLocation(true);
+    setTelegramLocationNotice(null);
+    try {
+      locationManager.getLocation(async (location: any) => {
+        if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)
+          || location.latitude < -90 || location.latitude > 90 || location.longitude < -180 || location.longitude > 180) {
+          setIsSavingTelegramLocation(false);
+          setTelegramLocationNotice('Location was not shared. You can try again or enter your address manually.');
+          return;
+        }
+        const coordinates = { lat: location.latitude, lng: location.longitude };
+        try {
+          await onUpdateProfile({ deliveryCoordinates: {
+            ...coordinates,
+            ...(Number.isFinite(location.horizontal_accuracy) && location.horizontal_accuracy >= 0
+              ? { accuracyMeters: location.horizontal_accuracy } : {}),
+          } });
+          setCustomerCoords(coordinates);
+          setTelegramLocationNotice('Your delivery coordinates have been saved to your customer profile.');
+        } catch {
+          setTelegramLocationNotice('We could not save your location. Please try again or enter your address manually.');
+        } finally { setIsSavingTelegramLocation(false); }
+      });
+    } catch {
+      setIsSavingTelegramLocation(false);
+      setTelegramLocationNotice('Telegram location access could not be opened. Please try again.');
+    }
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -253,7 +336,8 @@ export function CustomerView({
   };
 
   // Active in-flight order
-  const activeOrder = myOrders.find(
+  const telegramOrderId = isTelegramMiniApp ? telegramParams.get('tgOrderId') : null;
+  const activeOrder = telegramOrderId ? myOrders.find((order) => order.id === telegramOrderId) : myOrders.find(
     o => o.status !== 'RATED' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED'
   );
 
@@ -441,6 +525,28 @@ export function CustomerView({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {isTelegramMiniApp && telegramCommand === 'contact' && (
+        <section className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5" aria-labelledby="telegram-dispatch-title">
+          <h3 id="telegram-dispatch-title" className="font-bold text-slate-900">Contact Jijiga Express dispatch</h3>
+          {hasTelegramDispatcher ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p className="text-sm text-slate-700">Message the configured dispatcher account for help with an order.</p>
+              <button type="button" onClick={() => {
+                const url = `https://t.me/${dispatcherUsername}`;
+                const webApp = (window as any).Telegram?.WebApp;
+                if (webApp?.openTelegramLink) webApp.openTelegramLink(url);
+                else window.open(url, '_blank', 'noopener,noreferrer');
+              }} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">
+                Message dispatcher @{dispatcherUsername}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-slate-700">The dispatcher Telegram username has not been configured in this deployment yet. You can still view your orders below; configure dispatch contact before using this shortcut.</p>
+          )}
+          <button type="button" onClick={() => setActiveTab('history')} className="mt-3 text-sm font-semibold text-blue-800 underline underline-offset-2">View my orders</button>
+        </section>
+      )}
 
       {/* Sub-Navigation Bar */}
       <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-2xs overflow-x-auto">
@@ -1598,6 +1704,17 @@ export function CustomerView({
                   />
                 </div>
 
+                {isTelegramMiniApp && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-800">Set your delivery pin from Telegram</p>
+                    <p className="text-[11px] text-slate-600">Your precise location is shared only after you press this button and approve Telegram’s location prompt.</p>
+                    <button type="button" onClick={handleUseTelegramLocation} disabled={isSavingTelegramLocation}
+                      className="rounded-xl bg-blue-700 px-4 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:opacity-60">
+                      {isSavingTelegramLocation ? 'Saving location…' : 'Use my current location'}
+                    </button>
+                    {telegramLocationNotice && <p className="text-xs text-slate-700" role="status" aria-live="polite">{telegramLocationNotice}</p>}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 block">Plus Code / Digital Pin</label>
                   <input 

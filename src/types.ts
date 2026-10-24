@@ -242,6 +242,7 @@ export interface AppUserProfile {
   city?: string;
   address?: string;
   plusCode?: string;
+  deliveryCoordinates?: { lat: number; lng: number; accuracyMeters?: number };
   role: UserRole;
   mamilaId?: string;
   active?: boolean;
