@@ -1,25 +1,18 @@
 import { useState } from 'react';
-import { CITIES } from '../../data';
-import { PaymentMethod, RideDetails, Order } from '../../types';
-import { 
-  X, 
-  Bike, 
-  MapPin, 
-  Navigation, 
-  CheckCircle2, 
-  Star, 
-  ShieldCheck, 
-  Radio, 
-  Phone, 
-  Clock,
+import { RideDetails, Order } from '../../types';
+import {
+  X,
+  Navigation,
   ArrowRight,
-  Sparkles
+  ShieldCheck,
+  AlertCircle,
+  LoaderCircle
 } from 'lucide-react';
 
 interface BookRideModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBookRide: (order: Partial<Order>) => void;
+  onBookRide: (order: Partial<Order>) => Promise<void> | void;
   customerProfile: {
     name: string;
     phone: string;
@@ -33,88 +26,73 @@ export function BookRideModal({
   onBookRide,
   customerProfile,
 }: BookRideModalProps) {
-  const [selectedCity, setSelectedCity] = useState(customerProfile.city || 'Hargeisa');
+  const selectedCity = 'Jijiga';
   const [vehicleType, setVehicleType] = useState<'MARHABA_TAXI' | 'MARHABA_MOTO'>('MARHABA_TAXI');
-  const [pickup, setPickup] = useState(
-    selectedCity === 'Hargeisa' ? 'Egal International Airport Terminal 1' : 'Kebele 04, Central Plaza'
-  );
-  const [dropoff, setDropoff] = useState(
-    selectedCity === 'Hargeisa' ? 'Mansoor Hotel & Conference Hall' : 'Taiwan Commercial Market'
-  );
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(
-    selectedCity === 'Hargeisa' ? 'ZAAD' : 'TELEBIRR'
-  );
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchStep, setSearchStep] = useState(0);
+  const [pickup, setPickup] = useState('Kebele 04, Central Plaza');
+  const [dropoff, setDropoff] = useState('Taiwan Commercial Market');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   if (!isOpen) return null;
 
-  // Rate calculations
-  const distanceKm = vehicleType === 'MARHABA_TAXI' ? 6.8 : 5.4;
-  const baseFare = vehicleType === 'MARHABA_TAXI' ? 120 : 60;
-  const perKmRate = vehicleType === 'MARHABA_TAXI' ? 24 : 14;
-  const tripPrice = Math.round(baseFare + distanceKm * perKmRate);
-  const etaMinutes = Math.round(distanceKm * 2.2 + 3);
+  // Tariffs match validRideOrder() in firestore.rules. No route distance or ETA is fabricated.
+  const tripPrice = vehicleType === 'MARHABA_TAXI' ? 283 : 136;
 
-  const handleStartSearchAndBook = () => {
-    setIsSearching(true);
-    setSearchStep(1);
+  const handleRequestRide = async () => {
+    if (!pickup.trim() || !dropoff.trim()) {
+      setSubmitError('Enter both a pickup point and a destination.');
+      return;
+    }
+    if (pickup.trim().toLocaleLowerCase() === dropoff.trim().toLocaleLowerCase()) {
+      setSubmitError('Pickup and destination must be different.');
+      return;
+    }
 
-    setTimeout(() => {
-      setSearchStep(2);
-      setTimeout(() => {
-        const driverName = vehicleType === 'MARHABA_TAXI' ? 'Abdirahman Gulaid' : 'Kenenisa Bedada';
-        const vehicleModel = vehicleType === 'MARHABA_TAXI' ? 'Toyota Corolla Sedan (Silver)' : 'TVS King Bajaj 3-Wheeler (Blue)';
-        const licensePlate = selectedCity === 'Hargeisa' ? 'SL-88492' : 'ET-AA-91823';
+    setIsSubmitting(true);
+    setSubmitError('');
 
-        const rideDetails: RideDetails = {
-          vehicleType,
-          pickupLocation: pickup,
-          dropoffLocation: dropoff,
-          city: selectedCity,
-          driverName,
-          vehicleModel,
-          licensePlate,
-          driverRating: 4.9,
-          driverPhone: '+252 63 998 7766',
-          tripDistanceKm: distanceKm,
-          tripDurationMins: etaMinutes,
-          rideStatus: 'DRIVER_ASSIGNED',
-        };
+    const rideDetails: RideDetails = {
+      vehicleType,
+      pickupLocation: pickup.trim(),
+      dropoffLocation: dropoff.trim(),
+      city: selectedCity,
+      rideStatus: 'REQUESTED',
+    };
 
-        const newOrder: Partial<Order> = {
-          id: 'ord-ride-' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36),
-          serviceType: 'RIDE',
-          batchId: 'ride-' + vehicleType.toLowerCase(),
-          batchName: `${vehicleType === 'MARHABA_TAXI' ? 'Jijiga Express Taxi' : 'Jijiga Express Moto / Bajaj'}: ${pickup.split(',')[0]} → ${dropoff.split(',')[0]}`,
-          mamilaId: 'm4',
-          mamilaName: 'Jijiga Express Delivery Service Fleet Dispatch',
-          mamilaLocation: `${selectedCity} Fleet Hub`,
-          price: tripPrice,
-          quantity: 1,
-          deliveryFee: 0,
-          totalPrice: tripPrice,
-          status: 'PENDING',
-          paymentMethod,
-          paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
-          customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || '',
-          customerName: customerProfile.name,
-          customerPhone: customerProfile.phone,
-          customerCity: selectedCity,
-          customerPlusCode: selectedCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga',
-          customerAddress: dropoff,
-          specialInstructions: `Passenger pickup at ${pickup}. Please call upon arrival.`,
-          rideDetails,
-          distanceKm,
-          etaMinutes: 4, // 4 mins to arrive at pickup
-          createdAt: new Date(),
-        };
+    const newOrder: Partial<Order> = {
+      serviceType: 'RIDE',
+      batchId: vehicleType === 'MARHABA_TAXI' ? 'ride-marhaba-taxi' : 'ride-marhaba-moto',
+      batchName: (vehicleType === 'MARHABA_TAXI' ? 'Jijiga Express Taxi: ' : 'Jijiga Express Moto / Bajaj: ')
+        + pickup.trim() + ' → ' + dropoff.trim(),
+      mamilaId: 'm4',
+      mamilaName: 'Jijiga Express Fleet Dispatch',
+      mamilaLocation: 'Jijiga',
+      price: tripPrice,
+      quantity: 1,
+      deliveryFee: 0,
+      totalPrice: tripPrice,
+      status: 'PENDING',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      customerName: customerProfile.name,
+      customerPhone: customerProfile.phone,
+      customerCity: selectedCity,
+      customerPlusCode: '8F2P+5H Jijiga',
+      customerAddress: pickup.trim(),
+      specialInstructions: 'Pickup: ' + pickup.trim() + '. Destination: ' + dropoff.trim()
+        + '. Waiting for dispatcher assignment; no driver has been assigned yet.',
+      rideDetails,
+      createdAt: new Date(),
+    };
 
-        onBookRide(newOrder);
-        setIsSearching(false);
-        onClose();
-      }, 1500);
-    }, 1500);
+    try {
+      await onBookRide(newOrder);
+      onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Could not submit the ride request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -130,63 +108,34 @@ export function BookRideModal({
             </div>
             <div>
               <h3 className="font-bold text-lg">Book Ride • Jijiga Express Delivery Service</h3>
-              <p className="text-xs text-slate-400">On-demand Taxi & Moto in {selectedCity} • Fast Dispatch</p>
+              <p className="text-xs text-slate-400">On-demand Taxi & Moto in Jijiga</p>
             </div>
           </div>
           <button
             onClick={onClose}
+            disabled={isSubmitting}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {isSearching ? (
-          <div className="p-10 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center animate-ping" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg">
-                  <Radio className="w-6 h-6 animate-pulse" />
-                </div>
-              </div>
-            </div>
-
+        {isSubmitting ? (
+          <div className="p-10 flex flex-col items-center justify-center text-center space-y-4" role="status" aria-live="polite">
+            <LoaderCircle className="w-10 h-10 text-blue-600 animate-spin" />
             <div>
-              <h4 className="text-base font-bold text-slate-900">
-                {searchStep === 1 ? 'Locating Nearby Drivers...' : 'Driver Found! Connecting...'}
-              </h4>
+              <h4 className="text-base font-bold text-slate-900">Saving your ride request…</h4>
               <p className="text-xs text-slate-500 max-w-xs mt-1">
-                Scanning verified {vehicleType === 'MARHABA_TAXI' ? 'Jijiga Express Taxis' : 'Jijiga Express Motos'} in {selectedCity}.
+                This does not mean a driver has been assigned. Dispatch must confirm an available driver.
               </p>
             </div>
           </div>
         ) : (
           <div className="p-5 space-y-5">
-            {/* City Selector */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Operating City</label>
-              <select
-                value={selectedCity}
-                onChange={(e) => {
-                  const city = e.target.value;
-                  setSelectedCity(city);
-                  if (city === 'Hargeisa') {
-                    setPickup('Egal International Airport Terminal 1');
-                    setDropoff('Mansoor Hotel & Conference Hall');
-                    setPaymentMethod('ZAAD');
-                  } else {
-                    setPickup('Kebele 04, Central Plaza');
-                    setDropoff('Taiwan Commercial Market');
-                    setPaymentMethod('TELEBIRR');
-                  }
-                }}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white font-semibold"
-              >
-                {CITIES.map((c) => (
-                  <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
-                ))}
-              </select>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <label className="text-xs font-bold text-slate-700 block mb-1">Service Area</label>
+              <p className="text-sm font-semibold text-slate-900">Jijiga, Somali Region, Ethiopia</p>
+              <p className="text-[11px] text-slate-500 mt-1">Ride requests are currently limited to Jijiga.</p>
             </div>
 
             {/* Vehicle Mode Tabs (Marhaba Taxi vs Marhaba Moto) */}
@@ -230,7 +179,7 @@ export function BookRideModal({
                   </div>
                   <div className="font-bold text-slate-900 text-sm mt-2">Jijiga Express Moto / Bajaj</div>
                   <div className="text-[11px] text-slate-500">Fast city express ride</div>
-                  <div className="font-mono font-bold text-emerald-700 text-xs mt-1">~{Math.round(tripPrice * 0.65)} ETB</div>
+                  <div className="font-mono font-bold text-emerald-700 text-xs mt-1">{tripPrice} ETB</div>
                 </button>
               </div>
             </div>
@@ -263,58 +212,44 @@ export function BookRideModal({
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 font-medium">
-                <span>Estimated trip: {distanceKm} km</span>
-                <span className="flex items-center gap-1 text-slate-700 font-bold">
-                  <Clock className="w-3.5 h-3.5 text-blue-600" /> ~{etaMinutes} mins trip
-                </span>
-              </div>
+              <p className="text-[11px] text-slate-500 pt-1">
+                Live route distance and arrival-time estimates are not available in this booking flow. Dispatch will confirm availability separately.
+              </p>
             </div>
 
-            {/* Payment Method */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">Payment Method</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'ZAAD', label: 'Zaad' },
-                  { id: 'TELEBIRR', label: 'Telebirr' },
-                  { id: 'SAHAL', label: 'Sahal' },
-                  { id: 'EBIRR', label: 'eBIRR' },
-                  { id: 'COOP_PAY', label: 'Coop Pay' },
-                  { id: 'COD', label: 'Cash' },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setPaymentMethod(m.id as PaymentMethod)}
-                    className={`py-2 px-2.5 rounded-lg border text-xs font-semibold text-center cursor-pointer transition-colors ${
-                      paymentMethod === m.id
-                        ? 'border-blue-600 bg-blue-50 text-blue-800'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
+            <div className="rounded-xl border border-slate-200 p-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Payment: Cash on delivery (COD)
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Online wallet checkout is currently disabled. Pay only after the ride is completed and the fare is confirmed.
+              </p>
             </div>
 
             {/* Confirm button */}
             <div className="pt-2">
               <button
                 type="button"
-                onClick={handleStartSearchAndBook}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                onClick={handleRequestRide}
+                disabled={isSubmitting}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
                 <span>Request {vehicleType === 'MARHABA_TAXI' ? 'Jijiga Express Taxi' : 'Jijiga Express Moto'}</span>
                 <span className="text-emerald-400 font-mono font-bold">
-                  ({vehicleType === 'MARHABA_TAXI' ? tripPrice : Math.round(tripPrice * 0.65)} ETB)
+                  ({tripPrice} ETB)
                 </span>
                 <ArrowRight className="w-4 h-4 ml-1" />
               </button>
               <p className="text-[11px] text-slate-500 text-center mt-2 font-medium">
-                To request custom delivery features, ask support.
+                Your request will be saved as pending until dispatch assigns a real driver.
               </p>
+              {submitError && (
+                <p role="alert" className="text-[11px] text-rose-700 text-center mt-2 flex items-center justify-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {submitError}
+                </p>
+              )}
             </div>
           </div>
         )}
