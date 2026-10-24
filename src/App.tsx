@@ -1249,7 +1249,7 @@ export default function App() {
               onResolveDispute={handleResolveDispute}
               onOpenMapPreview={(order) => setGlobalModalOrder(order)}
               onReassignOrder={handleAdminReassign}
-              onConfirmPayment={handleAdminConfirmPayment}
+              onConfirmPayment={isDemoMode ? handleAdminConfirmPayment : undefined}
             />
           )}
           </main>
