@@ -298,8 +298,6 @@ export default function App() {
       riderCoordinates: originCoords,
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
-      distanceKm: 3.2,
-      etaMinutes: 14,
       createdAt: new Date(),
     };
 
