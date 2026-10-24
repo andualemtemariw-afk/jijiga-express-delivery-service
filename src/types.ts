@@ -185,11 +185,11 @@ export interface Order {
   rideDetails?: RideDetails;
   eeuDetails?: EeuRechargeDetails;
   khatDetails?: KhatOrderDetails;
-  runnerId?: string;
+  runnerId?: string | null;
   runnerName?: string;
   runnerTagId?: string;
   runnerPhotoUrl?: string;
-  riderId?: string;
+  riderId?: string | null;
   riderName?: string;
   riderProofUrl?: string;
   distanceKm?: number;
