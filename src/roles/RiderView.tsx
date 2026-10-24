@@ -31,7 +31,7 @@ import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispa
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { EEU_STATE_CHAIN, getNextEeuPhase, validateEeuTransition } from '../utils/eeuStateMachine';
 import { motion, AnimatePresence } from 'motion/react';
-import { saveEeuReceiptAndOrderDetails, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
+import { saveEeuReceiptAndOrderDetails, loadEeuReceiptImage, MAX_EEU_RECEIPT_DATA_URL_LENGTH } from '../services/eeuReceipts';
 import { CourierVoiceButton } from '../components/voice/CourierVoiceButton';
 import { CourierVoiceToTextModal } from '../components/voice/CourierVoiceToTextModal';
 
@@ -130,6 +130,36 @@ export function RiderView({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const lastGpsWriteRef = useRef<Record<string, { at: number; lat: number; lng: number }>>({});
+  const receiptCheckInFlightRef = useRef<Record<string, boolean>>({});
+  const [protectedReceiptAvailability, setProtectedReceiptAvailability] = useState<Record<string, boolean>>({});
+
+  // Older orders can have receiptCaptured=true without the protected receipts/terminal document.
+  // Confirm actual subcollection evidence before allowing the rider to leave the EEU hub.
+  useEffect(() => {
+    if (!currentRiderId) return;
+    const toCheck = orders.filter(order =>
+      order.serviceType === 'EEU_RECHARGE' &&
+      order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' &&
+      order.eeuDetails.receiptCaptured === true &&
+      !Object.prototype.hasOwnProperty.call(protectedReceiptAvailability, order.id) &&
+      !receiptCheckInFlightRef.current[order.id]
+    );
+    if (toCheck.length === 0) return;
+
+    toCheck.forEach(order => { receiptCheckInFlightRef.current[order.id] = true; });
+    void Promise.all(toCheck.map(async order => {
+      try {
+        return [order.id, Boolean(await loadEeuReceiptImage(order.id))] as const;
+      } catch (error) {
+        console.warn('[EEUReceipt] Could not verify saved receipt document:', error);
+        return [order.id, false] as const;
+      }
+    })).then(entries => {
+      setProtectedReceiptAvailability(previous => ({ ...previous, ...Object.fromEntries(entries) }));
+    }).finally(() => {
+      toCheck.forEach(order => { delete receiptCheckInFlightRef.current[order.id]; });
+    });
+  }, [orders, currentRiderId, protectedReceiptAvailability]);
 
   // Real device GPS telemetry. Updates are throttled to reduce battery/data usage.
   useEffect(() => {
@@ -248,9 +278,12 @@ export function RiderView({
           eeuDetails: { ...updatedEeu, receiptImageUrl }
         }, false);
       } else {
-        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
+        const safeUpdatedEeu: EeuRechargeDetails = { ...updatedEeu };
+        delete safeUpdatedEeu.receiptImageUrl;
+        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, safeUpdatedEeu);
+        setProtectedReceiptAvailability(previous => ({ ...previous, [cameraOrder.id]: true }));
         // The service committed order metadata and photo atomically; update app state without a duplicate write.
-        onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
+        onUpdateOrder(cameraOrder.id, { eeuDetails: safeUpdatedEeu }, false);
       }
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
@@ -567,13 +600,22 @@ export function RiderView({
 
                         {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
                           <div className="space-y-2">
-                            {order.eeuDetails.receiptCaptured !== true ? (
+                            {order.eeuDetails.receiptCaptured === true && protectedReceiptAvailability[order.id] === undefined ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="w-full py-3.5 bg-slate-200 text-slate-500 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-wait"
+                              >
+                                <Receipt className="w-5 h-5" />
+                                <span>Checking protected receipt evidence…</span>
+                              </button>
+                            ) : protectedReceiptAvailability[order.id] !== true ? (
                               <button
                                 onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
                               >
-                                <Camera className="w-5 h-5 animate-pulse" />
-                                <span>Mandatory Camera Intent: Snap Paper Receipt & STS Token</span>
+                                <Camera className="w-5 h-5" />
+                                <span>Capture / Re-capture Protected EEU Receipt & STS Token</span>
                               </button>
                             ) : (
                               <button
@@ -581,7 +623,7 @@ export function RiderView({
                                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                               >
                                 <CheckCircle2 className="w-5 h-5 text-blue-200" />
-                                <span>Receipt Verified - Start Return to Customer (WITH_RIDER)</span>
+                                <span>Protected Receipt Saved — Start Return to Customer</span>
                               </button>
                             )}
                           </div>
