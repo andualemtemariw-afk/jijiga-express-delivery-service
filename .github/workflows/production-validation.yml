@@ -10,6 +10,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  # This auth test uses only Node's built-in test runner and native TS stripping.
+  # It remains runnable even if the existing root npm lockfile blocks npm ci.
+  telegram-auth-unit-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Telegram authentication unit tests
+        run: node --experimental-strip-types --test scripts/telegram-auth-smoke.mjs
+
   build-and-test:
     runs-on: ubuntu-latest
     permissions:
