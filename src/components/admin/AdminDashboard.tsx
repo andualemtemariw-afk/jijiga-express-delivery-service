@@ -82,7 +82,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         dataKey: `mamila_${id}`,
         color: MAMILA_COLORS[index],
       }));
-  }, [orders, mamilaSeries]);
+  }, [orders]);
 
 
   // Generate 7-day chronological historical timeline (D-6 to D-0)
@@ -158,7 +158,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
     }
 
     return list;
-  }, [orders]);
+  }, [orders, mamilaSeries]);
 
   // Executive 7-day KPIs
   const kpis = useMemo(() => {
