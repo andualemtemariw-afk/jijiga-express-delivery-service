@@ -48,14 +48,7 @@ const SERVICE_CONFIG: Record<ServiceType, { label: string; color: string; icon: 
   EEU_RECHARGE: { label: 'EEU Electricity', color: '#8b5cf6', icon: Zap },
 };
 
-const MAMILA_PALETTE = [
-  { id: 'm1', name: 'Fresh Morning Farms', color: '#10b981' },
-  { id: 'm2', name: 'Arada Bakery', color: '#f59e0b' },
-  { id: 'm3', name: 'Sheger Dairy', color: '#6366f1' },
-  { id: 'm4', name: 'Hassan Wali Hotel', color: '#ec4899' },
-  { id: 'm5', name: 'Jijiga Fresh Kitchen', color: '#14b8a6' },
-  { id: 'khat_central', name: 'Central Khat Hub', color: '#84cc16' },
-];
+const MAMILA_COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ec4899', '#14b8a6', '#84cc16'];
 
 function isSameDay(d1: Date, d2: Date) {
   return (
@@ -68,6 +61,29 @@ function isSameDay(d1: Date, d2: Date) {
 export function AdminDashboard({ orders, inventory = [], className = '' }: AdminDashboardProps) {
   const [metricView, setMetricView] = useState<DashboardMetricView>('trend');
   const [selectedService, setSelectedService] = useState<string>('ALL');
+
+  // Derive merchant IDs and display names from the actual order records, not bundled examples.
+  const mamilaSeries = useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const order of orders) {
+      if (!order.mamilaId) continue;
+      const previous = counts.get(order.mamilaId);
+      counts.set(order.mamilaId, {
+        name: order.mamilaName || order.mamilaId,
+        count: (previous?.count || 0) + 1,
+      });
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1].count - a[1].count || a[1].name.localeCompare(b[1].name))
+      .slice(0, MAMILA_COLORS.length)
+      .map(([id, value], index) => ({
+        id,
+        name: value.name,
+        dataKey: `mamila_${id}`,
+        color: MAMILA_COLORS[index],
+      }));
+  }, [orders, mamilaSeries]);
+
 
   // Generate 7-day chronological historical timeline (D-6 to D-0)
   const daysData = useMemo(() => {
@@ -115,8 +131,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
 
       // Breakdown by Mamila
       const mamilaCounts: Record<string, number> = {};
-      MAMILA_PALETTE.forEach(m => {
-        mamilaCounts[m.name] = validOrders.filter(o => o.mamilaId === m.id).length;
+      mamilaSeries.forEach(m => {
+        mamilaCounts[m.dataKey] = validOrders.filter(order => order.mamilaId === m.id).length;
       });
 
       const dayCollectedOrderValue = validOrders.reduce((sum, order) => sum + calculateCollectedOrderValue(order), 0);
@@ -417,10 +433,15 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
                 />
                 <Tooltip content={<MerchantCustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="Fresh Morning Farms" fill="#10b981" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="Arada Bakery" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="Sheger Dairy" fill="#6366f1" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="Hassan Wali Hotel" fill="#ec4899" radius={[2, 2, 0, 0]} />
+                {mamilaSeries.map((mamila) => (
+                  <Bar
+                    key={mamila.id}
+                    dataKey={mamila.dataKey}
+                    name={mamila.name}
+                    fill={mamila.color}
+                    radius={[2, 2, 0, 0]}
+                  />
+                ))}
               </BarChart>
             ) : (
               <BarChart data={daysData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -513,7 +534,7 @@ function VolumeCustomTooltip({ active, payload }: any) {
           </div>
           {data.collectedOrderValue > 0 && (
             <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-slate-400 font-medium">
-              <span>Day GMV:</span>
+              <span>Day Collected Order Value:</span>
               <span className="font-mono text-white font-bold">{data.collectedOrderValue.toLocaleString()} ETB</span>
             </div>
           )}
