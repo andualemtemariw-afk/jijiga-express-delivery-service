@@ -275,7 +275,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold">7-Day Collected Order Value</span>
+            <span className="text-xs font-semibold">7-Day Collected Value by Order Date</span>
             <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <ArrowUpRight className="w-4 h-4" />
             </div>
@@ -287,7 +287,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
             <span className="text-xs font-bold text-slate-600">ETB</span>
           </div>
           <p className="text-[11px] text-purple-600 font-medium mt-1">
-            Excludes unpaid/refunded orders and EEU electricity principal; not platform profit.
+            By order creation date from loaded records (latest 100 orders); excludes unpaid/refunded orders and EEU electricity principal; not profit.
           </p>
         </div>
       </div>
