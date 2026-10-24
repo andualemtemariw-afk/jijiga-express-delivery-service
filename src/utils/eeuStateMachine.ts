@@ -58,11 +58,10 @@ export const EEU_STATE_CHAIN: EeuStepConfig[] = [
   }
 ];
 
+// Physical-card EEU recharge is currently limited to the two operationally approved Jijiga service points.
 export const EEU_HUBS = [
   { id: 'hub_jijiga_main', name: 'EEU Jijiga Main District Office (Keleb)', address: 'Near Regional Admin Complex, Keleb Sector' },
-  { id: 'hub_jijiga_taiwan', name: 'EEU Taiwan Market Commercial Station', address: 'Taiwan Market Commercial Center, Jijiga' },
-  { id: 'hub_jijiga_airport', name: 'EEU Garaad Wiilwaal District Kiosk', address: 'Airport Road Sub-center' },
-  { id: 'hub_diredawa_central', name: 'EEU Dire Dawa Regional Operations Hub', address: 'Kezira Business Sector, Dire Dawa' }
+  { id: 'hub_jijiga_taiwan', name: 'EEU Taiwan Market Commercial Station', address: 'Taiwan Market Commercial Center, Jijiga' }
 ];
 
 /**
