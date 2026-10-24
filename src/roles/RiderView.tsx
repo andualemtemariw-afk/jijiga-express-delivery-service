@@ -131,7 +131,7 @@ export function RiderView({
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const lastGpsWriteRef = useRef<Record<string, { at: number; lat: number; lng: number }>>({});
   const receiptCheckInFlightRef = useRef<Record<string, boolean>>({});
-  const [protectedReceiptAvailability, setProtectedReceiptAvailability] = useState<Record<string, boolean>>({});
+  const [protectedReceiptAvailability, setProtectedReceiptAvailability] = useState<Record<string, boolean | null>>({});
 
   // Older orders can have receiptCaptured=true without the protected receipts/terminal document.
   // Confirm actual subcollection evidence before allowing the rider to leave the EEU hub.
@@ -152,7 +152,7 @@ export function RiderView({
         return [order.id, Boolean(await loadEeuReceiptImage(order.id))] as const;
       } catch (error) {
         console.warn('[EEUReceipt] Could not verify saved receipt document:', error);
-        return [order.id, false] as const;
+        return [order.id, null] as const;
       }
     })).then(entries => {
       setProtectedReceiptAvailability(previous => ({ ...previous, ...Object.fromEntries(entries) }));
@@ -608,6 +608,19 @@ export function RiderView({
                               >
                                 <Receipt className="w-5 h-5" />
                                 <span>Checking protected receipt evidence…</span>
+                              </button>
+                            ) : protectedReceiptAvailability[order.id] === null ? (
+                              <button
+                                type="button"
+                                onClick={() => setProtectedReceiptAvailability(previous => {
+                                  const next = { ...previous };
+                                  delete next[order.id];
+                                  return next;
+                                })}
+                                className="w-full py-3.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Receipt className="w-5 h-5" />
+                                <span>Receipt check failed — retry before taking action</span>
                               </button>
                             ) : protectedReceiptAvailability[order.id] !== true ? (
                               <button
