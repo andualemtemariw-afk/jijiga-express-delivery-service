@@ -403,7 +403,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                               Pay: PENDING ({order.paymentMethod})
                             </span>
-                            {onConfirmPayment && (
+                            {onConfirmPayment ? (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -413,8 +413,12 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                                 className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer transition-colors shadow-xs flex items-center gap-1"
                               >
                                 <Receipt className="w-2.5 h-2.5" />
-                                <span>Verify Slip</span>
+                                <span>Demo Payment</span>
                               </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-500" title="Payment confirmation requires a trusted server-side verification flow">
+                                Server verification not configured
+                              </span>
                             )}
                           </>
                         )}
@@ -628,7 +632,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Receipt className="w-5 h-5 text-emerald-600" />
-                <h4 className="font-bold text-slate-900 text-base">Verify Payment Slip</h4>
+                <h4 className="font-bold text-slate-900 text-base">Demo Payment Confirmation</h4>
               </div>
               <button
                 type="button"
@@ -672,7 +676,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                   className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Cross-reference with your Telebirr / CBE / e-Dahab merchant statement before confirming.
+                  Demo sandbox only. This does not verify a real gateway transaction or change production payment state.
                 </p>
               </div>
 
@@ -690,7 +694,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
                   className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{isSubmittingPayment ? 'Confirming...' : 'Confirm & Mark Paid'}</span>
+                  <span>{isSubmittingPayment ? 'Updating demo...' : 'Mark Paid (Demo Only)'}</span>
                 </button>
               </div>
             </form>
