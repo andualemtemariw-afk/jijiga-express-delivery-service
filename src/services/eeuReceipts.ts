@@ -29,6 +29,9 @@ export async function saveEeuReceiptAndOrderDetails(
     throw new Error('The receipt can only be attached while the EEU card is at the hub.');
   }
 
+  const safeEeuDetails: EeuRechargeDetails = { ...eeuDetails };
+  delete safeEeuDetails.receiptImageUrl;
+
   const orderRef = doc(db, 'orders', orderId);
   const receiptRef = doc(orderRef, 'receipts', EEU_TERMINAL_RECEIPT_DOC_ID);
   const batch = writeBatch(db);
@@ -38,7 +41,7 @@ export async function saveEeuReceiptAndOrderDetails(
     capturedAt: serverTimestamp(),
   });
   batch.update(orderRef, {
-    eeuDetails,
+    eeuDetails: safeEeuDetails,
     updatedAt: serverTimestamp(),
   });
   await batch.commit();
