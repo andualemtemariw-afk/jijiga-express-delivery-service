@@ -15,13 +15,11 @@ import { MapErrorBoundary } from './MapErrorBoundary';
 import { getGoogleMapsMapId } from '../../services/mapsConfig';
 import { 
   Flame, 
-  Layers, 
   Activity, 
   TrendingUp, 
   Flame, 
   Eye, 
   EyeOff,
-  Crosshair,
   Sparkles
 } from 'lucide-react';
 
@@ -302,7 +300,7 @@ export function OrderDensityHeatmap({
               <Flame className="w-4 h-4" />
             </span>
             <h3 className="font-bold text-base md:text-lg tracking-tight">
-              {portalRole === 'ADMIN' ? 'City Logistics Demand & Order Density Heatmap' : 'Hotspot Navigation & Demand Density Map'}
+              {portalRole === 'ADMIN' ? 'Recorded Order Location Density' : 'Recorded Order Locations'}
             </h3>
             <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
               Order Locations
@@ -324,7 +322,7 @@ export function OrderDensityHeatmap({
           </div>
           <div className="px-3 py-1.5 bg-white/10 rounded-xl border border-white/10 backdrop-blur-xs flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-300">Peak Sector:</span>
+            <span className="text-slate-300">Data scope:</span>
             <span className="font-semibold text-white">{topSector}</span>
           </div>
         </div>
@@ -461,9 +459,9 @@ export function OrderDensityHeatmap({
           <div className="w-full h-2 rounded-full bg-linear-to-r from-emerald-500 via-blue-500 via-purple-500 via-amber-500 to-red-600" />
           
           <div className="flex justify-between text-[9px] text-slate-500 font-mono">
-            <span>Low (1x)</span>
-            <span>Medium (2.5x)</span>
-            <span>Peak Demand (5x)</span>
+            <span>Lower recorded weight</span>
+            <span>Medium recorded weight</span>
+            <span>Higher recorded weight</span>
           </div>
         </div>
       </div>
