@@ -120,7 +120,7 @@ export function validateEeuTransition(
   }
 
   // Camera receipt mandatory rule when advancing from AT_EEU_HUB to WITH_RIDER_RETURN or RETURNED
-  if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && !(currentDetails.receiptCaptured || currentDetails.receiptImageUrl)) {
+  if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && currentDetails.receiptCaptured !== true) {
     return {
       allowed: false,
       reason: 'Mandatory Terminal Receipt Missing: You must snap a photo of the EEU paper receipt before advancing custody.'
