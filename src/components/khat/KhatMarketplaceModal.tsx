@@ -61,7 +61,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const [quantity, setQuantity] = useState(1);
   const [landmark, setLandmark] = useState(customerProfile.address || 'Kebele 04, Near Central Plaza');
   const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '8F2P+5H Jijiga');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [specialNote, setSpecialNote] = useState('');
   const [wrapType, setWrapType] = useState<'Fresh Banana Leaf' | 'Traditional Palm Fiber' | 'Moist Burlap Wrap'>('Fresh Banana Leaf');
 
@@ -629,33 +629,20 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Payment Method Selector */}
                 <div className="space-y-2 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                    Select Payment Method
+                    Payment Method
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { id: 'TELEBIRR', label: 'Telebirr', badge: 'Popular' },
-                      { id: 'CBE_BIRR', label: 'CBE Birr', badge: 'Direct' },
-                      { id: 'COD', label: 'Cash on Delivery', badge: 'Doorstep' },
-                      { id: 'SAHAL', label: 'Sahal / Zaad', badge: 'Cross-border' }
-                    ].map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id as PaymentMethod)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${
-                          paymentMethod === m.id
-                            ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 shadow-xs'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <span>{m.label}</span>
-                        <span className="text-[9px] font-normal text-slate-400">{m.badge}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('COD')}
+                    className="w-full p-3 rounded-xl border border-emerald-600 bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-bold text-sm text-left"
+                  >
+                    Cash on Delivery (COD)
+                    <span className="block text-[10px] font-normal text-slate-500 mt-1">
+                      Online wallet checkout is disabled until trusted payment verification is available.
+                    </span>
+                  </button>
                 </div>
 
                 {/* Order Tariff Breakdown */}
