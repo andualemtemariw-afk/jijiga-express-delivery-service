@@ -866,6 +866,37 @@ async function main() {
     });
   });
 
+  const recoveredLegacyDetails = {
+    ...legacyEeuDetails,
+    receiptCaptured: true,
+    receiptTimestamp: legacyReceiptTimestamp,
+    tokenCode: '12345678901234567890',
+    custodyTimeline: [...legacyEeuDetails.custodyTimeline, {
+      phase: 'AT_EEU_HUB',
+      label: 'AT_EEU_HUB',
+      timestamp: legacyReceiptTimestamp,
+      note: 'Protected receipt attached during legacy recovery.',
+      actor: `Rider ${riderUid}`
+    }]
+  };
+  delete recoveredLegacyDetails.receiptImageUrl;
+  const legacyRecoveryBatch = writeBatch(rider.db);
+  legacyRecoveryBatch.set(doc(rider.db, 'orders', legacyEeuOrderId, 'receipts', 'terminal'), {
+    receiptImageUrl: 'data:image/jpeg;base64,RECOVERED',
+    capturedBy: riderUid,
+    capturedAt: new Date()
+  });
+  legacyRecoveryBatch.update(doc(rider.db, 'orders', legacyEeuOrderId), {
+    eeuDetails: recoveredLegacyDetails,
+    updatedAt: new Date().toISOString()
+  });
+  await legacyRecoveryBatch.commit();
+  const recoveredLegacyOrder = await getDoc(doc(rider.db, 'orders', legacyEeuOrderId));
+  if (!recoveredLegacyOrder.exists() || 'receiptImageUrl' in (recoveredLegacyOrder.data().eeuDetails || {})) {
+    throw new Error('Legacy EEU receipt recovery left an inline image in order metadata.');
+  }
+  console.log('PASS legacy EEU receipt can be safely migrated into the immutable receipt subcollection');
+
   await expectDenied('rider cannot alter EEU meter number or recharge amount with an otherwise-valid custody event', async () => {
     await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
       eeuDetails: {
