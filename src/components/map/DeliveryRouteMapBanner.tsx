@@ -61,11 +61,11 @@ export function DeliveryRouteMapBanner({
     status: 'PICKED_UP',
     paymentMethod: 'TELEBIRR',
     customerId: '',
-    customerName: 'Andualem Awraris Haile',
-    customerPhone: '+251 91 123 4567',
+    customerName: 'Demo Customer',
+    customerPhone: '',
     customerCity: 'Jijiga',
     customerPlusCode: '8F2P+5H Jijiga',
-    customerAddress: 'Kebele 04, Central Plaza, Jijiga',
+    customerAddress: 'Sample address, Jijiga',
     customerCoordinates: DEFAULT_CUSTOMER_COORDINATES,
     mamilaCoordinates: MAMILA_COORDINATES.m1,
     riderName: 'Active Fleet Courier',
@@ -176,7 +176,7 @@ export function DeliveryRouteMapBanner({
                 <Radio className="w-3.5 h-3.5 text-blue-600" />
                 {hasLiveGps ? 'Coordinates recorded' : 'Unavailable'}
               </span>
-              <span className="text-[10px] text-slate-500 block">Freshness timestamp not available</span>
+              <span className="text-[10px] text-slate-500 block">Coordinates are current only when the last GPS timestamp is under 60 seconds old</span>
             </div>
 
             <div className="space-y-0.5">
@@ -208,7 +208,7 @@ export function DeliveryRouteMapBanner({
 
             {/* In-Map Telemetry Overlay Badge */}
             <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-sm flex items-center gap-2 pointer-events-none text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
               <span className="font-bold text-slate-800">
                 {displayOrder.customerCity || 'City unavailable'}: {displayOrder.customerAddress || 'Delivery address not recorded'}
               </span>
