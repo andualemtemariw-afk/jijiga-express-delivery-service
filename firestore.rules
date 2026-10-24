@@ -69,25 +69,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/orders/$(orderId));
     }
 
-    // Prefer the protected subcollection receipt; recognize existing legacy inline receipts during rollout.
+    // Only the protected immutable /receipts/terminal document counts as receipt evidence.
+    // Legacy inline image fields are not trusted for custody transitions.
     function hasEeuReceipt(orderId) {
-      return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
-        || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
-        );
+      return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal);
     }
 
     function hasEeuReceiptAfter(orderId) {
-      return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
-        || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
-        );
+      return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal);
     }
 
     function isOrderCustomer(orderId) {
