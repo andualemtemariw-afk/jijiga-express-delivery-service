@@ -191,8 +191,12 @@ service cloud.firestore {
         && resource.data.eeuDetails is map
         && request.resource.data.eeuDetails is map
         && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
-          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode'
+          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode', 'receiptImageUrl'
         ])
+        && (
+          !request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasAny(['receiptImageUrl'])
+          || !('receiptImageUrl' in request.resource.data.eeuDetails)
+        )
         && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
         && request.resource.data.eeuDetails.customerAuthorized == resource.data.eeuDetails.customerAuthorized
         && request.resource.data.eeuDetails.rechargeAmount == resource.data.eeuDetails.rechargeAmount
@@ -212,7 +216,11 @@ service cloud.firestore {
           || (
             resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
             && request.resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-            && (!('receiptCaptured' in resource.data.eeuDetails) || resource.data.eeuDetails.receiptCaptured != true)
+            && (
+              !('receiptCaptured' in resource.data.eeuDetails)
+              || resource.data.eeuDetails.receiptCaptured != true
+              || !hasEeuReceipt(orderId)
+            )
             && request.resource.data.eeuDetails.receiptCaptured == true
             && hasEeuReceiptAfter(orderId)
             && request.resource.data.eeuDetails.receiptTimestamp is string
@@ -594,7 +602,6 @@ service cloud.firestore {
           && isOrderRider(orderId)
           && orderDoc(orderId).data.serviceType == 'EEU_RECHARGE'
           && orderDoc(orderId).data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
-          && (!('receiptCaptured' in orderDoc(orderId).data.eeuDetails) || orderDoc(orderId).data.eeuDetails.receiptCaptured != true)
           && request.resource.data.keys().hasOnly(['receiptImageUrl', 'capturedBy', 'capturedAt'])
           && request.resource.data.capturedBy == request.auth.uid
           && request.resource.data.capturedAt is timestamp
