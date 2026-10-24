@@ -567,7 +567,7 @@ export function RiderView({
 
                         {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
                           <div className="space-y-2">
-                            {!(order.eeuDetails.receiptCaptured || order.eeuDetails.receiptImageUrl) ? (
+                            {order.eeuDetails.receiptCaptured !== true ? (
                               <button
                                 onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
