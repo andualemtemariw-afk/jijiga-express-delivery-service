@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { Order, Batch, AppUserProfile } from '../types';
+import { calculateCollectedOrderValue } from '../utils/accounting';
 import { MAMILAS, CITIES } from '../data';
 import { OrderSearchFilterBar, OrderFilterState } from '../components/orders/OrderSearchFilterBar';
 import { extractAvailableCities, applyOrderFilters } from '../utils/orderFilterUtils';
@@ -144,21 +145,14 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
     o => o.status !== 'DELIVERED' && o.status !== 'RATED' && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED'
   );
   
-  // Calculate today's revenue (excluding cancelled)
-  const todayRevenue = orders
-    .filter(o => isSameCalendarDay(new Date(o.createdAt), new Date()) && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
+  // Collected order value is not platform profit. Count only confirmed digital payments
+  // or rider-confirmed COD collection; EEU contributes its service fee, not electricity principal.
+  const todayCollectedOrderValue = orders
+    .filter(o => isSameCalendarDay(new Date(o.createdAt), new Date()))
+    .reduce((sum, order) => sum + calculateCollectedOrderValue(order), 0);
 
-  // Financial Ledger breakdown
-  const grossPlatformGMV = orders
-    .filter(o => o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
-  
-  const totalDeliveryFees = orders
-    .filter(o => o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.deliveryFee || 150), 0);
-
-  const mamilaPayouts = grossPlatformGMV - totalDeliveryFees;
+  const collectedOrderValue = orders
+    .reduce((sum, order) => sum + calculateCollectedOrderValue(order), 0);
 
   // Disputed orders
   const disputedOrders = useMemo(() => {
@@ -186,10 +180,10 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 text-emerald-600 mb-2">
             <DollarSign className="w-5 h-5" /> 
-            <span className="font-semibold text-sm">Today's Revenue</span>
+            <span className="font-semibold text-sm">Today's Collected Order Value</span>
           </div>
-          <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">{todayRevenue.toLocaleString()} ETB</p>
-          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">Direct mobile money & cash</span>
+          <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">{todayCollectedOrderValue.toLocaleString()} ETB</p>
+          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">Confirmed digital payments & rider-confirmed COD</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -206,13 +200,13 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 text-purple-600 mb-2">
             <Wallet className="w-5 h-5" /> 
-            <span className="font-semibold text-sm">Platform GMV</span>
+            <span className="font-semibold text-sm">Collected Order Value</span>
           </div>
           <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
-            {grossPlatformGMV.toLocaleString()} ETB
+            {collectedOrderValue.toLocaleString()} ETB
           </p>
           <span className="text-xs text-purple-600 font-medium mt-1 inline-block">
-            Disbursing {mamilaPayouts.toLocaleString()} ETB to Mamilas
+            Excludes unpaid orders and EEU electricity principal; not a profit or payout ledger
           </span>
         </div>
       </div>
