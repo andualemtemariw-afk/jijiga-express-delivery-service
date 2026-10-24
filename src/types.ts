@@ -148,9 +148,9 @@ export interface RideDetails {
   licensePlate?: string;
   driverRating?: number;
   driverPhone?: string;
-  tripDistanceKm: number;
-  tripDurationMins: number;
-  rideStatus: 'SEARCHING' | 'DRIVER_ASSIGNED' | 'ARRIVED_PICKUP' | 'ON_TRIP' | 'COMPLETED' | 'CANCELLED';
+  tripDistanceKm?: number;
+  tripDurationMins?: number;
+  rideStatus: 'REQUESTED' | 'SEARCHING' | 'DRIVER_ASSIGNED' | 'ARRIVED_PICKUP' | 'ON_TRIP' | 'COMPLETED' | 'CANCELLED';
 }
 
 export interface Order {
