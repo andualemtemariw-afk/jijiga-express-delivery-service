@@ -142,15 +142,15 @@ async function main() {
   const validCustomerOrder = {
     id: 'customer-create-invalid-service',
     serviceType: 'RIDE',
-    batchId: 'ride-taxi',
+    batchId: 'ride-marhaba-taxi',
     batchName: 'Test ride',
     mamilaId: 'm4',
     mamilaName: 'Test',
     mamilaLocation: 'Jijiga',
-    price: 100,
+    price: 283,
     quantity: 1,
     deliveryFee: 0,
-    totalPrice: 100,
+    totalPrice: 283,
     status: 'PENDING',
     paymentMethod: 'TELEBIRR',
     paymentStatus: 'PAYMENT_PENDING',
@@ -159,12 +159,29 @@ async function main() {
     customerPhone: '',
     customerCity: 'Jijiga',
     customerPlusCode: '',
-    customerAddress: 'Test',
+    customerAddress: 'Kebele 04',
+    rideDetails: {
+      vehicleType: 'MARHABA_TAXI',
+      pickupLocation: 'Kebele 04',
+      dropoffLocation: 'Taiwan Market',
+      city: 'Jijiga',
+      rideStatus: 'REQUESTED'
+    },
     createdAt: new Date().toISOString()
   };
 
   await expectDenied('customer cannot create a RIDE order with online payment disabled', async () => {
     await setDoc(doc(customer.db, 'orders', validCustomerOrder.id), validCustomerOrder);
+  });
+
+  await expectDenied('customer cannot create a ride on behalf of another customer', async () => {
+    await setDoc(doc(customer.db, 'orders', 'ride-forged-customer'), {
+      ...validCustomerOrder,
+      id: 'ride-forged-customer',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      customerId: strangerUid
+    });
   });
   await expectDenied('customer cannot create an already-paid service order directly', async () => {
     await setDoc(doc(customer.db, 'orders', 'malicious-paid-create'), {
