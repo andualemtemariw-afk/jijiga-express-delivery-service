@@ -117,7 +117,25 @@ async function main() {
   };
   await adminDb.doc(`orders/${validOrder.id}`).set(validOrder);
 
+  const adminPaymentOrderId = 'test-admin-payment-guard';
+  await adminDb.doc(`orders/${adminPaymentOrderId}`).set({
+    ...validOrder,
+    id: adminPaymentOrderId,
+    status: 'PENDING',
+    paymentMethod: 'TELEBIRR',
+    paymentStatus: 'PAYMENT_PENDING',
+    riderId: null,
+    riderName: ''
+  });
+
   const customer = await clientFor('customer');
+  const adminClient = await clientFor('admin');
+  await expectDenied('admin client cannot mark a digital payment confirmed without trusted server authority', async () => {
+    await updateDoc(doc(adminClient.db, 'orders', adminPaymentOrderId), {
+      paymentStatus: 'PAID_CONFIRMED',
+      paymentReference: 'CLIENT-SUPPLIED-REFERENCE'
+    });
+  });
   // Register through Firebase Auth Emulator, create a customer-only profile, then reauthenticate
   // to exercise the profile lookup performed after an app relaunch without relying on active=true.
   const profileWithoutActive = await registerCustomerClient();
@@ -810,6 +828,44 @@ async function main() {
     status: 'PICKED_UP',
     eeuDetails: eeuDetailsFixture
   });
+  const legacyEeuOrderId = 'test-eeu-legacy-inline-receipt';
+  const legacyEeuDetails = {
+    ...eeuDetailsFixture,
+    receiptImageUrl: 'data:image/jpeg;base64,LEGACY-SAMPLE'
+  };
+  await adminDb.doc(`orders/${legacyEeuOrderId}`).set({
+    ...validOrder,
+    id: legacyEeuOrderId,
+    serviceType: 'EEU_RECHARGE',
+    batchName: 'Legacy EEU receipt fixture',
+    price: 500,
+    deliveryFee: 75,
+    totalPrice: 575,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    status: 'PICKED_UP',
+    riderId: riderUid,
+    eeuDetails: legacyEeuDetails
+  });
+  const legacyReceiptTimestamp = new Date().toISOString();
+  await expectDenied('rider cannot use a legacy inline image as a protected terminal receipt', async () => {
+    await updateDoc(doc(rider.db, 'orders', legacyEeuOrderId), {
+      eeuDetails: {
+        ...legacyEeuDetails,
+        receiptCaptured: true,
+        receiptTimestamp: legacyReceiptTimestamp,
+        tokenCode: '12345678901234567890',
+        custodyTimeline: [...legacyEeuDetails.custodyTimeline, {
+          phase: 'AT_EEU_HUB',
+          label: 'AT_EEU_HUB',
+          timestamp: legacyReceiptTimestamp,
+          note: 'Must be denied because no /receipts/terminal document exists.',
+          actor: `Rider ${riderUid}`
+        }]
+      }
+    });
+  });
+
   await expectDenied('rider cannot alter EEU meter number or recharge amount with an otherwise-valid custody event', async () => {
     await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
       eeuDetails: {
