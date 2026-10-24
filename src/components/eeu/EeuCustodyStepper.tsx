@@ -37,11 +37,11 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptLoadError, setReceiptLoadError] = useState<string | null>(null);
   const details = order.eeuDetails;
-  const hasReceipt = Boolean(details?.receiptCaptured || details?.receiptImageUrl);
-  const displayedReceiptImage = details?.receiptImageUrl || receiptImage;
+  const hasReceipt = details?.receiptCaptured === true;
+  const displayedReceiptImage = receiptImage;
 
   useEffect(() => {
-    if (!showReceiptModal || !hasReceipt || details?.receiptImageUrl) return;
+    if (!showReceiptModal || !hasReceipt) return;
     let cancelled = false;
     setReceiptLoading(true);
     setReceiptLoadError(null);
@@ -58,7 +58,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
         if (!cancelled) setReceiptLoading(false);
       });
     return () => { cancelled = true; };
-  }, [showReceiptModal, order.id, hasReceipt, details?.receiptImageUrl]);
+  }, [showReceiptModal, order.id, hasReceipt];
 
   if (!details) return null;
 
@@ -205,9 +205,9 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
           {hasReceipt ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-3">
-                {details.receiptImageUrl ? (
+                {receiptImage ? (
                   <img
-                    src={details.receiptImageUrl}
+                    src={receiptImage}
                     alt="EEU Receipt preview"
                     className="w-14 h-14 rounded-lg object-cover border border-emerald-300 shadow-2xs cursor-pointer hover:opacity-90"
                     onClick={() => setShowReceiptModal(true)}
