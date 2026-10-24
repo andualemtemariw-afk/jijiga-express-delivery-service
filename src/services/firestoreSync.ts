@@ -210,31 +210,32 @@ export async function saveOrderToFirestore(order: Order): Promise<string> {
     try {
       await runTransaction(db, async (tx) => {
         const batchSnap = await tx.get(batchRef);
-
-        if (batchSnap.exists()) {
-          const batchData = batchSnap.data();
-          const availableStock = batchData.available || 0;
-          const requestedQty = order.quantity || 1;
-
-          if (availableStock < requestedQty) {
-            throw new Error(`Insufficient stock for ${order.batchName}: ${availableStock} available, ${requestedQty} requested.`);
-          }
-
-          tx.update(batchRef, {
-            available: availableStock - requestedQty,
-            lastReservationId: orderId,
-            updatedAt: new Date().toISOString(),
-          });
-
-          tx.set(reservationRef, {
-            orderId,
-            batchId: order.batchId,
-            customerId: user.uid,
-            quantity: requestedQty,
-            action: 'RESERVE',
-            createdAt: new Date().toISOString(),
-          });
+        if (!batchSnap.exists()) {
+          throw new Error('This batch is no longer available. Refresh the live catalog and try again.');
         }
+
+        const batchData = batchSnap.data();
+        const availableStock = batchData.available || 0;
+        const requestedQty = order.quantity || 1;
+
+        if (availableStock < requestedQty) {
+          throw new Error('Insufficient stock for ' + order.batchName + ': ' + availableStock + ' available, ' + requestedQty + ' requested.');
+        }
+
+        tx.update(batchRef, {
+          available: availableStock - requestedQty,
+          lastReservationId: orderId,
+          updatedAt: new Date().toISOString(),
+        });
+
+        tx.set(reservationRef, {
+          orderId,
+          batchId: order.batchId,
+          customerId: user.uid,
+          quantity: requestedQty,
+          action: 'RESERVE',
+          createdAt: new Date().toISOString(),
+        });
 
         tx.set(docRef, serializedOrder);
       });
