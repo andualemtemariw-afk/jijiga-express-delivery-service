@@ -179,6 +179,7 @@ export interface Order {
   customerCoordinates?: { lat: number; lng: number };
   mamilaCoordinates?: { lat: number; lng: number };
   riderCoordinates?: { lat: number; lng: number };
+  riderLocationUpdatedAt?: string;
   specialInstructions?: string;
   cookingInstruction?: string; // Custom preparation / cooking note (e.g. "Please cook it well done, no pink inside")
   parcelDetails?: ParcelDetails;
