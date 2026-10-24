@@ -158,6 +158,18 @@ export function RiderView({
   const handleAdvanceEeuCustody = (order: Order, nextPhase: EeuCustodyPhase) => {
     if (!order.eeuDetails) return;
 
+    if (nextPhase === 'WITH_RIDER_RETURN' && (
+      order.eeuDetails.receiptCaptured !== true
+      || !order.eeuDetails.receiptTimestamp
+      || !/^[0-9]{20}$/.test(order.eeuDetails.tokenCode || '')
+    )) {
+      setEeuErrorMsg(prev => ({
+        ...prev,
+        [order.id]: 'Attach the genuine terminal receipt and enter its exact 20-digit STS token before leaving the EEU hub.'
+      }));
+      return;
+    }
+
     const check = validateEeuTransition(order.eeuDetails, nextPhase);
     if (!check.allowed) {
       setEeuErrorMsg(prev => ({ ...prev, [order.id]: check.reason || 'Custody action blocked' }));
@@ -204,6 +216,11 @@ export function RiderView({
 
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
+    const normalizedToken = cameraTokenInput.replace(/\D/g, '');
+    if (!/^[0-9\s-]+$/.test(cameraTokenInput.trim()) || normalizedToken.length !== 20) {
+      setEeuErrorMsg(prev => ({ ...prev, [cameraOrder.id]: 'Enter the exact 20-digit numeric STS token printed on the genuine EEU receipt.' }));
+      return;
+    }
     setIsCapturingReceipt(true);
     try {
       const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
@@ -212,7 +229,7 @@ export function RiderView({
         ...cameraOrder.eeuDetails,
         receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
-        tokenCode: cameraTokenInput.trim(),
+        tokenCode: normalizedToken,
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
@@ -763,7 +780,7 @@ export function RiderView({
                     required
                     value={cameraTokenInput}
                     onChange={(e) => setCameraTokenInput(e.target.value)}
-                    placeholder="e.g. 4920 1928 4820 9182 3849"
+                    placeholder="Enter the 20 digits printed on the receipt"
                     className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider text-center font-bold"
                   />
                 </div>
@@ -774,7 +791,7 @@ export function RiderView({
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
+                    The captured receipt is attached to this order's protected receipt record. The rider must enter the exact 20-digit numeric token printed on the genuine terminal slip before continuing.
                   </p>
                 </div>
 
@@ -788,7 +805,7 @@ export function RiderView({
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || !cameraTokenInput.trim()}
+                    disabled={isCapturingReceipt || !/^[0-9\s-]+$/.test(cameraTokenInput.trim()) || cameraTokenInput.replace(/\D/g, '').length !== 20}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
