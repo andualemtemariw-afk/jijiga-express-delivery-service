@@ -180,10 +180,10 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 text-emerald-600 mb-2">
             <DollarSign className="w-5 h-5" /> 
-            <span className="font-semibold text-sm">Today's Collected Order Value</span>
+            <span className="font-semibold text-sm">Today's Order-Created Collected Value</span>
           </div>
           <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">{todayCollectedOrderValue.toLocaleString()} ETB</p>
-          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">Confirmed digital payments & rider-confirmed COD</span>
+          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">By order creation date; loaded records only, not actual collection date</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -200,13 +200,13 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 text-purple-600 mb-2">
             <Wallet className="w-5 h-5" /> 
-            <span className="font-semibold text-sm">Collected Order Value</span>
+            <span className="font-semibold text-sm">Collected Value (Loaded Orders)</span>
           </div>
           <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
             {collectedOrderValue.toLocaleString()} ETB
           </p>
           <span className="text-xs text-purple-600 font-medium mt-1 inline-block">
-            Excludes unpaid orders and EEU electricity principal; not a profit or payout ledger
+            Excludes unpaid orders and EEU electricity principal; latest 100 orders only; not profit/payout
           </span>
         </div>
       </div>
