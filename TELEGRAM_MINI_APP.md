@@ -41,6 +41,12 @@ The Mini App and webhook must be reachable from Telegram on a public HTTPS origi
 
 The existing Firebase Hosting configuration rewrites \`/api/*\` to the SPA and does not execute these Node API routes. Run the app and \`/api/telegram/*\` routes together on Vercel before activating the bot.
 
+## Current Telegram platform requirements
+
+Telegram Bot API 10.3 enforces Mini App origin restrictions: Mini App methods must be used from the original Mini App domain. Use one stable, public HTTPS origin for the BotFather Mini App configuration, `TELEGRAM_MINI_APP_URL`, and the deployed app/API routes. Do not treat a per-commit Vercel Preview hostname as the permanent bot URL. If the origin changes, update the BotFather Mini App configuration and server variable together, then test the Mini App from Telegram. Keep external links (such as dispatcher contact) as explicit user-initiated navigation; never embed untrusted content into the Mini App.
+
+Rich Messages and ephemeral-message API additions are not required for the first release: this integration uses ordinary private-chat command replies with Mini App buttons. Keep the initial webhook subscription narrow (`message`) until additional update types are explicitly implemented and tested.
+
 ## Webhook and BotFather setup
 
 1. Revoke the exposed bot token in @BotFather and configure the replacement token only in server environment settings.
