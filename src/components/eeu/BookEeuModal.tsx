@@ -18,7 +18,7 @@ import { EEU_HUBS, validateMeterNumber, calculateEstimatedUnits } from '../../ut
 interface BookEeuModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (eeuOrder: Partial<Order>) => void;
+  onSubmit: (eeuOrder: Partial<Order>) => Promise<void> | void;
   customerProfile?: {
     uid?: string;
     displayName?: string;
@@ -45,6 +45,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
   const [specialNote, setSpecialNote] = useState<string>('');
   const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isJijigaProfile = customerProfile?.city?.trim() === 'Jijiga';
 
   const serviceFee = 75; // Standard errand & round-trip physical transit fee
@@ -61,9 +62,10 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
     setRechargeAmount(amt);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (isSubmitting) return;
     if (!isJijigaProfile) {
       setFormError('EEU prepaid-card service is available only to customers whose saved profile city is Jijiga. Update your profile before continuing.');
       return;
@@ -80,13 +82,21 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       setFormError('Confirm authorization before submitting this physical-card request.');
       return;
     }
+    if (!customerAddress.trim()) {
+      setFormError('Enter the actual address where the physical meter card can be collected.');
+      return;
+    }
+    if (paymentMethod !== 'COD') {
+      setFormError('Only Cash on Delivery is currently supported for the service fee.');
+      return;
+    }
 
     const hub = EEU_HUBS.find(h => h.id === selectedHubId);
     if (!hub) {
       setFormError('Choose one of the approved Jijiga EEU service points.');
       return;
     }
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeStr = new Date().toISOString();
 
     const customerDisplayName = customerProfile?.displayName || 'Customer';
 
@@ -137,8 +147,15 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       createdAt: new Date()
     };
 
-    onSubmit(newOrder);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onSubmit(newOrder);
+      onClose();
+    } catch (error) {
+      setFormError(error instanceof Error ? `Could not save EEU request: ${error.message}` : 'Could not save EEU request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -385,10 +402,10 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!isJijigaProfile || !meterValidation.isValid || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0 || !customerAuthorized}
+                disabled={!isJijigaProfile || !meterValidation.isValid || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0 || !customerAuthorized || !customerAddress.trim() || isSubmitting}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition"
               >
-                <span>Dispatch Rider for Card Pickup</span>
+                <span>{isSubmitting ? 'Saving EEU request…' : 'Request Card Pickup'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
