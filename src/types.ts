@@ -63,7 +63,7 @@ export interface EeuRechargeDetails {
     actor: string;
   }>;
   tokenCode?: string; // 20-digit STS prepaid code
-  receiptImageUrl?: string; // Mandatory camera snapshot of EEU terminal paper receipt
+  receiptImageUrl?: string; // Demo-only local preview; production evidence lives at /receipts/terminal
   receiptTimestamp?: string;
   kwhUnits?: number;
 }
