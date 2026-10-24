@@ -352,9 +352,9 @@ export function RiderView({
 
                     <div className="flex flex-col justify-between sm:items-end">
                       <div className="text-left sm:text-right">
-                        <span className="text-slate-400 font-semibold block text-[10px] uppercase">Route Telemetry</span>
+                        <span className="text-slate-400 font-semibold block text-[10px] uppercase">Route Estimates</span>
                         <span className="font-mono font-bold text-slate-800 text-xs">
-                          ~{order.distanceKm || 3.2} km · ~{order.etaMinutes || 12} mins
+                          Distance and ETA unavailable — no verified routing estimate
                         </span>
                         <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
                           {order.runnerTagId ? `Tamper Seal: ${order.runnerTagId}` : 'Awaiting Runner Seal'}
@@ -480,7 +480,7 @@ export function RiderView({
                         className="text-xs font-bold text-slate-800 flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer"
                       >
                         <MapIcon className="w-4 h-4 text-blue-600" />
-                        <span>Live Dispatch Route Map Preview</span>
+                        <span>Location Map Preview (approximate)</span>
                         {collapsedMaps[order.id] ? (
                           <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                         ) : (
