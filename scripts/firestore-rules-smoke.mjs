@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, doc, collection, getDoc, getDocs, query, where, setDoc, updateDoc, runTransaction, writeBatch } from 'firebase/firestore';
 
 import { createRequire } from 'node:module';
 const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
@@ -625,6 +625,65 @@ async function main() {
   const otherRunner = await clientFor('other-runner');
   const rider = await clientFor('rider');
   const otherRider = await clientFor('other-rider');
+
+  // Regression: queue queries are constrained to owned assignments or explicit-null unassigned pools.
+  const pendingQueueOrderId = 'test-explicit-null-runner-queue-' + Date.now();
+  await adminDb.doc(`orders/${pendingQueueOrderId}`).set({
+    ...validOrder,
+    id: pendingQueueOrderId,
+    serviceType: 'FOOD',
+    batchId: 'test-queue-food',
+    price: 100,
+    quantity: 1,
+    deliveryFee: 20,
+    totalPrice: 120,
+    status: 'PENDING',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    runnerId: null,
+    riderId: null
+  });
+  const runnerQueue = await getDocs(query(
+    collection(runner.db, 'orders'),
+    where('runnerId', '==', null),
+    where('status', 'in', ['PENDING', 'TRANSACTION_PENDING'])
+  ));
+  if (!runnerQueue.docs.some(order => order.id === pendingQueueOrderId)) {
+    throw new Error('FAIL runner explicit-null queue did not include the unassigned order');
+  }
+  console.log('PASS runner can query explicitly unassigned orders only');
+  await expectDenied('runner cannot subscribe to a broad status query that could include another runner assignment', async () => {
+    await getDocs(query(
+      collection(runner.db, 'orders'),
+      where('status', 'in', ['PENDING', 'RUNNER_ASSIGNED'])
+    ));
+  });
+
+  const riderQueueOrderId = 'test-explicit-null-rider-queue-' + Date.now();
+  await adminDb.doc(`orders/${riderQueueOrderId}`).set({
+    ...validOrder,
+    id: riderQueueOrderId,
+    status: 'READY_FOR_RIDER',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    runnerId: runnerUid,
+    riderId: null
+  });
+  const riderQueue = await getDocs(query(
+    collection(rider.db, 'orders'),
+    where('riderId', '==', null),
+    where('status', 'in', ['READY_FOR_RIDER', 'VERIFIED_READY'])
+  ));
+  if (!riderQueue.docs.some(order => order.id === riderQueueOrderId)) {
+    throw new Error('FAIL rider explicit-null queue did not include the ready unassigned order');
+  }
+  console.log('PASS rider can query explicitly unassigned pickup-ready orders');
+  await expectDenied('rider cannot subscribe to a broad queue that could include another rider assignment', async () => {
+    await getDocs(query(
+      collection(rider.db, 'orders'),
+      where('status', 'in', ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'])
+    ));
+  });
 
   const unassignedOrderId = 'test-unassigned-order-' + Date.now();
   await adminDb.doc(`orders/${unassignedOrderId}`).set({
