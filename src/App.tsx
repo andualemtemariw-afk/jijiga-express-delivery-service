@@ -30,7 +30,7 @@ import {
   subscribeToFirestoreBatches,
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
-import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
+import { MAMILA_COORDINATES } from './utils/geo';
 import { 
   Package2, 
   Users, 
@@ -262,8 +262,8 @@ export default function App() {
       b.id === batch.id ? { ...b, available: Math.max(0, b.available - quantity) } : b
     ));
 
-    const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId] || MAMILA_COORDINATES.m1;
-    const destCoords = options?.customerCoordinates || DEFAULT_CUSTOMER_COORDINATES;
+    const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId];
+    const destCoords = options?.customerCoordinates;
 
     const orderDocId = generateOrderId();
     const effectiveCustomerId = currentUser.uid;
@@ -293,9 +293,8 @@ export default function App() {
       customerCity: options?.deliveryCity || userProfile?.city || 'Jijiga',
       customerPlusCode: effectivePlusCode,
       customerAddress: effectiveAddress,
-      customerCoordinates: destCoords,
-      mamilaCoordinates: originCoords,
-      riderCoordinates: originCoords,
+      ...(destCoords ? { customerCoordinates: destCoords } : {}),
+      ...(originCoords ? { mamilaCoordinates: originCoords } : {}),
       specialInstructions: options?.specialInstructions || '',
       cookingInstruction: options?.cookingInstruction || '',
       createdAt: new Date(),
