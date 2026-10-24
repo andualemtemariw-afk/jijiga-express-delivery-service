@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { CITIES } from '../../data';
 import { PaymentMethod, ParcelDetails, Order } from '../../types';
 import { 
   X, 
@@ -35,37 +34,46 @@ export function BookParcelModal({
   onBookParcel,
   senderProfile,
 }: BookParcelModalProps) {
-  const [senderCity, setSenderCity] = useState(senderProfile.city || 'Jijiga');
+  const senderCity = 'Jijiga';
   const [senderName, setSenderName] = useState(senderProfile.name);
   const [senderPhone, setSenderPhone] = useState(senderProfile.phone);
   const [senderAddress, setSenderAddress] = useState(senderProfile.address);
 
-  const [receiverCity, setReceiverCity] = useState('Hargeisa');
-  const [receiverName, setReceiverName] = useState('Mustafa Farah Omer');
-  const [receiverPhone, setReceiverPhone] = useState('+252 63 445 6789');
-  const [receiverAddress, setReceiverAddress] = useState('Near Dahabshiil Tower, Independence Ave');
+  const receiverCity = 'Jijiga';
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverPhone, setReceiverPhone] = useState('');
+  const [receiverAddress, setReceiverAddress] = useState('');
 
   const [category, setCategory] = useState<ParcelDetails['parcelCategory']>('DOCUMENTS');
   const [weight, setWeight] = useState<ParcelDetails['weightCategory']>('< 1 kg');
-  const [description, setDescription] = useState('Important legal clearance certificates and documents');
+  const [description, setDescription] = useState('');
   const [isFragile, setIsFragile] = useState(false);
   const [tamperSeal, setTamperSeal] = useState(true);
-  const [specialNote, setSpecialNote] = useState('Handle with care, expedited courier delivery.');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ZAAD');
+  const [specialNote, setSpecialNote] = useState('');
+  const paymentMethod: PaymentMethod = 'COD';
+  const [formError, setFormError] = useState('');
+  const isJijigaProfile = senderProfile.city.trim().toLowerCase() === 'jijiga';
 
   if (!isOpen) return null;
 
-  // Inter-city fee calculation
-  const isIntercity = senderCity !== receiverCity;
-  const baseRate = isIntercity ? 200 : 120; // 200 ETB inter-city matching walkthrough video
+  // Firestore currently authorizes local Jijiga parcels only.
   const weightAddon = weight === '< 1 kg' ? 50 : weight === '1 - 3 kg' ? 100 : weight === '3 - 5 kg' ? 180 : 250;
   const sealAddon = tamperSeal ? 30 : 0;
-  const deliveryFee = baseRate;
+  const deliveryFee = 120;
   const itemPrice = weightAddon + sealAddon;
   const totalPrice = itemPrice + deliveryFee;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+    if (!isJijigaProfile) {
+      setFormError('Parcel delivery is currently available only for customers with a saved Jijiga profile. Update your profile before booking.');
+      return;
+    }
+    if (!receiverName.trim() || !receiverPhone.trim() || !receiverAddress.trim() || !description.trim()) {
+      setFormError('Enter the receiver name, phone, drop-off address, and parcel contents.');
+      return;
+    }
     const trackingTag = 'PARCEL-' + (senderCity.slice(0, 2) + receiverCity.slice(0, 2)).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
 
     const parcelDetails: ParcelDetails = {
@@ -106,12 +114,10 @@ export function BookParcelModal({
       customerName: senderName,
       customerPhone: senderPhone,
       customerCity: receiverCity,
-      customerPlusCode: receiverCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga',
+      customerPlusCode: '',
       customerAddress: receiverAddress,
       specialInstructions: specialNote || '',
       parcelDetails,
-      distanceKm: isIntercity ? 145 : 6.5,
-      etaMinutes: isIntercity ? 180 : 35,
       createdAt: new Date(),
     };
 
@@ -132,7 +138,7 @@ export function BookParcelModal({
             </div>
             <div>
               <h3 className="font-bold text-lg">Book Express Parcel Service</h3>
-              <p className="text-xs text-slate-400">Inter-city & Express Courier • Jijiga • Hargeisa • Dire Dawa</p>
+              <p className="text-xs text-slate-400">Local courier service within Jijiga</p>
             </div>
           </div>
           <button
@@ -155,15 +161,7 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Origin City</label>
-                <select
-                  value={senderCity}
-                  onChange={(e) => setSenderCity(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-white font-medium"
-                >
-                  {CITIES.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
-                  ))}
-                </select>
+                <p className="w-full text-xs p-2 rounded-lg border border-slate-300 bg-slate-100 font-medium text-slate-800">Jijiga</p>
               </div>
 
               <div>
@@ -209,15 +207,7 @@ export function BookParcelModal({
 
               <div>
                 <label className="text-[11px] font-semibold text-slate-600 block mb-1">Destination City</label>
-                <select
-                  value={receiverCity}
-                  onChange={(e) => setReceiverCity(e.target.value)}
-                  className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-white font-medium"
-                >
-                  {CITIES.map((c) => (
-                    <option key={c.id} value={c.name}>{c.name} ({c.region})</option>
-                  ))}
-                </select>
+                <p className="w-full text-xs p-2 rounded-lg border border-blue-300 bg-blue-50 font-medium text-slate-800">Jijiga</p>
               </div>
 
               <div>
@@ -325,36 +315,16 @@ export function BookParcelModal({
             </div>
           </div>
 
-          {/* Regional Payment Methods */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
             <label className="text-xs font-bold text-slate-800 uppercase tracking-wide block">
-              Horn of Africa Payment Method
+              Payment Method
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: 'TELEBIRR', label: 'Telebirr', sub: 'Ethio Telecom' },
-                { id: 'ZAAD', label: 'Zaad', sub: 'Telesom' },
-                { id: 'EBIRR', label: 'eBIRR', sub: 'Mobile Wallet' },
-                { id: 'SAHAL', label: 'Sahal', sub: 'Golis Telecom' },
-                { id: 'COOP_PAY', label: 'Coop Pay', sub: 'CBO Bank' },
-                { id: 'CBE_BIRR', label: 'CBE Birr', sub: 'Commercial Bank' },
-                { id: 'E_DAHAB', label: 'e-Dahab', sub: 'Dahabshiil' },
-                { id: 'COD', label: 'Cash (COD)', sub: 'Pay Courier' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setPaymentMethod(m.id as PaymentMethod)}
-                  className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
-                    paymentMethod === m.id
-                      ? 'border-blue-600 bg-blue-50/80 font-bold text-blue-900 ring-2 ring-blue-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-100/80 text-slate-700'
-                  }`}
-                >
-                  <div className="font-semibold">{m.label}</div>
-                  <div className="text-[10px] text-slate-500">{m.sub}</div>
-                </button>
-              ))}
+            <div className="flex items-start gap-2 text-sm text-slate-800">
+              <CreditCard className="w-4 h-4 text-emerald-600 mt-0.5" />
+              <div>
+                <span className="font-semibold">Cash on Delivery (COD)</span>
+                <p className="text-[11px] text-slate-500 mt-1">Online wallet checkout is temporarily unavailable until trusted payment verification is implemented.</p>
+              </div>
             </div>
           </div>
 
@@ -372,7 +342,7 @@ export function BookParcelModal({
                 <span>{senderCity}</span>
                 <ArrowRight className="w-3 h-3 text-emerald-400" />
                 <span>{receiverCity}</span>
-                <span>• ~{isIntercity ? '145 km express corridor' : '6 km intra-city'}</span>
+                <span>• Local Jijiga service; route distance and ETA unavailable</span>
               </div>
             </div>
 
@@ -386,18 +356,17 @@ export function BookParcelModal({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+                disabled={!isJijigaProfile}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Confirm & Dispatch Parcel
               </button>
             </div>
           </div>
-          <div className="bg-slate-950/80 px-6 py-2 border-t border-slate-800 text-center">
-            <p className="text-[11px] text-slate-400 font-medium">
-              To request custom delivery features, ask support.
-            </p>
-          </div>
+          {formError && <p role="alert" className="px-6 text-xs font-medium text-rose-700">{formError}</p>}
+          {!isJijigaProfile && <p className="px-6 text-xs text-rose-700">Your saved profile city must be Jijiga to use parcel delivery.</p>}
+
         </form>
       </div>
     </div>
