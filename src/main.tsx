@@ -32,17 +32,19 @@ console.error = (...args: unknown[]) => {
   originalConsoleError.apply(console, args);
 };
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AppErrorBoundary>
-      <ThemeProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </ThemeProvider>
-    </AppErrorBoundary>
-  </StrictMode>,
-);
+const root = createRoot(document.getElementById('root')!);
+const isTelegramMiniApp = new URLSearchParams(window.location.search).get('tg') === '1';
+if (isTelegramMiniApp) {
+  import('./telegram/TelegramMiniApp').then(({ default: TelegramMiniApp }) => {
+    root.render(<StrictMode><TelegramMiniApp /></StrictMode>);
+  }).catch(() => {
+    root.render(<div className="min-h-screen p-6 flex items-center justify-center text-sm text-slate-700" role="alert">
+      Jijiga Express could not start inside Telegram. Please close the Mini App and try again.
+    </div>);
+  });
+} else {
+  root.render(<StrictMode><AppErrorBoundary><ThemeProvider><AuthProvider><App /></AuthProvider></ThemeProvider></AppErrorBoundary></StrictMode>);
+}
 
 // Register service worker in production; clear caches in development to prevent stale module caching
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

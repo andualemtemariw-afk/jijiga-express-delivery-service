@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_USE_FIREBASE_EMULATORS?: string;
   readonly VITE_GOOGLE_MAPS_API_KEY?: string;
+  readonly VITE_TELEGRAM_DISPATCHER_USERNAME?: string;
   readonly APP_URL?: string;
   readonly GEMINI_API_KEY?: string;
 }

@@ -28,6 +28,8 @@ jobs:
         run: npm run lint
       - name: Root production build
         run: npm run build
+      - name: Telegram authentication unit tests
+        run: npm run test:telegram
       # The functions/ folder is retained only for firebase-admin emulator test support.
       # There is no Cloud Functions source or deploy target in this Spark-compatible branch.
       - name: Install Firebase Admin emulator test dependencies
