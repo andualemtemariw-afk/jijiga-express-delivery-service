@@ -16,7 +16,6 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './googleAuth';
 import { Order, Batch, Mamila, ChatMessage, DeliveryEvent, Role } from '../types';
-import { INITIAL_BATCHES, MAMILAS } from '../data';
 
 /**
  * Validates connection to Cloud Firestore if invoked explicitly.
@@ -398,26 +397,14 @@ export async function logDeliveryEventToFirestore(event: Omit<DeliveryEvent, 'id
 }
 
 /**
- * Seeds initial Mamilas & Batches to Firestore if empty, enabling full production functionality.
+ * Automatic catalog seeding is intentionally disabled.
+ * Use an explicitly reviewed, one-time migration for catalog data; never bootstrap
+ * production by writing bundled sample records when a collection is empty.
+ *
+ * Kept as a no-op to preserve compatibility with any older call sites.
  */
 export async function seedCatalogIfEmpty(): Promise<void> {
-  try {
-    const batchesSnap = await getDocs(query(collection(db, BATCHES_COLLECTION), limit(1)));
-    if (batchesSnap.empty) {
-      console.log('Seeding initial product catalog to Cloud Firestore...');
-      // Seed Mamilas
-      for (const m of MAMILAS) {
-        await setDoc(doc(db, MAMILAS_COLLECTION, m.id), m);
-      }
-      // Seed Batches
-      for (const b of INITIAL_BATCHES) {
-        await setDoc(doc(db, BATCHES_COLLECTION, b.id), b);
-      }
-      console.log('Catalog seeding complete.');
-    }
-  } catch (err) {
-    console.warn('Notice: Catalog seeding skipped or already present:', err);
-  }
+  console.warn('[FirestoreSync] Automatic catalog seeding is disabled; no catalog writes were attempted.');
 }
 
 /**
