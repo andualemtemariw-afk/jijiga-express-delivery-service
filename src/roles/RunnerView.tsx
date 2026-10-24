@@ -228,7 +228,7 @@ export function RunnerView({
               <PackageCheck className="w-12 h-12 mb-2 text-slate-300" />
               <p className="font-semibold text-slate-800">No Open Jobs Available</p>
               <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                All newly placed orders have already been claimed by active runners. New orders will appear here in real time.
+                All currently loaded orders have been claimed or filtered out. New orders appear automatically when the Firestore connection and permissions are available.
               </p>
             </div>
           ) : (
