@@ -52,7 +52,7 @@ export function BookParcelModal({
   const [specialNote, setSpecialNote] = useState('');
   const paymentMethod: PaymentMethod = 'COD';
   const [formError, setFormError] = useState('');
-  const isJijigaProfile = senderProfile.city.trim().toLowerCase() === 'jijiga';
+  const isJijigaProfile = senderProfile.city.trim() === 'Jijiga';
 
   if (!isOpen) return null;
 
