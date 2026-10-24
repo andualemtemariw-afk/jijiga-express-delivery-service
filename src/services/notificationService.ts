@@ -234,7 +234,7 @@ export function generateAutomatedSmsPayload(order: Order, stage: 'PLACED' | 'RUN
   body: string;
   smsUrl: string;
 } {
-  const phone = order.customerPhone || '0911234567';
+  const phone = order.customerPhone || '';
   let body = '';
 
   switch (stage) {
@@ -245,7 +245,7 @@ export function generateAutomatedSmsPayload(order: Order, stage: 'PLACED' | 'RUN
       body = `[Jijiga Express] Quality Runner ${order.runnerName || 'Assigned'} is inspecting your order #${order.id} at ${order.mamilaName}. Seal tag applied.`;
       break;
     case 'TRANSIT':
-      body = `[Jijiga Express] Your order #${order.id} is OUT FOR DELIVERY! Rider ${order.riderName || 'Fleet'} en route to ${order.customerAddress || order.customerCity}. ETA: ~${order.etaMinutes || 7} mins.`;
+      body = `[Jijiga Express] Your order #${order.id} is OUT FOR DELIVERY! Rider ${order.riderName || 'Fleet'} en route to ${order.customerAddress || order.customerCity}. ${typeof order.etaMinutes === 'number' ? 'ETA: ~' + order.etaMinutes + ' mins (order estimate).' : 'ETA unavailable; live routing is not connected.'}`;
       break;
     case 'DELIVERED':
       body = `[Jijiga Express] Order #${order.id} has been DELIVERED safely! Thank you for ordering local with Jijiga Express.`;
@@ -266,7 +266,7 @@ export function generateAutomatedWhatsAppPayload(order: Order, stage: 'PLACED' |
   body: string;
   waUrl: string;
 } {
-  const phone = order.customerPhone || order.riderId ? '+251911234567' : '0911234567';
+  const phone = order.customerPhone || '';
   let body = '';
 
   switch (stage) {
@@ -277,7 +277,7 @@ export function generateAutomatedWhatsAppPayload(order: Order, stage: 'PLACED' |
       body = `🏃 *JIJIGA EXPRESS — RUNNER AT STORE*\nOrder: #${order.id}\nRunner: ${order.runnerName || 'Verified Runner'} (Tag #${order.runnerTagId || 'SEAL'})\nStore: ${order.mamilaName} (${order.mamilaLocation})\n\n_Quality inspection & tamper seal in progress._`;
       break;
     case 'TRANSIT':
-      body = `🏍️ *JIJIGA EXPRESS — OUT FOR DELIVERY*\nOrder: #${order.id}\nRider: ${order.riderName || 'Express Courier'}\nETA: ~${order.etaMinutes || 7} mins\nDestination: ${order.customerAddress || order.customerCity}\n\n_Rider is on the way to your doorstep!_`;
+      body = `🏍️ *JIJIGA EXPRESS — OUT FOR DELIVERY*\nOrder: #${order.id}\nRider: ${order.riderName || 'Express Courier'}\nETA: ${typeof order.etaMinutes === 'number' ? '~' + order.etaMinutes + ' mins (order estimate)' : 'unavailable; live routing is not connected'}\nDestination: ${order.customerAddress || order.customerCity}\n\n_Rider is on the way to your doorstep!_`;
       break;
     case 'DELIVERED':
       body = `✅ *JIJIGA EXPRESS — DELIVERED!*\nOrder: #${order.id}\nItem: ${order.batchName}\nStatus: Delivered & Confirmed\n\n_Thank you for choosing Jijiga Express!_`;
@@ -331,7 +331,7 @@ export async function notifyOrderStatusChange(
     case 'IN_TRANSIT':
     case 'PICKED_UP':
       title = '🚀 Out for Delivery!';
-      body = `Rider ${order.riderName || 'Courier'} is on the way to ${order.customerAddress || order.customerCity}. ETA: ~${order.etaMinutes || 7} mins.`;
+      body = `Rider ${order.riderName || 'Courier'} is on the way to ${order.customerAddress || order.customerCity}. ${typeof order.etaMinutes === 'number' ? 'ETA: ~' + order.etaMinutes + ' mins (order estimate).' : 'ETA unavailable; live routing is not connected.'}`;
       break;
 
     case 'DELIVERED':
