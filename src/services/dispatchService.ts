@@ -16,7 +16,7 @@ const ORDERS_COLLECTION = 'orders';
 const USERS_COLLECTION = 'users';
 
 /**
- * Queries active verified staff members from `/users` by role.
+ * Queries active staff members from `/users` by role.
  */
 export async function fetchEligibleStaff(role: 'runner' | 'rider'): Promise<AppUserProfile[]> {
   try {
