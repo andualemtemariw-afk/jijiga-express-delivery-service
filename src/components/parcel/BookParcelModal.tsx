@@ -18,7 +18,7 @@ import {
 interface BookParcelModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBookParcel: (order: Partial<Order>) => void;
+  onBookParcel: (order: Partial<Order>) => Promise<void> | void;
   senderProfile: {
     name: string;
     phone: string;
@@ -52,6 +52,7 @@ export function BookParcelModal({
   const [specialNote, setSpecialNote] = useState('');
   const paymentMethod: PaymentMethod = 'COD';
   const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isJijigaProfile = senderProfile.city.trim() === 'Jijiga';
 
   if (!isOpen) return null;
@@ -63,9 +64,10 @@ export function BookParcelModal({
   const itemPrice = weightAddon + sealAddon;
   const totalPrice = itemPrice + deliveryFee;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (isSubmitting) return;
     if (!isJijigaProfile) {
       setFormError('Parcel delivery is currently available only for customers with a saved Jijiga profile. Update your profile before booking.');
       return;
@@ -121,8 +123,15 @@ export function BookParcelModal({
       createdAt: new Date(),
     };
 
-    onBookParcel(newOrder);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onBookParcel(newOrder);
+      onClose();
+    } catch (error) {
+      setFormError(error instanceof Error ? `Could not save parcel request: ${error.message}` : 'Could not save parcel request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -356,11 +365,11 @@ export function BookParcelModal({
               </button>
               <button
                 type="submit"
-                disabled={!isJijigaProfile}
+                disabled={!isJijigaProfile || isSubmitting}
                 className="px-5 py-2.5 rounded-xl bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Confirm & Dispatch Parcel
+                {isSubmitting ? 'Saving parcel request…' : 'Request Parcel Delivery'}
               </button>
             </div>
           </div>
