@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Navigation, 
   Bike, 
@@ -8,7 +8,6 @@ import {
   MessageSquare, 
   Maximize2, 
   Clock, 
-  Gauge, 
   Package, 
   FastForward,
   ChevronDown,
@@ -26,7 +25,6 @@ interface Props {
   onBookParcel?: () => void;
   onSimulateStep?: (orderId: string) => void;
   onOpenChat?: (order: Order) => void;
-  onCallCourier?: (phone: string) => void;
   language?: 'en' | 'so' | 'am';
 }
 
@@ -36,24 +34,9 @@ export function DeliveryRouteMapBanner({
   onBookParcel,
   onSimulateStep,
   onOpenChat,
-  onCallCourier,
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [telemetrySpeed, setTelemetrySpeed] = useState(24);
-  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(false);
-  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
-
-  // Dynamic simulated speed telemetry jitter for ultra-realistic courier tracking
-  useEffect(() => {
-    if (!isSimulatingTraffic) return;
-    const interval = setInterval(() => {
-      setTelemetrySpeed(prev => {
-        const delta = Math.floor(Math.random() * 5) - 2;
-        return Math.max(18, Math.min(38, prev + delta));
-      });
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [isSimulatingTraffic]);
+  const demoSandboxEnabled = import.meta.env.DEV;
 
   // Synthetic route data is available only in an explicit development/demo sandbox.
   const displayOrder: Order = activeOrder || (demoSandboxEnabled ? {
@@ -88,6 +71,8 @@ export function DeliveryRouteMapBanner({
   if (!activeOrder && !demoSandboxEnabled) return null;
 
   const isRealOrder = !!activeOrder;
+  const hasLiveGps = Boolean(activeOrder?.riderId && activeOrder.riderCoordinates);
+  const hasAssignedCourier = Boolean(activeOrder?.riderId || activeOrder?.runnerId);
 
   return (
     <div className="bg-white rounded-2xl border-2 border-blue-500/30 shadow-md overflow-hidden transition-all">
@@ -97,7 +82,7 @@ export function DeliveryRouteMapBanner({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              LIVE COURIER RADAR • GPS ACTIVE
+              {hasLiveGps ? 'RIDER COORDINATE RECORDED' : demoSandboxEnabled && !isRealOrder ? 'DEMO SANDBOX' : 'GPS UNAVAILABLE'}
             </span>
             <span className="text-[11px] font-mono text-blue-300">
               {isRealOrder ? `Order #${displayOrder.id}` : 'Fleet Patrol Demo'}
@@ -105,22 +90,24 @@ export function DeliveryRouteMapBanner({
           </div>
           <h3 className="text-lg md:text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <Navigation className="w-5 h-5 text-blue-400" />
-            Delivery Route Map • Real-Time Courier Tracking
+            Delivery Location & Dispatch Status
           </h3>
           <p className="text-xs text-slate-300 max-w-xl">
-            {isRealOrder
-              ? `Tracking ${displayOrder.riderName || 'Courier'} live on route to ${displayOrder.customerAddress || displayOrder.customerCity}.`
-              : 'Direct route visualization connecting Jijiga Express Central Hub to local sectors with live telemetry.'}
+            {hasLiveGps
+              ? 'A rider coordinate is recorded for this order. Location timestamp, turn-by-turn routing and ETA are not verified here.'
+              : demoSandboxEnabled && !isRealOrder
+                ? 'Illustrative sample only. No real driver, GPS telemetry, route distance or ETA is represented.'
+                : 'No verified rider GPS coordinate is available for this order yet. A driver is not considered assigned until the order records an authorized assignment.'}
           </p>
         </div>
 
         {/* Quick Toolbar */}
         <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
-          {onSimulateStep && (
+          {demoSandboxEnabled && onSimulateStep && (
             <button
               onClick={() => onSimulateStep(displayOrder.id)}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              title="Advance simulated courier state along route"
+              title="Demo Sandbox only: simulate a sample order"
             >
               <FastForward className="w-3.5 h-3.5" />
               <span>Simulate Next Step</span>
@@ -149,53 +136,47 @@ export function DeliveryRouteMapBanner({
 
       {isExpanded && (
         <div className="p-4 md:p-6 space-y-4">
-          {/* Real-time Telemetry HUD Grid */}
+          {/* Only display values backed by the actual order document. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
             <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Active Courier
-              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Assigned Courier</span>
               <span className="font-bold text-slate-900 text-sm flex items-center gap-1 truncate">
                 <Bike className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                {displayOrder.riderName || 'Staff Rider'}
+                {displayOrder.riderId
+                  ? (displayOrder.riderName || 'Assigned rider')
+                  : displayOrder.runnerId
+                    ? (displayOrder.runnerName || 'Assigned runner')
+                    : demoSandboxEnabled && !isRealOrder ? 'Demo sample only' : 'No courier assigned'}
               </span>
-              <span className="text-[10px] text-emerald-600 font-semibold block">
-                Express Moto • Verified
-              </span>
-            </div>
-
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Live Speed
-              </span>
-              <span className="font-mono font-extrabold text-slate-900 text-sm flex items-center gap-1">
-                <Gauge className="w-3.5 h-3.5 text-amber-500" />
-                {telemetrySpeed} km/h
-              </span>
-              <span className="text-[10px] text-slate-500 block">Traffic: Light</span>
-            </div>
-
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Remaining Distance
-              </span>
-              <span className="font-mono font-bold text-slate-900 text-sm block">
-                ~{displayOrder.distanceKm || 2.4} km
-              </span>
-              <span className="text-[10px] text-blue-600 font-semibold block">
-                ETA: ~{displayOrder.etaMinutes || 7} mins
+              <span className="text-[10px] text-slate-500 block">
+                {hasAssignedCourier ? 'Assignment ID recorded' : 'Waiting for authorized dispatch'}
               </span>
             </div>
 
             <div className="space-y-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Security Seal
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">GPS Status</span>
+              <span className="font-bold text-slate-900 text-sm flex items-center gap-1">
+                <Radio className="w-3.5 h-3.5 text-blue-600" />
+                {hasLiveGps ? 'Coordinates recorded' : 'Unavailable'}
               </span>
-              <span className="font-mono font-bold text-emerald-700 text-xs flex items-center gap-1 truncate">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                {displayOrder.runnerTagId || 'TAG-ET-91820'}
+              <span className="text-[10px] text-slate-500 block">Freshness timestamp not available</span>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Route Distance / ETA</span>
+              <span className="font-mono font-bold text-slate-900 text-sm block">Unavailable</span>
+              <span className="text-[10px] text-slate-500 block">Verified routing is not connected</span>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Handover Tag</span>
+              <span className="font-mono font-bold text-slate-900 text-xs flex items-center gap-1 truncate">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                {displayOrder.runnerTagId || 'Not recorded'}
               </span>
-              <span className="text-[10px] text-slate-500 block">Tamper Verified</span>
+              <span className="text-[10px] text-slate-500 block">
+                {displayOrder.runnerTagId ? 'Recorded reference; integrity not implied' : 'No tag reference recorded'}
+              </span>
             </div>
           </div>
 
@@ -212,7 +193,7 @@ export function DeliveryRouteMapBanner({
             <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-sm flex items-center gap-2 pointer-events-none text-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
               <span className="font-bold text-slate-800">
-                {displayOrder.customerCity || 'Jijiga'}: {displayOrder.customerAddress || 'Kebele 04 Corridor'}
+                {displayOrder.customerCity || 'City unavailable'}: {displayOrder.customerAddress || 'Delivery address not recorded'}
               </span>
             </div>
           </div>
@@ -220,17 +201,15 @@ export function DeliveryRouteMapBanner({
           {/* Bottom Action Footer with Secondary Text Prompt */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => onCallCourier?.(displayOrder.customerPhone || '')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
-              >
-                <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Call Courier</span>
-              </button>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-xs" title="A verified courier phone number is not stored in the order record">
+                <Phone className="w-3.5 h-3.5" />
+                <span>Courier phone unavailable</span>
+              </span>
 
               <button
-                onClick={() => onOpenChat?.(displayOrder)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs transition cursor-pointer border border-blue-200"
+                disabled={!hasAssignedCourier}
+                onClick={() => { if (hasAssignedCourier) onOpenChat?.(displayOrder); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs transition cursor-pointer border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
                 <span>Chat & Vernacular Voice</span>
