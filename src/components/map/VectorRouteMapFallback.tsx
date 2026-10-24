@@ -4,7 +4,6 @@ import {
   MAMILA_COORDINATES, 
   DEFAULT_CUSTOMER_COORDINATES, 
   CITY_COORDINATES,
-  calculateDistanceKm, 
   generateRoutePoints, 
   getEstimatedRiderPosition, 
   LatLng 
@@ -48,7 +47,7 @@ export function VectorRouteMapFallback({
 }: VectorRouteMapFallbackProps) {
   const [mapTheme, setMapTheme] = useState<'dark' | 'light'>('dark');
   const [zoomLevel, setZoomLevel] = useState(1);
-  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
+  const demoSandboxEnabled = import.meta.env.DEV;
   const [simulatedFrac, setSimulatedFrac] = useState(0.48);
 
   useEffect(() => {
@@ -83,7 +82,6 @@ export function VectorRouteMapFallback({
     return customerPos;
   }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedFrac, demoSandboxEnabled]);
 
-  const distanceKm = useMemo(() => calculateDistanceKm(mamilaPos, customerPos), [mamilaPos, customerPos]);
 
   // Convert GPS coordinates into local SVG coordinate space (0-1000 x 0-600)
   const svgCoords = useMemo(() => {
@@ -115,6 +113,17 @@ export function VectorRouteMapFallback({
   }, [mamilaPos, customerPos, riderPos]);
 
   const isDark = mapTheme === 'dark';
+  const usesFallbackCustomerLocation = Boolean(order.customerCoordinates
+    && order.customerCoordinates.lat === DEFAULT_CUSTOMER_COORDINATES.lat
+    && order.customerCoordinates.lng === DEFAULT_CUSTOMER_COORDINATES.lng);
+
+  if (!demoSandboxEnabled && (!order.customerCoordinates || !order.mamilaCoordinates || usesFallbackCustomerLocation)) {
+    return (
+      <div className={`rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 ${className}`}>
+        <strong>Location preview unavailable.</strong> Verified customer and vendor coordinates are required before drawing a route illustration.
+      </div>
+    );
+  }
 
   return (
     <div className={`relative rounded-2xl overflow-hidden border border-slate-700/80 shadow-md ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'} ${className}`}>
@@ -144,9 +153,9 @@ export function VectorRouteMapFallback({
       <div className="p-3 flex items-center justify-between border-b border-slate-800/60 bg-slate-900/60">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-          <span className="font-bold text-xs">Vector Route Telemetry</span>
+          <span className="font-bold text-xs">Illustrative Location Map</span>
           <span className="text-[11px] font-mono text-slate-400">
-            {order.customerCity || 'Jijiga'} • Corridor {distanceKm} km
+            {order.customerCity || 'Jijiga'} • Not turn-by-turn routing
           </span>
         </div>
 
@@ -241,7 +250,7 @@ export function VectorRouteMapFallback({
               <text x="70" y="352">Kebele 04 Central Commercial Ave</text>
               <text x="290" y="80">Taiwan Market Boulevard</text>
               <text x="590" y="80">Jijiga University Expressway</text>
-              <text x="750" y="520">Ring Road South Corridor</text>
+              <text x="750" y="520">Illustrative connector, not a verified road route</text>
             </g>
 
             {/* Route Polyline */}
@@ -311,7 +320,7 @@ export function VectorRouteMapFallback({
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Corridor Distance</span>
-              <span className="font-mono font-bold">{distanceKm} km</span>
+              <span className="font-mono font-bold">Unavailable — no verified route estimate</span>
             </div>
           </div>
 
@@ -321,7 +330,7 @@ export function VectorRouteMapFallback({
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Estimated Arrival</span>
-              <span className="font-mono font-bold text-emerald-400">~{order.etaMinutes || 12} mins</span>
+              <span className="font-mono font-bold text-emerald-400">Unavailable — live routing not connected</span>
             </div>
           </div>
 
