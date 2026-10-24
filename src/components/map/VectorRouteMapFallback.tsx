@@ -47,17 +47,32 @@ export function VectorRouteMapFallback({
 }: VectorRouteMapFallbackProps) {
   const [mapTheme, setMapTheme] = useState<'dark' | 'light'>('dark');
   const [zoomLevel, setZoomLevel] = useState(1);
-  const demoSandboxEnabled = import.meta.env.DEV;
+  const demoSandboxEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
   const [simulatedFrac, setSimulatedFrac] = useState(0.48);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    if (order.status === 'PICKED_UP') {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const riderGpsTimestamp = order.riderLocationUpdatedAt ? Date.parse(order.riderLocationUpdatedAt) : Number.NaN;
+  const hasFreshRiderGps = Boolean(
+    order.riderId &&
+    order.riderCoordinates &&
+    Number.isFinite(riderGpsTimestamp) &&
+    nowMs >= riderGpsTimestamp &&
+    nowMs - riderGpsTimestamp <= 60000
+  );
+
+  useEffect(() => {
+    if (demoSandboxEnabled && order.status === 'PICKED_UP') {
       const interval = setInterval(() => {
         setSimulatedFrac((prev) => (prev >= 0.9 ? 0.35 : prev + 0.03));
       }, 2500);
       return () => clearInterval(interval);
     }
-  }, [order.status]);
+  }, [order.status, demoSandboxEnabled]);
 
   const mamilaPos: LatLng = useMemo(() => {
     if (order.mamilaCoordinates) return order.mamilaCoordinates;
@@ -77,10 +92,10 @@ export function VectorRouteMapFallback({
   }, [order.customerCoordinates, order.customerCity]);
 
   const riderPos: LatLng = useMemo(() => {
-    if (order.riderCoordinates) return order.riderCoordinates;
+    if (hasFreshRiderGps && order.riderCoordinates) return order.riderCoordinates;
     if (demoSandboxEnabled) return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedFrac);
     return customerPos;
-  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedFrac, demoSandboxEnabled]);
+  }, [order.riderCoordinates, hasFreshRiderGps, mamilaPos, customerPos, order.status, simulatedFrac, demoSandboxEnabled]);
 
 
   // Convert GPS coordinates into local SVG coordinate space (0-1000 x 0-600)
@@ -295,7 +310,7 @@ export function VectorRouteMapFallback({
             </g>
 
             {/* Live Courier Marker — only when real rider GPS exists */}
-            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && order.riderCoordinates && (
+            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && hasFreshRiderGps && (
               <g transform={`translate(${svgCoords.courier.x}, ${svgCoords.courier.y})`}>
                 <circle r="28" fill="#3b82f6" fillOpacity="0.25" className="animate-ping" />
                 <circle r="16" fill="#1d4ed8" stroke="#ffffff" strokeWidth="2.5" />
