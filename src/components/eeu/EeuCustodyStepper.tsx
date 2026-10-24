@@ -34,6 +34,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
 }) => {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [protectedReceiptAvailable, setProtectedReceiptAvailable] = useState<boolean | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptLoadError, setReceiptLoadError] = useState<string | null>(null);
   const details = order.eeuDetails;
@@ -41,19 +42,30 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   const displayedReceiptImage = receiptImage;
 
   useEffect(() => {
+    setReceiptImage(null);
+    setProtectedReceiptAvailable(null);
+    setReceiptLoadError(null);
+  }, [order.id]);
+
+  useEffect(() => {
     if (!showReceiptModal || !hasReceipt) return;
     let cancelled = false;
     setReceiptImage(null);
+    setProtectedReceiptAvailable(null);
     setReceiptLoading(true);
     setReceiptLoadError(null);
     loadEeuReceiptImage(order.id)
       .then((image) => {
         if (cancelled) return;
         setReceiptImage(image);
-        if (!image) setReceiptLoadError('The saved receipt photo was not found.');
+        setProtectedReceiptAvailable(Boolean(image));
+        if (!image) setReceiptLoadError('The saved receipt photo was not found. The rider may need to re-capture it.');
       })
       .catch((error: any) => {
-        if (!cancelled) setReceiptLoadError(error?.message || 'Could not load receipt photo.');
+        if (!cancelled) {
+          setProtectedReceiptAvailable(false);
+          setReceiptLoadError(error?.message || 'Could not load receipt photo.');
+        }
       })
       .finally(() => {
         if (!cancelled) setReceiptLoading(false);
@@ -192,9 +204,15 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
               <span>Official EEU Terminal Paper Receipt</span>
             </div>
             {hasReceipt ? (
-              <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
-                <CheckCircle2 className="w-3 h-3" />
-                Photo Captured
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shadow-2xs ${
+                protectedReceiptAvailable === true
+                  ? 'bg-emerald-600 text-white'
+                  : protectedReceiptAvailable === false
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-slate-200 text-slate-700'
+              }`}>
+                {protectedReceiptAvailable === true ? <CheckCircle2 className="w-3 h-3" /> : <Receipt className="w-3 h-3" />}
+                {protectedReceiptAvailable === true ? 'Protected Photo Available' : protectedReceiptAvailable === false ? 'Protected Photo Missing' : 'Receipt Metadata Recorded'}
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded-md bg-amber-200 text-amber-900 text-[10px] font-bold">
@@ -226,7 +244,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
                     Captured at {details.receiptTimestamp || 'EEU Kiosk Counter'}
                   </div>
                   <div className="text-[10px] text-emerald-700">
-                    Photo stored separately to keep order-list downloads small.
+                    The protected receipt photo is checked when you inspect it; missing evidence requires rider recovery.
                   </div>
                 </div>
               </div>
