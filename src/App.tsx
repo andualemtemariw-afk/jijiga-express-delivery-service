@@ -584,34 +584,42 @@ export default function App() {
   };
 
   const handleUpdateOrder = async (orderId: string, updates: Partial<Order>) => {
-    // Prevent customer from modifying protected pricing or courier assignment fields
     if (activeRole === 'CUSTOMER' && userProfile?.role !== 'admin') {
       const protectedKeys = ['price', 'totalPrice', 'deliveryFee', 'paymentStatus', 'customerId', 'runnerId', 'riderId', 'runnerTagId', 'riderProofUrl'];
-      const hasProtected = Object.keys(updates).some(k => protectedKeys.includes(k));
+      const hasProtected = Object.keys(updates).some(key => protectedKeys.includes(key));
       if (hasProtected || (updates.status && updates.status !== 'CANCELLED')) {
-        showAlert('Unauthorized: Customers cannot modify protected pricing, status, or courier assignment fields.', 'error');
-        return;
+        const error = new Error('Unauthorized: Customers cannot modify protected pricing, status, or courier assignment fields.');
+        showAlert(error.message, 'error');
+        throw error;
       }
     }
 
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updates } : o));
-
+    // Persist first in production so a rejected write cannot masquerade as a successful local update.
     if (!isDemoMode && currentUser) {
       try {
         await updateOrderInFirestore(orderId, updates);
-        if (updates.status) {
-          await logDeliveryEventToFirestore({
-            orderId,
-            status: updates.status,
-            timestamp: new Date().toISOString(),
-            actorRole: activeRole,
-            actorId: currentUser.uid,
-            actorName: userProfile?.displayName || 'Courier',
-            note: `Status updated to ${updates.status} by ${activeRole}.`
-          });
-        }
-      } catch (err: any) {
-        showAlert(`Status update failed: ${err.message}`, 'error');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        showAlert(`Order update failed to save: ${message}`, 'error');
+        throw error instanceof Error ? error : new Error(message);
+      }
+    }
+
+    setOrders(prev => prev.map(order => order.id === orderId ? { ...order, ...updates } : order));
+
+    if (!isDemoMode && currentUser && updates.status) {
+      try {
+        await logDeliveryEventToFirestore({
+          orderId,
+          status: updates.status,
+          timestamp: new Date().toISOString(),
+          actorRole: activeRole,
+          actorId: currentUser.uid,
+          actorName: userProfile?.displayName || 'Courier',
+          note: `Status updated to ${updates.status} by ${activeRole}.`
+        });
+      } catch {
+        showAlert('The order update was saved, but the activity event could not be recorded.', 'error');
       }
     }
   };
