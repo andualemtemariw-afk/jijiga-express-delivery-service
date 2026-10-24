@@ -17,7 +17,6 @@ import {
   Flame, 
   Activity, 
   TrendingUp, 
-  Flame, 
   Eye, 
   EyeOff,
   Sparkles
@@ -251,11 +250,10 @@ export function OrderDensityHeatmap({
     filteredOrders.forEach(order => {
       const pickup = order.mamilaCoordinates;
       if (pickup && typeof pickup.lat === 'number' && typeof pickup.lng === 'number') {
-        const weight = Math.min(5, Math.max(1, (order.quantity || 1) * 1.4));
         points.push({
           lat: pickup.lat,
           lng: pickup.lng,
-          weight,
+          weight: 1,
           label: `${order.mamilaName} (${order.batchName})`,
           category: 'order_pickup'
         });
@@ -267,7 +265,7 @@ export function OrderDensityHeatmap({
         points.push({
           lat: dest.lat,
           lng: dest.lng,
-          weight: 2.2,
+          weight: 1,
           label: `Delivery location (${order.customerCity || 'Jijiga'})`,
           category: 'order_delivery'
         });
@@ -276,11 +274,6 @@ export function OrderDensityHeatmap({
 
     return points;
   }, [filteredOrders]);
-
-  // Insights analytics
-  const totalWeight = useMemo(() => {
-    return Math.round(heatmapPoints.reduce((acc, p) => acc + p.weight, 0));
-  }, [heatmapPoints]);
 
   const topSector = heatmapPoints.length > 0
     ? 'Recorded order locations'
@@ -459,9 +452,9 @@ export function OrderDensityHeatmap({
           <div className="w-full h-2 rounded-full bg-linear-to-r from-emerald-500 via-blue-500 via-purple-500 via-amber-500 to-red-600" />
           
           <div className="flex justify-between text-[9px] text-slate-500 font-mono">
-            <span>Lower recorded weight</span>
-            <span>Medium recorded weight</span>
-            <span>Higher recorded weight</span>
+            <span>Lower density</span>
+            <span>Medium density</span>
+            <span>Higher overlap</span>
           </div>
         </div>
       </div>
