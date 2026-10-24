@@ -30,7 +30,7 @@ import {
   Cell
 } from 'recharts';
 import { Order, Batch, ServiceType } from '../../types';
-import { MAMILAS } from '../../data';
+import { calculateCollectedOrderValue } from '../../utils/accounting';
 
 interface AdminDashboardProps {
   orders: Order[];
@@ -119,7 +119,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         mamilaCounts[m.name] = validOrders.filter(o => o.mamilaId === m.id).length;
       });
 
-      const dayRevenue = validOrders.reduce((sum, o) => sum + (o.totalPrice || o.price || 0), 0);
+      const dayCollectedOrderValue = validOrders.reduce((sum, order) => sum + calculateCollectedOrderValue(order), 0);
 
       list.push({
         dateStr: target.toISOString().split('T')[0],
@@ -131,7 +131,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         delivered: deliveredCount,
         inTransit: activeCount,
         cancelled: cancelledCount,
-        revenue: dayRevenue,
+        collectedOrderValue: dayCollectedOrderValue,
         Food: foodCount,
         Khat: khatCount,
         Parcel: parcelCount,
@@ -148,7 +148,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
   const kpis = useMemo(() => {
     const total7Days = daysData.reduce((sum, d) => sum + d.totalOrders, 0);
     const delivered7Days = daysData.reduce((sum, d) => sum + d.delivered, 0);
-    const revenue7Days = daysData.reduce((sum, d) => sum + d.revenue, 0);
+    const collectedOrderValue7Days = daysData.reduce((sum, d) => sum + d.collectedOrderValue, 0);
     const dailyAvg = (total7Days / 7).toFixed(1);
 
     // Peak day
@@ -164,7 +164,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
     return {
       total7Days,
       delivered7Days,
-      revenue7Days,
+      collectedOrderValue7Days,
       dailyAvg,
       peakDayLabel: peakDay.dayLabel,
       peakDayCount: peakDay.totalOrders,
@@ -259,19 +259,19 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold">7-Day Gross Value</span>
+            <span className="text-xs font-semibold">7-Day Collected Order Value</span>
             <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
           <div className="flex items-baseline gap-1">
             <p className="text-2xl sm:text-3xl font-bold font-mono text-slate-900 tabular-nums">
-              {kpis.revenue7Days.toLocaleString()}
+              {kpis.collectedOrderValue7Days.toLocaleString()}
             </p>
             <span className="text-xs font-bold text-slate-600">ETB</span>
           </div>
           <p className="text-[11px] text-purple-600 font-medium mt-1">
-            Across parcels, foods & rides
+            Excludes unpaid/refunded orders and EEU electricity principal; not platform profit.
           </p>
         </div>
       </div>
@@ -511,10 +511,10 @@ function VolumeCustomTooltip({ active, payload }: any) {
             <span>Cancelled:</span>
             <span className="font-mono text-rose-400 font-bold">{data.cancelled}</span>
           </div>
-          {data.revenue > 0 && (
+          {data.collectedOrderValue > 0 && (
             <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-slate-400 font-medium">
               <span>Day GMV:</span>
-              <span className="font-mono text-white font-bold">{data.revenue.toLocaleString()} ETB</span>
+              <span className="font-mono text-white font-bold">{data.collectedOrderValue.toLocaleString()} ETB</span>
             </div>
           )}
         </div>
