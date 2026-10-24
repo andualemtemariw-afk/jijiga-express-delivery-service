@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Navigation, 
   Bike, 
@@ -36,7 +36,14 @@ export function DeliveryRouteMapBanner({
   onOpenChat,
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const demoSandboxEnabled = import.meta.env.DEV;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const demoSandboxEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
+
+  useEffect(() => {
+    if (!activeOrder?.riderLocationUpdatedAt) return;
+    const interval = window.setInterval(() => setNowMs(Date.now()), 15000);
+    return () => window.clearInterval(interval);
+  }, [activeOrder?.riderLocationUpdatedAt]);
 
   // Synthetic route data is available only in an explicit development/demo sandbox.
   const displayOrder: Order = activeOrder || (demoSandboxEnabled ? {
@@ -71,7 +78,15 @@ export function DeliveryRouteMapBanner({
   if (!activeOrder && !demoSandboxEnabled) return null;
 
   const isRealOrder = !!activeOrder;
-  const hasLiveGps = Boolean(activeOrder?.riderId && activeOrder.riderCoordinates);
+  const gpsUpdatedAt = activeOrder?.riderLocationUpdatedAt ? Date.parse(activeOrder.riderLocationUpdatedAt) : Number.NaN;
+  const hasLiveGps = Boolean(
+    activeOrder?.riderId &&
+    activeOrder.riderCoordinates &&
+    Number.isFinite(gpsUpdatedAt) &&
+    nowMs >= gpsUpdatedAt &&
+    nowMs - gpsUpdatedAt <= 60000
+  );
+  const hasStaleGps = Boolean(activeOrder?.riderCoordinates && !hasLiveGps);
   const hasAssignedCourier = Boolean(activeOrder?.riderId || activeOrder?.runnerId);
 
   return (
@@ -80,9 +95,9 @@ export function DeliveryRouteMapBanner({
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 p-4 md:p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              {hasLiveGps ? 'RIDER COORDINATE RECORDED' : demoSandboxEnabled && !isRealOrder ? 'DEMO SANDBOX' : 'GPS UNAVAILABLE'}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${hasLiveGps ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-500/20 text-slate-300 border-slate-500/40'}`}>
+              <span className={`w-2 h-2 rounded-full ${hasLiveGps ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
+              {hasLiveGps ? 'GPS UPDATED WITHIN 60 SECONDS' : demoSandboxEnabled && !isRealOrder ? 'DEMO SANDBOX' : hasStaleGps ? 'GPS DATA STALE' : 'GPS UNAVAILABLE'}
             </span>
             <span className="text-[11px] font-mono text-blue-300">
               {isRealOrder ? `Order #${displayOrder.id}` : 'Fleet Patrol Demo'}
@@ -94,10 +109,12 @@ export function DeliveryRouteMapBanner({
           </h3>
           <p className="text-xs text-slate-300 max-w-xl">
             {hasLiveGps
-              ? 'A rider coordinate is recorded for this order. Location timestamp, turn-by-turn routing and ETA are not verified here.'
+              ? 'A rider GPS update was recorded within the last 60 seconds. Turn-by-turn routing and ETA are not connected.'
               : demoSandboxEnabled && !isRealOrder
                 ? 'Illustrative sample only. No real driver, GPS telemetry, route distance or ETA is represented.'
-                : 'No verified rider GPS coordinate is available for this order yet. A driver is not considered assigned until the order records an authorized assignment.'}
+                : hasStaleGps
+                  ? 'A prior coordinate exists but is stale or missing a valid timestamp. Current rider location is unavailable.'
+                  : 'No verified rider GPS coordinate is available for this order yet. A driver is not considered assigned until the order records an authorized assignment.'}
           </p>
         </div>
 
