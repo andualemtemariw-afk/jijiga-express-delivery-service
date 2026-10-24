@@ -77,7 +77,7 @@ interface Props {
   orders: Order[];
   orderMessages?: Record<string, ChatMessage[]>;
   onSendMessage?: (orderId: string, message: Omit<ChatMessage, 'id' | 'orderId'>) => void;
-  onUpdateOrder: (orderId: string, updates: Partial<Order>, persistToFirestore?: boolean) => void;
+  onUpdateOrder: (orderId: string, updates: Partial<Order>, persistToFirestore?: boolean) => Promise<void> | void;
   isDemoMode?: boolean;
   currentRiderId: string;
   currentRiderName?: string;
@@ -145,7 +145,11 @@ export function RiderView({
             : Infinity;
           if (!previous || now - previous.at >= 15000 || distanceApprox >= 30) {
             lastGpsWriteRef.current[order.id] = { at: now, ...coords };
-            onUpdateOrder(order.id, { riderCoordinates: coords });
+            void Promise.resolve(onUpdateOrder(order.id, { riderCoordinates: coords }, true)).catch(() => {
+              // Never present failed GPS writes as shared/live location; clear throttle so the next fix can retry.
+              delete lastGpsWriteRef.current[order.id];
+              console.warn('[RiderGPS] Coordinate could not be saved; shared location remains unavailable.');
+            });
           }
         });
       },
