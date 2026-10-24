@@ -9,9 +9,9 @@ import type { Order } from '../types';
  * not contribute. Platform profit needs separate commission and payout data.
  */
 export function calculateCollectedOrderValue(
-  order: Pick<Order, 'status' | 'paymentStatus' | 'serviceType' | 'totalPrice' | 'deliveryFee'>
+  order: Pick<Order, 'status' | 'paymentStatus' | 'serviceType' | 'totalPrice' | 'deliveryFee' | 'dispute'>
 ): number {
-  if (order.status === 'CANCELLED' || order.status === 'DEFECT_REJECTED') {
+  if (order.status === 'CANCELLED' || order.status === 'DEFECT_REJECTED' || order.dispute?.status === 'REFUNDED') {
     return 0;
   }
 
