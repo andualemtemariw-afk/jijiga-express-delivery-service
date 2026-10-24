@@ -100,19 +100,34 @@ function LiveGoogleMap({
   const [showTraffic, setShowTraffic] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<'mamila' | 'rider' | 'customer' | null>(null);
   const [recenterCount, setRecenterCount] = useState(0);
-  const demoSandboxEnabled = import.meta.env.DEV;
+  const demoSandboxEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
   const [simulatedTransitFrac, setSimulatedTransitFrac] = useState(0.45);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const riderGpsTimestamp = order.riderLocationUpdatedAt ? Date.parse(order.riderLocationUpdatedAt) : Number.NaN;
+  const hasFreshRiderGps = Boolean(
+    order.riderId &&
+    order.riderCoordinates &&
+    Number.isFinite(riderGpsTimestamp) &&
+    nowMs >= riderGpsTimestamp &&
+    nowMs - riderGpsTimestamp <= 60000
+  );
 
   const hasAdvancedMarker = typeof window !== 'undefined' && !!window.google?.maps?.marker?.AdvancedMarkerElement;
 
   useEffect(() => {
-    if (order.status === 'PICKED_UP') {
+    if (demoSandboxEnabled && order.status === 'PICKED_UP') {
       const interval = setInterval(() => {
         setSimulatedTransitFrac((prev) => (prev >= 0.88 ? 0.35 : prev + 0.04));
       }, 3000);
       return () => clearInterval(interval);
     }
-  }, [order.status]);
+  }, [order.status, demoSandboxEnabled]);
 
   const mamilaPos: LatLng = useMemo(() => {
     if (order.mamilaCoordinates) return order.mamilaCoordinates;
@@ -132,10 +147,10 @@ function LiveGoogleMap({
   }, [order.customerCoordinates, order.customerCity]);
 
   const riderPos: LatLng = useMemo(() => {
-    if (order.riderCoordinates) return order.riderCoordinates;
+    if (hasFreshRiderGps && order.riderCoordinates) return order.riderCoordinates;
     if (demoSandboxEnabled) return getEstimatedRiderPosition(mamilaPos, customerPos, order.status, simulatedTransitFrac);
     return customerPos;
-  }, [order.riderCoordinates, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
+  }, [order.riderCoordinates, hasFreshRiderGps, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
 
   const routePath = useMemo(() => {
     return generateRoutePoints(mamilaPos, customerPos);
@@ -278,7 +293,7 @@ function LiveGoogleMap({
           )}
 
           {/* Live Rider / Dispatch Courier Marker */}
-          {hasAdvancedMarker && order.riderId && order.riderCoordinates && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(order.status) && (
+          {hasAdvancedMarker && hasFreshRiderGps && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(order.status) && (
             <AdvancedMarker
               position={riderPos}
               title={`Rider: ${order.riderName || 'Staff Rider'}`}
@@ -338,7 +353,7 @@ function LiveGoogleMap({
                 </div>
                 <p className="font-semibold text-sm mt-0.5">{order.riderName || 'Staff Rider'}</p>
                 <div className="text-xs text-slate-500 mt-0.5 space-y-0.5">
-                  <p>ETA: {typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (order estimate)` : 'Unavailable; routing is not connected'}</p>
+                  <p>ETA: {demoSandboxEnabled && typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (demo estimate)` : 'Unavailable; routing is not connected'}</p>
                   <p className="font-mono text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
                     Tag: {order.runnerTagId || 'Not recorded'}
@@ -360,7 +375,7 @@ function LiveGoogleMap({
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Corridor Distance</span>
               <span className="font-mono font-bold text-slate-200">
-                {typeof order.distanceKm === 'number' ? `${order.distanceKm} km (order estimate)` : 'Unavailable; routing is not connected'}
+                {demoSandboxEnabled && typeof order.distanceKm === 'number' ? `${order.distanceKm} km (demo estimate)` : 'Unavailable; routing is not connected'}
               </span>
             </div>
           </div>
@@ -372,7 +387,7 @@ function LiveGoogleMap({
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Estimated Arrival</span>
               <span className="font-mono font-bold text-emerald-400">
-                {typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (order estimate)` : 'Unavailable; routing is not connected'}
+                {demoSandboxEnabled && typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (demo estimate)` : 'Unavailable; routing is not connected'}
               </span>
             </div>
           </div>
