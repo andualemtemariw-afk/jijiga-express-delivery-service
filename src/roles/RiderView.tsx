@@ -97,7 +97,7 @@ export function RiderView({
   onOpenMapPreview 
 }: Props) {
   const readyOrders = orders.filter(o => ['READY_FOR_RIDER', 'VERIFIED_READY'].includes(o.status) && !o.riderId);
-  const activeJobs = orders.filter(o => ['RIDER_ACCEPTED', 'PICKED_UP'].includes(o.status) && o.riderId === currentRiderId);
+  const activeJobs = orders.filter(o => ['RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(o.status) && o.riderId === currentRiderId);
   const [dialedPhone, setDialedPhone] = useState<string | null>(null);
   const [activeChatOrder, setActiveChatOrder] = useState<Order | null>(null);
   const [whatsAppOrder, setWhatsAppOrder] = useState<Order | null>(null);
