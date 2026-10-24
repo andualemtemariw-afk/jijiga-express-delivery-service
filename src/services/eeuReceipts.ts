@@ -61,7 +61,7 @@ export async function loadEeuReceiptImage(orderId: string): Promise<string | nul
   if (
     typeof image !== 'string' ||
     image.length > MAX_EEU_RECEIPT_DATA_URL_LENGTH ||
-    !/^data:image\\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image)
+    !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image)
   ) {
     throw new Error('A protected terminal receipt exists but its image is invalid. The immutable evidence was not changed.');
   }
