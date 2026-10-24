@@ -999,37 +999,24 @@ export function CustomerView({
                     </div>
                   </div>
 
-                  {/* Payment Method Selector */}
+                  {/* Online checkout is disabled until a trusted payment backend is available. */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                       <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
                       Payment Method
                     </label>
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {PAYMENT_PROVIDERS.map(method => (
-                        <label 
-                          key={method.id} 
-                          className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                            paymentMethod === method.id 
-                              ? 'border-blue-600 bg-blue-50 text-blue-900' 
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <input 
-                            type="radio" 
-                            name="payment" 
-                            checked={paymentMethod === method.id} 
-                            onChange={() => setPaymentMethod(method.id as PaymentMethod)} 
-                            className="hidden" 
-                          />
-                          <method.icon className={`w-4 h-4 ${method.color}`} />
-                          <div className="flex-1">
-                            <span className="font-semibold text-xs block">{method.label}</span>
-                            <span className="text-[10px] text-slate-500">{method.sub}</span>
-                          </div>
-                          {paymentMethod === method.id && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
-                        </label>
-                      ))}
+                    <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-950">
+                      <input
+                        type="radio"
+                        name="payment"
+                        checked={paymentMethod === 'COD'}
+                        onChange={() => setPaymentMethod('COD')}
+                        aria-label="Cash on Delivery"
+                      />
+                      <div>
+                        <span className="font-semibold text-xs block">Cash on Delivery (COD)</span>
+                        <span className="text-[10px] text-slate-600">Mobile-wallet checkout is temporarily unavailable.</span>
+                      </div>
                     </div>
                   </div>
 
