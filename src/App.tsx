@@ -796,34 +796,21 @@ export default function App() {
       showAlert('Admin privileges required to confirm payment.', 'error');
       return;
     }
-    try {
-      if (!isDemoMode) {
-        await updateOrderInFirestore(orderId, {
-          paymentStatus: 'PAID_CONFIRMED',
-          paymentReference: receiptReference,
-          paymentConfirmedBy: currentUser.email || currentUser.uid,
-        });
-        await logDeliveryEventToFirestore({
-          orderId,
-          status: 'PAID_CONFIRMED' as any,
-          timestamp: new Date().toISOString(),
-          actorRole: 'ADMIN',
-          actorId: currentUser.uid,
-          actorName: userProfile?.displayName || 'Admin',
-          note: `Payment receipt verified by Admin (Ref: ${receiptReference}).`,
-        });
-      }
-      setOrders(prev => prev.map(o => o.id === orderId ? {
-        ...o,
-        paymentStatus: 'PAID_CONFIRMED',
-        paymentReference: receiptReference,
-        paymentConfirmedBy: currentUser.email || currentUser.uid,
-      } : o));
-      showAlert(`Payment for order #${orderId.slice(-6)} verified and confirmed!`, 'success');
-    } catch (err: any) {
-      console.error('Failed to confirm payment:', err);
-      showAlert(`Could not update payment status: ${err.message}`, 'error');
+
+    // A trusted server-side provider-verification endpoint is not configured in this repository.
+    // A receipt reference typed by a browser client must never mark a production order as paid.
+    if (!isDemoMode) {
+      showAlert('Payment confirmation is unavailable: trusted server-side payment verification is not configured. No payment status was changed.', 'error');
+      return;
     }
+
+    setOrders(prev => prev.map(o => o.id === orderId ? {
+      ...o,
+      paymentStatus: 'PAID_CONFIRMED',
+      paymentReference: receiptReference,
+      paymentConfirmedBy: currentUser.email || currentUser.uid,
+    } : o));
+    showAlert(`DEMO ONLY: order #${orderId.slice(-6)} marked paid in local sandbox data; no real payment was verified.`, 'info');
   };
 
   const handleRateOrder = (orderId: string, rating: number, reviewComment?: string) => {
