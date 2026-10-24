@@ -22,6 +22,7 @@ service cloud.firestore {
 
     function isAllowlistedAdminEmail() {
       return signedIn()
+        && request.auth.token.email_verified == true
         && request.auth.token.email in [
           'andualemawraris4@gmail.com',
           'andualemawraris104@gmail.com',
