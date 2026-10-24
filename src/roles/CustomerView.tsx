@@ -70,6 +70,7 @@ import { AppUserProfile } from '../types';
 interface Props {
   inventory: Batch[];
   myOrders: Order[];
+  isDemoMode?: boolean;
   currentUser?: any;
   customerProfile?: AppUserProfile | null;
   orderMessages?: Record<string, ChatMessage[]>;
@@ -88,7 +89,7 @@ interface Props {
       customerPlusCode?: string;
       customerCoordinates?: { lat: number; lng: number };
     }
-  ) => void;
+  ) => Promise<void> | void;
   onCancelOrder?: (orderId: string) => void;
   onRateOrder?: (orderId: string, rating: number, comment?: string) => void;
   onDisputeOrder?: (orderId: string, reason: string, comment: string) => void;
@@ -104,7 +105,8 @@ type TabType = 'batches' | 'tracking' | 'history' | 'profile';
 
 export function CustomerView({ 
   inventory, 
-  myOrders, 
+  myOrders,
+  isDemoMode = false, 
   currentUser,
   customerProfile,
   orderMessages,
@@ -125,10 +127,11 @@ export function CustomerView({
   const [activeTab, setActiveTab] = useState<TabType>('batches');
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [selectedCity, setSelectedCity] = useState(customerProfile?.city || 'Jijiga');
-  const [address, setAddress] = useState(customerProfile?.address || 'Kebele 04, Jijiga');
-  const [plusCode, setPlusCode] = useState(customerProfile?.plusCode || '8F2P+5H Jijiga');
-  const [customerCoords, setCustomerCoords] = useState<LatLng>(DEFAULT_CUSTOMER_COORDINATES);
+  const selectedCity = 'Jijiga';
+  const isJijigaProfile = customerProfile?.city?.trim() === 'Jijiga';
+  const [address, setAddress] = useState(customerProfile?.address || '');
+  const [plusCode, setPlusCode] = useState(customerProfile?.plusCode || '');
+  const [customerCoords, setCustomerCoords] = useState<LatLng | undefined>(undefined);
   const [showCheckoutMap, setShowCheckoutMap] = useState(true);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [cookingInstruction, setCookingInstruction] = useState('Please cook it well done, no pink inside.');
@@ -156,7 +159,7 @@ export function CustomerView({
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
   // Checkout & process state
-  const [txLogs, setTxLogs] = useState<string[]>([]);
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveSaveSuccess, setDriveSaveSuccess] = useState<string | null>(null);
@@ -333,43 +336,42 @@ export function CustomerView({
       return;
     }
     if (!selectedBatch) return;
-    setIsProcessing(true);
-    setTxLogs([]);
-
-    const deliveryFee = selectedCity === 'Hargeisa' ? 200 : 150;
-
-    const steps = [
-      "BEGIN TRANSACTION [ISOLATION: SERIALIZABLE]",
-      `Lock batch row ID #${selectedBatch.id}`,
-      `Validate stock available: ${selectedBatch.available} >= ${quantity}`,
-      `Freshness timestamp check: Valid until ${selectedBatch.expiry}`,
-      `Atomically reserve ${quantity} unit(s)`,
-      `Calculate dispatch tariff for ${selectedCity} (+${deliveryFee} ETB)`,
-      `Attach cooking instruction: "${cookingInstruction.trim() || 'Standard'}"`,
-      "Persist immutable order state & event log",
-      "Assign verified runner for photo verification",
-      "COMMIT TRANSACTION SUCCESSFUL"
-    ];
-
-    for (const step of steps) {
-      await new Promise(r => setTimeout(r, 240));
-      setTxLogs(prev => [...prev, step]);
+    if (!isJijigaProfile) {
+      setCheckoutMessage('Delivery is available only to customers with a saved profile city of Jijiga. Update your profile before ordering.');
+      return;
     }
+    if (!address.trim()) {
+      setCheckoutMessage('Enter your actual delivery address before placing the order.');
+      return;
+    }
+    if (isDemoMode && checkoutMessage?.startsWith('Demo Sandbox only')) return;
 
-    await new Promise(r => setTimeout(r, 400));
-    onPlaceOrder(selectedBatch, paymentMethod, {
-      quantity,
-      specialInstructions: specialInstructions.trim() || undefined,
-      cookingInstruction: cookingInstruction.trim() || undefined,
-      deliveryCity: selectedCity,
-      customerAddress: address,
-      customerPlusCode: plusCode,
-      customerCoordinates: customerCoords,
-    });
+    setIsProcessing(true);
+    setCheckoutMessage(null);
+    try {
+      await onPlaceOrder(selectedBatch, 'COD', {
+        quantity,
+        specialInstructions: specialInstructions.trim() || undefined,
+        cookingInstruction: cookingInstruction.trim() || undefined,
+        deliveryCity: 'Jijiga',
+        customerAddress: address.trim(),
+        customerPlusCode: plusCode.trim(),
+        ...(customerCoords ? { customerCoordinates: customerCoords } : {}),
+      });
 
-    setSelectedBatch(null);
-    setIsProcessing(false);
-    setActiveTab('tracking');
+      if (isDemoMode) {
+        setCheckoutMessage('Demo Sandbox only: this order exists in local sample state and was not saved to production Firestore. No runner has been assigned.');
+        return;
+      }
+
+      setSelectedBatch(null);
+      setActiveTab('tracking');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setCheckoutMessage(`Order was not saved. ${message}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleConfirmCancel = () => {
