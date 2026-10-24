@@ -457,10 +457,7 @@ export function CustomerView({
             }`}
           >
             <Bike className="w-4 h-4" />
-            Live Tracking
-            {activeOrder && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
-            )}
+            Order Tracking
           </button>
 
           <button
