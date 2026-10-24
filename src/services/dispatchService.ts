@@ -22,7 +22,8 @@ export async function fetchEligibleStaff(role: 'runner' | 'rider'): Promise<AppU
   try {
     const q = query(
       collection(db, USERS_COLLECTION),
-      where('role', '==', role)
+      where('role', '==', role),
+      where('active', '==', true)
     );
     const snap = await getDocs(q);
     const staff: AppUserProfile[] = [];
