@@ -13,7 +13,6 @@ import {
   MAMILA_COORDINATES, 
   DEFAULT_CUSTOMER_COORDINATES, 
   CITY_COORDINATES,
-  calculateDistanceKm, 
   generateRoutePoints, 
   getEstimatedRiderPosition, 
   LatLng 
@@ -101,7 +100,7 @@ function LiveGoogleMap({
   const [showTraffic, setShowTraffic] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<'mamila' | 'rider' | 'customer' | null>(null);
   const [recenterCount, setRecenterCount] = useState(0);
-  const demoSandboxEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_SANDBOX === 'true';
+  const demoSandboxEnabled = import.meta.env.DEV;
   const [simulatedTransitFrac, setSimulatedTransitFrac] = useState(0.45);
 
   const hasAdvancedMarker = typeof window !== 'undefined' && !!window.google?.maps?.marker?.AdvancedMarkerElement;
@@ -143,7 +142,18 @@ function LiveGoogleMap({
   }, [mamilaPos, customerPos]);
 
   const pointsToFit = useMemo(() => [mamilaPos, customerPos, riderPos], [mamilaPos, customerPos, riderPos]);
-  const calculatedDistance = useMemo(() => calculateDistanceKm(mamilaPos, customerPos), [mamilaPos, customerPos]);
+
+  const usesFallbackCustomerLocation = Boolean(order.customerCoordinates
+    && order.customerCoordinates.lat === DEFAULT_CUSTOMER_COORDINATES.lat
+    && order.customerCoordinates.lng === DEFAULT_CUSTOMER_COORDINATES.lng);
+
+  if (!demoSandboxEnabled && (!order.customerCoordinates || !order.mamilaCoordinates || usesFallbackCustomerLocation)) {
+    return (
+      <div className={`rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 ${className}`}>
+        <strong>Location preview unavailable.</strong> This order has no verified customer pickup/drop-off coordinates. Set the actual delivery pin to display a location preview.
+      </div>
+    );
+  }
 
   if (!hasAdvancedMarker) {
     return null;
@@ -156,7 +166,7 @@ function LiveGoogleMap({
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-md flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold">Live Route Telemetry</span>
+            <span className="font-semibold">Location Preview · approximate connector</span>
             <span className="text-slate-400 font-mono text-[11px]">
               {order.customerCity || 'Jijiga'}
             </span>
@@ -268,7 +278,7 @@ function LiveGoogleMap({
           )}
 
           {/* Live Rider / Dispatch Courier Marker */}
-          {hasAdvancedMarker && order.riderCoordinates && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && (
+          {hasAdvancedMarker && order.riderId && order.riderCoordinates && ['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(order.status) && (
             <AdvancedMarker
               position={riderPos}
               title={`Rider: ${order.riderName || 'Staff Rider'}`}
@@ -328,10 +338,10 @@ function LiveGoogleMap({
                 </div>
                 <p className="font-semibold text-sm mt-0.5">{order.riderName || 'Staff Rider'}</p>
                 <div className="text-xs text-slate-500 mt-0.5 space-y-0.5">
-                  <p>ETA: ~{order.etaMinutes || 12} mins</p>
+                  <p>ETA: {typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (order estimate)` : 'Unavailable; routing is not connected'}</p>
                   <p className="font-mono text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
-                    Tag: {order.runnerTagId || 'TAG-ET-91820'}
+                    Tag: {order.runnerTagId || 'Not recorded'}
                   </p>
                 </div>
               </div>
@@ -350,7 +360,7 @@ function LiveGoogleMap({
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Corridor Distance</span>
               <span className="font-mono font-bold text-slate-200">
-                {order.distanceKm || calculatedDistance} km
+                {typeof order.distanceKm === 'number' ? `${order.distanceKm} km (order estimate)` : 'Unavailable; routing is not connected'}
               </span>
             </div>
           </div>
@@ -362,7 +372,7 @@ function LiveGoogleMap({
             <div>
               <span className="text-[10px] text-slate-400 block font-medium">Estimated Arrival</span>
               <span className="font-mono font-bold text-emerald-400">
-                ~{order.etaMinutes || 12} mins
+                {typeof order.etaMinutes === 'number' ? `~${order.etaMinutes} mins (order estimate)` : 'Unavailable; routing is not connected'}
               </span>
             </div>
           </div>
