@@ -7,7 +7,8 @@ import {
   getDoc,
   getDocFromServer,
   query, 
-  where,
+  where, 
+  orderBy,
   limit,
   serverTimestamp,
   Timestamp,
@@ -96,7 +97,7 @@ export function subscribeToOrdersByRole(
   const queries = [];
 
   if (userRole === 'admin') {
-    queries.push(query(ordersRef, limit(100)));
+    queries.push(query(ordersRef, orderBy('createdAt', 'desc'), limit(100)));
   } else if (userRole === 'runner') {
     // Assigned work is queried by identity; the public queue is limited to explicit-null assignment.
     // Legacy documents without runnerId need an authorized migration before they enter this queue.
