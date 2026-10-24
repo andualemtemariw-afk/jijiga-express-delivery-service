@@ -1067,7 +1067,7 @@ export function CustomerView({
         </div>
       )}
 
-      {/* TAB 2: LIVE ORDER TRACKING & TRANSIT SIMULATOR */}
+      {/* TAB 2: ORDER STATUS AND LOCATION UPDATES */}
       {activeTab === 'tracking' && (
         <div className="max-w-3xl mx-auto space-y-6">
           {!currentUser ? (
@@ -1078,7 +1078,7 @@ export function CustomerView({
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Sign In to Track Deliveries</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed">
-                  Real-time GPS tracking and courier transit milestone updates require Google authentication.
+                  Sign in to view your orders. Rider GPS is displayed only when an assigned rider has saved a recent coordinate; routing and ETA may be unavailable.
                 </p>
               </div>
               <button
@@ -1112,7 +1112,7 @@ export function CustomerView({
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Live Order Fulfillment</h2>
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Order Status & Tracking</h2>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                     <span>Order #{activeOrder.id}</span>
                     <span aria-hidden="true">·</span>
@@ -1120,7 +1120,7 @@ export function CustomerView({
                   </div>
                 </div>
 
-                {/* Instant Simulation Stepper Button for Testing */}
+                {/* Available only in the explicit Demo Sandbox */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <span className="text-[11px] text-slate-500 font-medium">
                     To request custom delivery features, ask support.
@@ -1129,7 +1129,7 @@ export function CustomerView({
                     <button
                       onClick={() => onSimulateNextStep(activeOrder.id)}
                       className="px-3.5 py-1.5 bg-slate-900 text-emerald-400 border border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
-                      title="Advance order through simulation pipeline"
+                      title="Demo Sandbox only: advance a sample order"
                     >
                       <FastForward className="w-3.5 h-3.5" />
                       Advance Pipeline State
