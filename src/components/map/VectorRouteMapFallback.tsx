@@ -310,7 +310,7 @@ export function VectorRouteMapFallback({
             </g>
 
             {/* Live Courier Marker — only when real rider GPS exists */}
-            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP'].includes(order.status) && hasFreshRiderGps && (
+            {['READY_FOR_RIDER', 'RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(order.status) && hasFreshRiderGps && (
               <g transform={`translate(${svgCoords.courier.x}, ${svgCoords.courier.y})`}>
                 <circle r="28" fill="#3b82f6" fillOpacity="0.25" className="animate-ping" />
                 <circle r="16" fill="#1d4ed8" stroke="#ffffff" strokeWidth="2.5" />
