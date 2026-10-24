@@ -34,6 +34,10 @@ export async function saveEeuReceiptAndOrderDetails(
 
   const orderRef = doc(db, 'orders', orderId);
   const receiptRef = doc(orderRef, 'receipts', EEU_TERMINAL_RECEIPT_DOC_ID);
+  const existingReceipt = await getDoc(receiptRef);
+  if (existingReceipt.exists()) {
+    throw new Error('A protected terminal receipt already exists and is immutable. No receipt was replaced.');
+  }
   const batch = writeBatch(db);
   batch.set(receiptRef, {
     receiptImageUrl: imageDataUrl,
@@ -54,5 +58,12 @@ export async function loadEeuReceiptImage(orderId: string): Promise<string | nul
   const snap = await getDoc(receiptRef);
   if (!snap.exists()) return null;
   const image = snap.data().receiptImageUrl;
-  return typeof image === 'string' ? image : null;
+  if (
+    typeof image !== 'string' ||
+    image.length > MAX_EEU_RECEIPT_DATA_URL_LENGTH ||
+    !/^data:image\\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image)
+  ) {
+    throw new Error('A protected terminal receipt exists but its image is invalid. The immutable evidence was not changed.');
+  }
+  return image;
 }
