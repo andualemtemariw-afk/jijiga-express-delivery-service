@@ -94,36 +94,38 @@ export function subscribeToOrdersByRole(
   onError?: (err: Error) => void
 ) {
   const ordersRef = collection(db, ORDERS_COLLECTION);
-  let q;
+  const queries = [];
 
-  // Structure queries so they satisfy the security rules constraints
   if (userRole === 'admin') {
-    q = query(ordersRef, limit(100));
+    queries.push(query(ordersRef, limit(100)));
   } else if (userRole === 'runner') {
-    q = query(
+    // Assigned work is queried by identity; the public queue is limited to explicit-null assignment.
+    // Legacy documents without runnerId need an authorized migration before they enter this queue.
+    queries.push(query(ordersRef, where('runnerId', '==', userUid), limit(50)));
+    queries.push(query(
       ordersRef,
-      where('status', 'in', ['PENDING', 'TRANSACTION_PENDING', 'RUNNER_ASSIGNED', 'VERIFIED_READY', 'READY_FOR_RIDER']),
+      where('runnerId', '==', null),
+      where('status', 'in', ['PENDING', 'TRANSACTION_PENDING']),
       limit(50)
-    );
+    ));
   } else if (userRole === 'rider') {
-    q = query(
+    queries.push(query(ordersRef, where('riderId', '==', userUid), limit(50)));
+    queries.push(query(
       ordersRef,
-      where('status', 'in', ['READY_FOR_RIDER', 'RIDER_DISPATCHED', 'RIDER_ACCEPTED', 'IN_TRANSIT', 'PICKED_UP', 'DELIVERED']),
+      where('riderId', '==', null),
+      where('status', 'in', ['READY_FOR_RIDER', 'VERIFIED_READY']),
       limit(50)
-    );
+    ));
   } else {
-    // Default to Customer: strictly query own orders
-    q = query(
-      ordersRef,
-      where('customerId', '==', userUid),
-      limit(50)
-    );
+    // Customer queries remain strictly scoped to the authenticated identity.
+    queries.push(query(ordersRef, where('customerId', '==', userUid), limit(50)));
   }
 
-  return onSnapshot(
-    q,
+  const snapshotsByQuery: (Order[] | undefined)[] = Array(queries.length).fill(undefined);
+  const unsubscribers = queries.map((orderQuery, index) => onSnapshot(
+    orderQuery,
     (snapshot) => {
-      const loadedOrders: Order[] = snapshot.docs.map((docSnap) => {
+      snapshotsByQuery[index] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
         return {
           ...data,
@@ -134,14 +136,21 @@ export function subscribeToOrdersByRole(
         } as Order;
       });
 
-      loadedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      onOrdersUpdated(loadedOrders);
+      if (snapshotsByQuery.every((orders): orders is Order[] => orders !== undefined)) {
+        const mergedOrders = new Map<string, Order>();
+        snapshotsByQuery.forEach((orders) => orders?.forEach((order) => mergedOrders.set(order.id, order)));
+        const result = [...mergedOrders.values()];
+        result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onOrdersUpdated(result);
+      }
     },
     (err) => {
       console.warn('Firestore subscription notice:', err.message);
       onError?.(err);
     }
-  );
+  ));
+
+  return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
 }
 
 /**
