@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Map, 
   AdvancedMarker, 
-  Pin, 
-  InfoWindow, 
   useMap, 
   useMapsLibrary,
   useApiLoadingStatus, 
@@ -232,7 +230,7 @@ function VectorHeatmapFallback({
       />
       <div className="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-slate-700 text-[11px] text-slate-300 font-mono flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-        <span>Vector Hotspot Simulation (Jijiga Urban Grid)</span>
+        <span>Illustrative map grid · loaded order coordinates only</span>
       </div>
     </div>
   );
@@ -250,11 +248,9 @@ export function OrderDensityHeatmap({
   const isApiReady = loadingStatus === APILoadingStatus.LOADED;
 
   const [isHeatmapVisible, setIsHeatmapVisible] = useState(true);
-  const [showHubPins, setShowHubPins] = useState(true);
   const [radius, setRadius] = useState(defaultRadius);
   const [opacity, setOpacity] = useState(0.8);
   const [maxIntensity, setMaxIntensity] = useState(4);
-  const [selectedHub, setSelectedHub] = useState<HotspotPoint | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED'>('ALL');
 
   // Filter orders according to selection
@@ -268,16 +264,14 @@ export function OrderDensityHeatmap({
     return orders.filter(o => o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED');
   }, [orders, statusFilter]);
 
-  // Aggregate order coordinates and combine with municipal demand hubs
+  // Plot only coordinates actually stored on loaded order records. Never substitute
+  // fixed city hubs or default coordinates, which would manufacture demand hotspots.
   const heatmapPoints = useMemo<HotspotPoint[]>(() => {
     const points: HotspotPoint[] = [];
 
-    // 1. Add baseline municipal demand hubs
-    points.push(...JIJIGA_DEMAND_HUBS);
-
-    // 2. Add real order pickup locations (Mamilas)
+    // Recorded pickup coordinates
     filteredOrders.forEach(order => {
-      const pickup = order.mamilaCoordinates || (order.mamilaId && MAMILA_COORDINATES[order.mamilaId]);
+      const pickup = order.mamilaCoordinates;
       if (pickup && typeof pickup.lat === 'number' && typeof pickup.lng === 'number') {
         const weight = Math.min(5, Math.max(1, (order.quantity || 1) * 1.4));
         points.push({
@@ -289,8 +283,8 @@ export function OrderDensityHeatmap({
         });
       }
 
-      // 3. Add order customer destination points
-      const dest = order.customerCoordinates || DEFAULT_CUSTOMER_COORDINATES;
+      // Add a destination only when the customer explicitly saved coordinates.
+      const dest = order.customerCoordinates;
       if (dest && typeof dest.lat === 'number' && typeof dest.lng === 'number') {
         points.push({
           lat: dest.lat,
@@ -310,9 +304,9 @@ export function OrderDensityHeatmap({
     return Math.round(heatmapPoints.reduce((acc, p) => acc + p.weight, 0));
   }, [heatmapPoints]);
 
-  const topSector = useMemo(() => {
-    return 'Taiwan Market & Kebele 04 Corridor';
-  }, []);
+  const topSector = heatmapPoints.length > 0
+    ? 'Recorded order locations'
+    : 'No verified order coordinates';
 
   const centerCoordinates = useMemo(() => {
     return CITY_COORDINATES.Jijiga || { lat: 9.3547, lng: 42.7955 };
@@ -331,13 +325,13 @@ export function OrderDensityHeatmap({
               {portalRole === 'ADMIN' ? 'City Logistics Demand & Order Density Heatmap' : 'Hotspot Navigation & Demand Density Map'}
             </h3>
             <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Live Hotspots
+              Order Locations
             </span>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
             {portalRole === 'ADMIN' 
-              ? 'Real-time spatial density analysis visualizing customer order origin/dropoff hotspots across the city grid.'
-              : 'Track high-demand pickup corridors across Jijiga to position yourself near busy Mamila clusters and accelerate order claiming.'}
+              ? 'Heatmap from coordinates stored on the currently loaded orders only. Unrecorded locations are excluded; this is not a demand forecast.'
+              : 'Shows only recorded order coordinates from the currently loaded records. Static demand estimates and simulated locations are excluded.'}
           </p>
         </div>
 
@@ -372,20 +366,6 @@ export function OrderDensityHeatmap({
             >
               {isHeatmapVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
               <span>{isHeatmapVisible ? 'Heatmap Active' : 'Heatmap Paused'}</span>
-            </button>
-
-            {/* Pins Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowHubPins(prev => !prev)}
-              className={`px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 duration-150 ${
-                showHubPins 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
-              }`}
-            >
-              <MapPin className="w-3.5 h-3.5" />
-              <span>{showHubPins ? 'Hub Pins On' : 'Hub Pins Off'}</span>
             </button>
 
             {/* Status filter selector */}
@@ -484,44 +464,6 @@ export function OrderDensityHeatmap({
                 visible={isHeatmapVisible}
               />
 
-              {/* Advanced Markers for Commercial Hubs */}
-              {showHubPins && JIJIGA_DEMAND_HUBS.map((hub, idx) => (
-                <AdvancedMarker
-                  key={`hub-${idx}`}
-                  position={{ lat: hub.lat, lng: hub.lng }}
-                  onClick={() => setSelectedHub(hub)}
-                  title={hub.label}
-                >
-                  <Pin 
-                    background="#b91c1c" 
-                    borderColor="#7f1d1d" 
-                    glyphColor="#ffffff" 
-                    scale={0.9} 
-                  />
-                </AdvancedMarker>
-              ))}
-
-              {/* Active InfoWindow for clicked demand hubs */}
-              {selectedHub && (
-                <InfoWindow
-                  position={{ lat: selectedHub.lat, lng: selectedHub.lng }}
-                  onCloseClick={() => setSelectedHub(null)}
-                >
-                  <div className="p-1 max-w-[220px] text-xs space-y-1">
-                    <p className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                      <Flame className="w-3.5 h-3.5 text-amber-600" />
-                      {selectedHub.label}
-                    </p>
-                    <p className="text-[11px] text-slate-500">
-                      Urban dispatch hotspot index: <strong className="text-slate-800">{selectedHub.weight}x density</strong>
-                    </p>
-                    <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[10px]">
-                      <span className="text-emerald-700 font-semibold">High Order Flow</span>
-                      <span className="text-slate-400 font-mono">Jijiga, Somali Region</span>
-                    </div>
-                  </div>
-                </InfoWindow>
-              )}
             </Map>
           )}
         </MapErrorBoundary>
