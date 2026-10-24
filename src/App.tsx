@@ -343,30 +343,44 @@ export default function App() {
     }
   };
 
-  const handleBookParcel = async (parcelOrder: Partial<Order>) => {
-    if (!currentUser) {
-      showAlert('Please sign in with Google to book a parcel delivery.', 'error');
-      return;
-    }
-    const orderDocId = generateOrderId();
-    const effectiveCustomerId = currentUser.uid;
-    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || parcelOrder.customerName || 'Customer';
-    const effectivePhone = userProfile?.phone || parcelOrder.customerPhone || '';
+  const handleBookParcel = async (parcelOrder: Partial<Order>): Promise<void> => {
+    if (!currentUser) throw new Error('Sign in before booking a parcel.');
+    if (userProfile?.city?.trim() !== 'Jijiga') throw new Error('Parcel delivery requires a saved Jijiga profile.');
+    if (parcelOrder.paymentMethod !== 'COD') throw new Error('Only Cash on Delivery is currently supported.');
+    if (!parcelOrder.parcelDetails || parcelOrder.customerCity !== 'Jijiga') throw new Error('A valid local Jijiga parcel request is required.');
 
+    const orderDocId = generateOrderId();
+    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || parcelOrder.customerName || 'Customer';
     const fullOrder: Order = {
       ...(parcelOrder as Order),
       id: orderDocId,
-      customerId: effectiveCustomerId,
+      customerId: currentUser.uid,
       customerName: effectiveCustomerName,
-      customerPhone: effectivePhone,
+      customerPhone: userProfile?.phone || parcelOrder.customerPhone || '',
+      customerCity: 'Jijiga',
+      customerAddress: parcelOrder.customerAddress?.trim() || '',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
       status: 'PENDING',
       createdAt: new Date(),
     };
 
-    setOrders(prev => [fullOrder, ...prev]);
+    if (isDemoMode) {
+      setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+      showAlert('Demo Sandbox only: parcel request is local sample state and was not saved to production Firestore.', 'success');
+      return;
+    }
 
     try {
       await saveOrderToFirestore(fullOrder);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Could not save parcel request: ${message}`, 'error');
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+    try {
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -374,97 +388,111 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `Express parcel booked: ${fullOrder.batchName}.`
+        note: 'Local Jijiga parcel request created; awaiting authorized fulfillment.'
       });
-      showAlert(`Parcel Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
-    } catch (err: any) {
-      // Rollback state on persistence failure
-      setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
-      showAlert(`Could not save parcel order to Firestore: ${err.message}`, 'error');
+      showAlert(`Parcel request #${fullOrder.id.slice(-6)} saved. Awaiting authorized fulfillment.`, 'success');
+    } catch {
+      showAlert(`Parcel request #${fullOrder.id.slice(-6)} was saved, but its activity event could not be recorded. Please do not submit it again.`, 'error');
     }
   };
 
-  const handleBookRide = async (rideOrder: Partial<Order>) => {
-    if (!currentUser) {
-      const error = new Error('Please sign in with Google to request an express ride.');
-      showAlert(error.message, 'error');
-      throw error;
+  const handleBookRide = async (rideOrder: Partial<Order>): Promise<void> => {
+    if (!currentUser) throw new Error('Sign in before requesting a ride.');
+    if (userProfile?.city?.trim() !== 'Jijiga') throw new Error('Ride requests require a saved Jijiga profile.');
+    if (rideOrder.paymentMethod !== 'COD' || (rideOrder.paymentStatus && rideOrder.paymentStatus !== 'UNPAID')) {
+      throw new Error('Only unpaid Cash on Delivery ride requests are currently supported.');
     }
-    const orderDocId = generateOrderId();
-    const effectiveCustomerId = currentUser.uid;
-    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || rideOrder.customerName || 'Customer';
+    if (rideOrder.customerCity !== 'Jijiga' || rideOrder.rideDetails?.city !== 'Jijiga') {
+      throw new Error('Ride service is limited to Jijiga.');
+    }
 
+    const orderDocId = generateOrderId();
+    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || rideOrder.customerName || 'Customer';
     const fullOrder: Order = {
       ...(rideOrder as Order),
       id: orderDocId,
-      customerId: effectiveCustomerId,
+      customerId: currentUser.uid,
       customerName: effectiveCustomerName,
+      customerPhone: userProfile?.phone || rideOrder.customerPhone || '',
+      customerCity: 'Jijiga',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
       status: 'PENDING',
       createdAt: new Date(),
     };
 
-    setOrders(prev => [fullOrder, ...prev]);
-    let orderSaved = false;
+    if (isDemoMode) {
+      setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+      showAlert('Demo Sandbox only: ride request is local sample state and was not saved to production Firestore. No driver has been assigned.', 'success');
+      return;
+    }
 
     try {
       await saveOrderToFirestore(fullOrder);
-      orderSaved = true;
-
-      let eventLogged = true;
-      try {
-        await logDeliveryEventToFirestore({
-          orderId: fullOrder.id,
-          status: fullOrder.status,
-          timestamp: new Date().toISOString(),
-          actorRole: 'CUSTOMER',
-          actorId: currentUser.uid,
-          actorName: fullOrder.customerName,
-          note: 'Ride request submitted; awaiting authorized driver assignment.'
-        });
-      } catch (eventError) {
-        eventLogged = false;
-        console.warn('Ride was saved, but its delivery event could not be recorded:', eventError);
-      }
-
-      if (eventLogged) {
-        showAlert(`Ride request #${fullOrder.id.slice(-6)} saved. Waiting for dispatch; no driver has been assigned yet.`, 'success');
-      } else {
-        showAlert('Ride request was saved, but its activity event could not be recorded. No driver has been assigned.', 'error');
-      }
-    } catch (err: any) {
-      if (!orderSaved) {
-        setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
-      }
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
       showAlert(`Could not save ride request: ${message}`, 'error');
-      throw new Error(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+    try {
+      await logDeliveryEventToFirestore({
+        orderId: fullOrder.id,
+        status: fullOrder.status,
+        timestamp: new Date().toISOString(),
+        actorRole: 'CUSTOMER',
+        actorId: currentUser.uid,
+        actorName: fullOrder.customerName,
+        note: 'Ride request saved; waiting for authorized dispatcher assignment. No driver was pre-assigned.'
+      });
+      showAlert(`Ride request #${fullOrder.id.slice(-6)} saved. Waiting for dispatch; no driver has been assigned yet.`, 'success');
+    } catch {
+      showAlert('Ride request was saved, but its activity event could not be recorded. No driver has been assigned.', 'error');
     }
   };
 
-  const handleBookEeu = async (eeuOrder: Partial<Order>) => {
-    if (!currentUser) {
-      showAlert('Please sign in with Google to book an EEU recharge.', 'error');
-      return;
+  const handleBookEeu = async (eeuOrder: Partial<Order>): Promise<void> => {
+    if (!currentUser) throw new Error('Sign in before booking an EEU recharge.');
+    if (userProfile?.city?.trim() !== 'Jijiga') throw new Error('EEU prepaid-card service requires a saved Jijiga profile.');
+    if (eeuOrder.paymentMethod !== 'COD' || (eeuOrder.paymentStatus && eeuOrder.paymentStatus !== 'UNPAID')) {
+      throw new Error('Only unpaid Cash on Delivery requests are supported for EEU service.');
     }
-    const orderDocId = generateOrderId();
-    const effectiveCustomerId = currentUser.uid;
-    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || eeuOrder.customerName || 'Customer';
-    const effectivePhone = userProfile?.phone || eeuOrder.customerPhone || '';
+    if (eeuOrder.customerCity !== 'Jijiga' || !eeuOrder.eeuDetails?.customerAuthorized) {
+      throw new Error('A Jijiga EEU request with customer authorization is required.');
+    }
 
+    const orderDocId = generateOrderId();
+    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || eeuOrder.customerName || 'Customer';
     const fullOrder: Order = {
       ...(eeuOrder as Order),
       id: orderDocId,
-      customerId: effectiveCustomerId,
+      customerId: currentUser.uid,
       customerName: effectiveCustomerName,
-      customerPhone: effectivePhone,
+      customerPhone: userProfile?.phone || eeuOrder.customerPhone || '',
+      customerCity: 'Jijiga',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
       status: 'PENDING',
       createdAt: new Date(),
     };
 
-    setOrders(prev => [fullOrder, ...prev]);
+    if (isDemoMode) {
+      setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+      showAlert('Demo Sandbox only: EEU request is local sample state. No physical-card trip, STS token, receipt, or recharge has occurred.', 'success');
+      return;
+    }
 
     try {
       await saveOrderToFirestore(fullOrder);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Could not save EEU request: ${message}`, 'error');
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+    try {
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -472,40 +500,51 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `EEU Prepaid electricity recharge booked.`
+        note: 'EEU physical-card errand requested; no recharge or terminal receipt is implied by order creation.'
       });
-      showAlert(`EEU Recharge Order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
-    } catch (err: any) {
-      // Rollback state on persistence failure
-      setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
-      showAlert(`Could not save EEU order: ${err.message}`, 'error');
+      showAlert(`EEU request #${fullOrder.id.slice(-6)} saved. Physical-card custody is awaiting an authorized rider.`, 'success');
+    } catch {
+      showAlert('EEU request was saved, but its activity event could not be recorded. No recharge or receipt has occurred.', 'error');
     }
   };
 
-  const handleBookKhat = async (khatOrder: Partial<Order>) => {
-    if (!currentUser) {
-      showAlert('Please sign in with Google to order Khat.', 'error');
-      return;
-    }
-    const orderDocId = generateOrderId();
-    const effectiveCustomerId = currentUser.uid;
-    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || khatOrder.customerName || 'Customer';
-    const effectivePhone = userProfile?.phone || khatOrder.customerPhone || '';
+  const handleBookKhat = async (khatOrder: Partial<Order>): Promise<void> => {
+    if (!currentUser) throw new Error('Sign in before placing a Khat order.');
+    if (userProfile?.city?.trim() !== 'Jijiga') throw new Error('Khat delivery requires a saved Jijiga profile.');
+    if (khatOrder.paymentMethod !== 'COD') throw new Error('Only Cash on Delivery is currently supported.');
+    if (khatOrder.customerCity !== 'Jijiga') throw new Error('Khat delivery is currently limited to Jijiga.');
 
+    const orderDocId = generateOrderId();
+    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || khatOrder.customerName || 'Customer';
     const fullOrder: Order = {
       ...(khatOrder as Order),
       id: orderDocId,
-      customerId: effectiveCustomerId,
+      customerId: currentUser.uid,
       customerName: effectiveCustomerName,
-      customerPhone: effectivePhone,
+      customerPhone: userProfile?.phone || khatOrder.customerPhone || '',
+      customerCity: 'Jijiga',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
       status: 'PENDING',
       createdAt: new Date(),
     };
 
-    setOrders(prev => [fullOrder, ...prev]);
+    if (isDemoMode) {
+      setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+      showAlert('Demo Sandbox only: Khat request is local sample state and was not saved to production Firestore.', 'success');
+      return;
+    }
 
     try {
       await saveOrderToFirestore(fullOrder);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Could not save Khat request: ${message}`, 'error');
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    setOrders(prev => [fullOrder, ...prev.filter(order => order.id !== fullOrder.id)]);
+    try {
       await logDeliveryEventToFirestore({
         orderId: fullOrder.id,
         status: fullOrder.status,
@@ -513,13 +552,11 @@ export default function App() {
         actorRole: 'CUSTOMER',
         actorId: currentUser.uid,
         actorName: fullOrder.customerName,
-        note: `Fresh Khat order placed from ${fullOrder.mamilaName || 'Mamila stall'}.`
+        note: 'Khat order saved with COD; awaiting authorized fulfillment.'
       });
-      showAlert(`Khat order #${fullOrder.id.slice(-6)} saved to Cloud Firestore!`, 'success');
-    } catch (err: any) {
-      // Rollback state on persistence failure
-      setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
-      showAlert(`Could not save Khat order: ${err.message}`, 'error');
+      showAlert(`Khat request #${fullOrder.id.slice(-6)} saved. Awaiting authorized fulfillment.`, 'success');
+    } catch {
+      showAlert('Khat request was saved, but its activity event could not be recorded. Please do not submit it again.', 'error');
     }
   };
 
