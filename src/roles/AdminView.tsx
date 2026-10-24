@@ -312,7 +312,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="font-bold text-lg text-slate-900">Live Orders Dispatch</h3>
+              <h3 className="font-bold text-lg text-slate-900">Order Dispatch</h3>
               <p className="text-xs text-slate-500">All registered customer orders in platform</p>
             </div>
             
@@ -486,7 +486,7 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-lg text-slate-900">Live Inventory Status</h3>
+              <h3 className="font-bold text-lg text-slate-900">Inventory Status</h3>
               <p className="text-xs text-slate-500">Batch availability across Mamilas</p>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-100 font-mono tabular-nums">
