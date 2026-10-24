@@ -234,7 +234,7 @@ export default function App() {
   };
 
   const handlePlaceOrder = async (
-    batch: Batch, 
+    batch: Batch,
     paymentMethod: PaymentMethod,
     options?: {
       quantity?: number;
@@ -245,32 +245,39 @@ export default function App() {
       customerPlusCode?: string;
       customerCoordinates?: { lat: number; lng: number };
     }
-  ) => {
+  ): Promise<void> => {
     if (!currentUser) {
-      showAlert('Please sign in with Google to place an order.', 'error');
-      return;
+      throw new Error('Sign in before placing an order.');
+    }
+    if (paymentMethod !== 'COD') {
+      throw new Error('Online wallet checkout is temporarily unavailable. Select Cash on Delivery.');
+    }
+    if (userProfile?.city?.trim() !== 'Jijiga' || options?.deliveryCity !== 'Jijiga') {
+      throw new Error('Food delivery is currently available only to customers with a saved profile city of Jijiga.');
+    }
+
+    const effectiveAddress = options?.customerAddress?.trim() || userProfile.address?.trim() || '';
+    if (!effectiveAddress) {
+      throw new Error('Enter your actual delivery address before placing the order.');
+    }
+
+    const quantity = options?.quantity ?? 1;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
+      throw new Error('Choose a valid quantity between 1 and 50.');
+    }
+    if (!batch.id || !Number.isFinite(batch.price) || batch.price <= 0 || batch.available < quantity) {
+      throw new Error('This batch is no longer available in the live catalog. Refresh and try again.');
     }
 
     const mamila = mamilasList.find(m => m.id === batch.mamilaId);
-    const quantity = options?.quantity || 1;
-    const deliveryFee = options?.deliveryCity === 'Hargeisa' ? 200 : 150;
+    const deliveryFee = 150;
     const subtotal = batch.price * quantity;
     const totalPrice = subtotal + deliveryFee;
-
-    // Decrease inventory atomically
-    setInventory(prev => prev.map(b => 
-      b.id === batch.id ? { ...b, available: Math.max(0, b.available - quantity) } : b
-    ));
-
     const originCoords = mamila?.coordinates || MAMILA_COORDINATES[batch.mamilaId];
     const destCoords = options?.customerCoordinates;
-
     const orderDocId = generateOrderId();
     const effectiveCustomerId = currentUser.uid;
     const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || 'Customer';
-    const effectivePhone = userProfile?.phone || '';
-    const effectiveAddress = options?.customerAddress || userProfile?.address || 'Jijiga';
-    const effectivePlusCode = options?.customerPlusCode || userProfile?.plusCode || '';
 
     const newOrder: Order = {
       id: orderDocId,
@@ -285,13 +292,13 @@ export default function App() {
       deliveryFee,
       totalPrice,
       status: 'PENDING',
-      paymentMethod,
-      paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAYMENT_PENDING',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
       customerId: effectiveCustomerId,
       customerName: effectiveCustomerName,
-      customerPhone: effectivePhone,
-      customerCity: options?.deliveryCity || userProfile?.city || 'Jijiga',
-      customerPlusCode: effectivePlusCode,
+      customerPhone: userProfile?.phone || '',
+      customerCity: 'Jijiga',
+      customerPlusCode: options?.customerPlusCode?.trim() || userProfile?.plusCode?.trim() || '',
       customerAddress: effectiveAddress,
       ...(destCoords ? { customerCoordinates: destCoords } : {}),
       ...(originCoords ? { mamilaCoordinates: originCoords } : {}),
@@ -300,30 +307,39 @@ export default function App() {
       createdAt: new Date(),
     };
 
-    setOrders(prev => [newOrder, ...prev]);
+    if (isDemoMode) {
+      setOrders(prev => [newOrder, ...prev.filter(order => order.id !== newOrder.id)]);
+      setInventory(prev => prev.map(b => b.id === batch.id
+        ? { ...b, available: Math.max(0, b.available - quantity) }
+        : b
+      ));
+      showAlert('Demo Sandbox only: order is local sample state and was not saved to production Firestore.', 'success');
+      return;
+    }
 
-    if (!isDemoMode && currentUser) {
-      try {
-        await saveOrderToFirestore(newOrder);
-        await logDeliveryEventToFirestore({
-          orderId: orderDocId,
-          status: 'PENDING',
-          timestamp: new Date().toISOString(),
-          actorRole: 'CUSTOMER',
-          actorId: currentUser.uid,
-          actorName: effectiveCustomerName,
-          note: `Order placed for ${batch.name} (${paymentMethod}) and entered unassigned runner pool.`
-        });
-        showAlert(`Order #${orderDocId.slice(-6)} securely saved to Cloud Firestore!`, 'success');
-      } catch (err: any) {
-        console.error('Failed to save order to Firestore:', err);
-        // Data integrity rollback: undo optimistic additions so React state strictly matches database truth
-        setOrders(prev => prev.filter(o => o.id !== orderDocId));
-        setInventory(prev => prev.map(b => 
-          b.id === batch.id ? { ...b, available: b.available + quantity } : b
-        ));
-        showAlert(`Could not sync order to database: ${err.message}`, 'error');
-      }
+    try {
+      await saveOrderToFirestore(newOrder);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Could not save order to Firestore: ${message}`, 'error');
+      throw error instanceof Error ? error : new Error(message);
+    }
+
+    // The order write succeeded. Update local state only after persistence; the live listener owns stock.
+    setOrders(prev => [newOrder, ...prev.filter(order => order.id !== newOrder.id)]);
+    try {
+      await logDeliveryEventToFirestore({
+        orderId: orderDocId,
+        status: 'PENDING',
+        timestamp: new Date().toISOString(),
+        actorRole: 'CUSTOMER',
+        actorId: currentUser.uid,
+        actorName: effectiveCustomerName,
+        note: 'Food order submitted with COD and queued for authorized runner dispatch.'
+      });
+      showAlert(`Order #${orderDocId.slice(-6)} saved. Awaiting authorized fulfillment.`, 'success');
+    } catch {
+      showAlert(`Order #${orderDocId.slice(-6)} was saved, but its activity event could not be recorded. Please do not submit it again.`, 'error');
     }
   };
 
@@ -1121,7 +1137,7 @@ export default function App() {
           {activeRole === 'CUSTOMER' && (
             <CustomerView 
               inventory={inventory} 
-              myOrders={customerOrders} 
+              myOrders={customerOrders} isDemoMode={isDemoMode} 
               currentUser={currentUser}
               customerProfile={userProfile}
               orderMessages={orderMessages}
