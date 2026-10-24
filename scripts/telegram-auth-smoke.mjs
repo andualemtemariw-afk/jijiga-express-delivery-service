@@ -47,8 +47,8 @@ test('creates a one-hour RS256 Firebase customer token', () => {
   assert.equal(payload.sub, account.client_email);
   assert.equal(payload.iat, NOW);
   assert.equal(payload.exp, NOW + 3600);
-  assert.equal(payload.provider, 'telegram');
-  assert.equal(payload.telegramUserId, '987654321');
+  assert.equal('provider' in payload, false);
+  assert.equal('telegramUserId' in payload, false);
   assert.equal('email' in payload, false);
   const verifier = createVerify('RSA-SHA256');
   verifier.update(headerPart + '.' + payloadPart);

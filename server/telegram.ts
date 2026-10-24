@@ -98,8 +98,6 @@ export function createFirebaseCustomToken(
     iat: nowSeconds,
     exp: nowSeconds + 3600,
     uid,
-    provider: 'telegram',
-    telegramUserId: uid.startsWith('telegram_') ? uid.slice('telegram_'.length) : '',
   });
   const signingInput = header + '.' + payload;
   const signer = createSign('RSA-SHA256');
