@@ -43,6 +43,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   useEffect(() => {
     if (!showReceiptModal || !hasReceipt) return;
     let cancelled = false;
+    setReceiptImage(null);
     setReceiptLoading(true);
     setReceiptLoadError(null);
     loadEeuReceiptImage(order.id)
@@ -58,7 +59,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
         if (!cancelled) setReceiptLoading(false);
       });
     return () => { cancelled = true; };
-  }, [showReceiptModal, order.id, hasReceipt];
+  }, [showReceiptModal, order.id, hasReceipt]);
 
   if (!details) return null;
 
