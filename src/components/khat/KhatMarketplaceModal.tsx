@@ -34,7 +34,7 @@ interface Props {
     address: string;
     plusCode: string;
   };
-  onConfirmOrder: (order: Order) => void;
+  onConfirmOrder: (order: Order) => Promise<void> | void;
 }
 
 type Step = 'SELECT_MAMILA' | 'SELECT_BATCH' | 'CHECKOUT';
@@ -59,10 +59,12 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const [selectedMamila, setSelectedMamila] = useState<Mamila | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [landmark, setLandmark] = useState(customerProfile.address || 'Kebele 04, Near Central Plaza');
-  const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '8F2P+5H Jijiga');
+  const [landmark, setLandmark] = useState(customerProfile.address || '');
+  const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [specialNote, setSpecialNote] = useState('');
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [wrapType, setWrapType] = useState<'Fresh Banana Leaf' | 'Traditional Palm Fiber' | 'Moist Burlap Wrap'>('Fresh Banana Leaf');
 
   if (!isOpen) return null;
@@ -91,8 +93,17 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
     localStorage.setItem('jijiga_preferred_mamila_id', mamilaId);
   };
 
-  const handlePlaceOrder = () => {
-    if (!selectedMamila || !selectedBatch) return;
+  const handlePlaceOrder = async () => {
+    if (!selectedMamila || !selectedBatch || isSubmitting) return;
+    setFormError('');
+    if (customerProfile.city.trim() !== 'Jijiga') {
+      setFormError('Khat delivery requires a saved profile city of Jijiga. Update your profile before ordering.');
+      return;
+    }
+    if (!landmark.trim()) {
+      setFormError('Enter your actual delivery address before placing the order.');
+      return;
+    }
 
     const deliveryFee = 60; // Standard express city fee in Jijiga
     const itemsTotal = selectedBatch.price * quantity;
@@ -135,8 +146,15 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
       createdAt: new Date(),
     };
 
-    onConfirmOrder(newOrder);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onConfirmOrder(newOrder);
+      onClose();
+    } catch (error) {
+      setFormError(error instanceof Error ? `Could not save Khat request: ${error.message}` : 'Could not save Khat request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -683,7 +701,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Confirm & Place Khat Order ({selectedBatch ? selectedBatch.price * quantity + 60 : 0} ETB)</span>
+                <span>{isSubmitting ? 'Saving Khat request…' : `Request Khat Delivery (${selectedBatch ? selectedBatch.price * quantity + 60 : 0} ETB)`}</span>
               </button>
             ) : (
               <div className="text-xs text-slate-500 font-medium">
