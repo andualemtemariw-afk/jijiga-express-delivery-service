@@ -13,11 +13,9 @@ import {
   MAMILA_COORDINATES, 
   DEFAULT_CUSTOMER_COORDINATES, 
   CITY_COORDINATES,
-  generateRoutePoints, 
   getEstimatedRiderPosition, 
   LatLng 
 } from '../../utils/geo';
-import { RoutePolyline } from './RoutePolyline';
 import { MapBoundsFitter } from './MapBoundsFitter';
 import { VectorRouteMapFallback } from './VectorRouteMapFallback';
 import { MapErrorBoundary } from './MapErrorBoundary';
@@ -152,10 +150,6 @@ function LiveGoogleMap({
     return customerPos;
   }, [order.riderCoordinates, hasFreshRiderGps, mamilaPos, customerPos, order.status, simulatedTransitFrac, demoSandboxEnabled]);
 
-  const routePath = useMemo(() => {
-    return generateRoutePoints(mamilaPos, customerPos);
-  }, [mamilaPos, customerPos]);
-
   const pointsToFit = useMemo(() => [mamilaPos, customerPos, riderPos], [mamilaPos, customerPos, riderPos]);
 
   const usesFallbackCustomerLocation = Boolean(order.customerCoordinates
@@ -181,7 +175,7 @@ function LiveGoogleMap({
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-xl border border-slate-700/80 shadow-md flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold">Location Preview · approximate connector</span>
+            <span className="font-semibold">Location markers · no route navigation</span>
             <span className="text-slate-400 font-mono text-[11px]">
               {order.customerCity || 'Jijiga'}
             </span>
@@ -257,9 +251,6 @@ function LiveGoogleMap({
             showTraffic={showTraffic}
           />
           <MapBoundsFitter points={pointsToFit} trigger={recenterCount} padding={50} />
-
-          {/* Polyline Route */}
-          <RoutePolyline path={routePath} strokeColor="#2563eb" strokeOpacity={0.85} strokeWeight={4} />
 
           {/* Origin: Mamila Hub Marker */}
           {hasAdvancedMarker && (
