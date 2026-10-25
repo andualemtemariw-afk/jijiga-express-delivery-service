@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Read-only coding assistant for the Jijiga Express Delivery Service repository",
   "scripts": {
-    "build": "node scripts/safety-check.mjs",
-    "test": "node scripts/safety-check.mjs"
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/safety-check.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.3"
-  }
+  },
+  "type": "module"
 }
