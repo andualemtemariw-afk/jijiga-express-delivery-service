@@ -5,6 +5,7 @@ import { OrderSearchFilterBar, OrderFilterState } from '../components/orders/Ord
 import { extractAvailableCities, applyOrderFilters } from '../utils/orderFilterUtils';
 import { WhatsAppDispatchModal } from '../components/communication/WhatsAppDispatchModal';
 import { fetchEligibleStaff } from '../services/dispatchService';
+import { calculatePlatformTotals, calculateOrderRevenue } from '../utils/revenueAccounting';
 import { 
   Activity, 
   Package, 
@@ -144,21 +145,19 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
     o => o.status !== 'DELIVERED' && o.status !== 'RATED' && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED'
   );
   
-  // Calculate today's revenue (excluding cancelled)
-  const todayRevenue = orders
-    .filter(o => isSameCalendarDay(new Date(o.createdAt), new Date()) && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
+  // Platform financial breakdown from certified accounting model
+  const platformFinancials = useMemo(() => calculatePlatformTotals(orders), [orders]);
 
-  // Financial Ledger breakdown
-  const grossPlatformGMV = orders
-    .filter(o => o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.totalPrice || o.price), 0);
-  
-  const totalDeliveryFees = orders
-    .filter(o => o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
-    .reduce((sum, o) => sum + (o.deliveryFee || 150), 0);
+  // Today's platform earnings (fees & fares excluding EEU electricity principal)
+  const todayRevenue = useMemo(() => {
+    return orders
+      .filter(o => isSameCalendarDay(new Date(o.createdAt), new Date()) && o.status !== 'CANCELLED' && o.status !== 'DEFECT_REJECTED')
+      .reduce((sum, o) => sum + calculateOrderRevenue(o).platformRevenue, 0);
+  }, [orders]);
 
-  const mamilaPayouts = grossPlatformGMV - totalDeliveryFees;
+  const grossPlatformGMV = platformFinancials.grossPlatformGMV;
+  const mamilaPayouts = platformFinancials.totalMerchantPayouts;
+  const eeuUtilityPrincipal = platformFinancials.totalUtilityPrincipal;
 
   // Disputed orders
   const disputedOrders = useMemo(() => {
@@ -186,10 +185,10 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 text-emerald-600 mb-2">
             <DollarSign className="w-5 h-5" /> 
-            <span className="font-semibold text-sm">Today's Revenue</span>
+            <span className="font-semibold text-sm">Today's Platform Revenue</span>
           </div>
           <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">{todayRevenue.toLocaleString()} ETB</p>
-          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">Direct mobile money & cash</span>
+          <span className="text-xs text-emerald-600 font-medium mt-1 inline-block">Platform fees & transport fares</span>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -211,8 +210,8 @@ export function AdminView({ orders, inventory, onResolveDispute, onOpenMapPrevie
           <p className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
             {grossPlatformGMV.toLocaleString()} ETB
           </p>
-          <span className="text-xs text-purple-600 font-medium mt-1 inline-block">
-            Disbursing {mamilaPayouts.toLocaleString()} ETB to Mamilas
+          <span className="text-xs text-purple-600 font-medium mt-1 inline-block truncate" title={`Mamila Payouts: ${mamilaPayouts.toLocaleString()} ETB · EEU Utility: ${eeuUtilityPrincipal.toLocaleString()} ETB`}>
+            Mamilas: {mamilaPayouts.toLocaleString()} ETB · EEU: {eeuUtilityPrincipal.toLocaleString()} ETB
           </span>
         </div>
       </div>

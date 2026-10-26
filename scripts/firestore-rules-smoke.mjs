@@ -255,6 +255,75 @@ async function main() {
   });
   console.log('PASS COD ride order created directly with rules-validated fare');
 
+  const directMotoId = 'valid-moto-' + Date.now();
+  await setDoc(doc(profileWithoutActive.db, 'orders', directMotoId), {
+    id: directMotoId, serviceType: 'RIDE', batchId: 'ride-marhaba-moto', batchName: 'Test moto',
+    mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+    price: 136, quantity: 1, deliveryFee: 0, totalPrice: 136, status: 'PENDING',
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+    customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+    customerPlusCode: '', customerAddress: 'Kebele 04',
+    rideDetails: {
+      vehicleType: 'MARHABA_MOTO', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+      city: 'Jijiga', tripDistanceKm: 5.4, tripDurationMins: 12, rideStatus: 'REQUESTED'
+    },
+    distanceKm: 5.4, etaMinutes: 12, createdAt: new Date().toISOString()
+  });
+  console.log('PASS COD moto ride order created directly with rules-validated 136 ETB fare');
+
+  const forgedRideId = 'forged-customer-ride-' + Date.now();
+  await expectDenied('customer cannot create a ride order on behalf of another customer (forged customerId)', async () => {
+    await setDoc(doc(customer.db, 'orders', forgedRideId), {
+      id: forgedRideId, serviceType: 'RIDE', batchId: 'ride-marhaba-taxi', batchName: 'Forged customer taxi',
+      mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+      price: 283, quantity: 1, deliveryFee: 0, totalPrice: 283, status: 'PENDING',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid, // Different user
+      customerName: 'Impersonated User', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      rideDetails: {
+        vehicleType: 'MARHABA_TAXI', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+        city: 'Jijiga', tripDistanceKm: 6.8, tripDurationMins: 18, rideStatus: 'REQUESTED'
+      },
+      distanceKm: 6.8, etaMinutes: 18, createdAt: new Date().toISOString()
+    });
+  });
+
+  const selfAssignedRideId = 'self-assigned-driver-ride-' + Date.now();
+  await expectDenied('customer cannot self-assign a driver upon creating a ride order', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', selfAssignedRideId), {
+      id: selfAssignedRideId, serviceType: 'RIDE', batchId: 'ride-marhaba-taxi', batchName: 'Self-assigned taxi',
+      mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+      price: 283, quantity: 1, deliveryFee: 0, totalPrice: 283, status: 'PENDING',
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      riderId: riderUid, // Unauthorized courier self-assignment
+      riderName: 'rider User',
+      rideDetails: {
+        vehicleType: 'MARHABA_TAXI', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+        city: 'Jijiga', tripDistanceKm: 6.8, tripDurationMins: 18, rideStatus: 'DRIVER_ASSIGNED'
+      },
+      distanceKm: 6.8, etaMinutes: 18, createdAt: new Date().toISOString()
+    });
+  });
+
+  const mismatchedMotoId = 'mismatched-moto-fare-' + Date.now();
+  await expectDenied('customer cannot create moto order with mismatched taxi fare', async () => {
+    await setDoc(doc(profileWithoutActive.db, 'orders', mismatchedMotoId), {
+      id: mismatchedMotoId, serviceType: 'RIDE', batchId: 'ride-marhaba-moto', batchName: 'Mismatched fare moto',
+      mamilaId: 'm4', mamilaName: 'Jijiga Express Fleet', mamilaLocation: 'Jijiga',
+      price: 283, quantity: 1, deliveryFee: 0, totalPrice: 283, status: 'PENDING', // Taxi price on Moto
+      paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
+      customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
+      customerPlusCode: '', customerAddress: 'Kebele 04',
+      rideDetails: {
+        vehicleType: 'MARHABA_MOTO', pickupLocation: 'Kebele 04', dropoffLocation: 'Taiwan Market',
+        city: 'Jijiga', tripDistanceKm: 5.4, tripDurationMins: 12, rideStatus: 'REQUESTED'
+      },
+      distanceKm: 5.4, etaMinutes: 12, createdAt: new Date().toISOString()
+    });
+  });
+
   const directEeuId = 'valid-eeu-' + Date.now();
   await setDoc(doc(profileWithoutActive.db, 'orders', directEeuId), {
     id: directEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga', batchName: 'EEU recharge test',

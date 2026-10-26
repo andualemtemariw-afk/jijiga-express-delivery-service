@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import { Order, Batch, ServiceType } from '../../types';
 import { MAMILAS } from '../../data';
+import { calculateOrderRevenue } from '../../utils/revenueAccounting';
 
 interface AdminDashboardProps {
   orders: Order[];
@@ -119,7 +120,15 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         mamilaCounts[m.name] = validOrders.filter(o => o.mamilaId === m.id).length;
       });
 
-      const dayRevenue = validOrders.reduce((sum, o) => sum + (o.totalPrice || o.price || 0), 0);
+      let dayRevenue = 0;
+      let dayGmv = 0;
+      let dayUtilityPrincipal = 0;
+      validOrders.forEach(o => {
+        const rev = calculateOrderRevenue(o);
+        dayRevenue += rev.platformRevenue;
+        dayGmv += rev.grossTransactionValue;
+        dayUtilityPrincipal += rev.utilityPrincipal;
+      });
 
       list.push({
         dateStr: target.toISOString().split('T')[0],
@@ -132,6 +141,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         inTransit: activeCount,
         cancelled: cancelledCount,
         revenue: dayRevenue,
+        gmv: dayGmv,
+        utilityPrincipal: dayUtilityPrincipal,
         Food: foodCount,
         Khat: khatCount,
         Parcel: parcelCount,
@@ -149,6 +160,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
     const total7Days = daysData.reduce((sum, d) => sum + d.totalOrders, 0);
     const delivered7Days = daysData.reduce((sum, d) => sum + d.delivered, 0);
     const revenue7Days = daysData.reduce((sum, d) => sum + d.revenue, 0);
+    const gmv7Days = daysData.reduce((sum, d) => sum + d.gmv, 0);
+    const utilityPrincipal7Days = daysData.reduce((sum, d) => sum + d.utilityPrincipal, 0);
     const dailyAvg = (total7Days / 7).toFixed(1);
 
     // Peak day
@@ -165,6 +178,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
       total7Days,
       delivered7Days,
       revenue7Days,
+      gmv7Days,
+      utilityPrincipal7Days,
       dailyAvg,
       peakDayLabel: peakDay.dayLabel,
       peakDayCount: peakDay.totalOrders,
@@ -259,7 +274,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold">7-Day Gross Value</span>
+            <span className="text-xs font-semibold">7-Day Platform Revenue</span>
             <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <ArrowUpRight className="w-4 h-4" />
             </div>
@@ -270,8 +285,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
             </p>
             <span className="text-xs font-bold text-slate-600">ETB</span>
           </div>
-          <p className="text-[11px] text-purple-600 font-medium mt-1">
-            Across parcels, foods & rides
+          <p className="text-[11px] text-purple-600 font-medium mt-1 truncate" title={`GMV: ${kpis.gmv7Days.toLocaleString()} ETB · EEU Utility Principal: ${kpis.utilityPrincipal7Days.toLocaleString()} ETB`}>
+            Fees & fares (GMV {kpis.gmv7Days.toLocaleString()} ETB)
           </p>
         </div>
       </div>

@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test": "tsx scripts/unit-regression.mjs",
+    "test:unit": "tsx scripts/unit-regression.mjs",
     "test:rules": "npx --yes firebase-tools@15.32.1 --config firebase.rules-test.json emulators:exec --only auth,firestore \"node scripts/firestore-rules-smoke.mjs\"",
     "typecheck": "tsc --noEmit"
   },

@@ -57,6 +57,7 @@ import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { MamilaGallery, MamilaGalleryItem } from '../components/mamila/MamilaGallery';
 import { CommunicationBridgeModal, ModalTab } from '../components/communication/CommunicationBridgeModal';
 import { OrderHistory } from '../components/orders/OrderHistory';
+import { SimplifiedOrderHistory } from '../components/orders/SimplifiedOrderHistory';
 import { OrderProgressStepper } from '../components/orders/OrderProgressStepper';
 import { 
   notifyOrderStatusChange, 
@@ -123,6 +124,7 @@ export function CustomerView({
   onBookKhat,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('batches');
+  const [historyViewFormat, setHistoryViewFormat] = useState<'simplified' | 'detailed'>('simplified');
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedCity, setSelectedCity] = useState(customerProfile?.city || 'Jijiga');
@@ -1127,22 +1129,62 @@ export function CustomerView({
               </button>
             </div>
           ) : !activeOrder ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-                <Bike className="w-8 h-8" />
+            <div className="space-y-6">
+              <div className="bg-white p-8 md:p-12 rounded-2xl border border-slate-200 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Bike className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">No In-Flight Orders</h3>
+                  <p className="text-sm text-slate-500 max-w-sm mx-auto mt-1">
+                    You don't have an active batch delivery in progress. Select a batch to order or review past orders below.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => setActiveTab('batches')}
+                    className="px-6 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+                  >
+                    Browse Fresh Batches
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className="px-6 py-2.5 bg-white border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Manage Past Orders
+                  </button>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">No In-Flight Orders</h3>
-                <p className="text-sm text-slate-500 max-w-sm mx-auto mt-1">
-                  You don't have an active batch delivery in progress. Select a batch to order.
-                </p>
+
+              {/* Embedded Simplified Order History for quick access */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Recent Completed & Cancelled Orders</h3>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                  >
+                    Full History View &rarr;
+                  </button>
+                </div>
+                <SimplifiedOrderHistory
+                  currentUser={currentUser}
+                  fallbackOrders={myOrders}
+                  inventory={inventory}
+                  onOpenReceipt={(order) => setReceiptOrder(order)}
+                  onOpenMapPreview={onOpenMapPreview}
+                  onRateOrder={(order) => setRatingOrder(order)}
+                  onDisputeOrder={(order) => setDisputeOrder(order)}
+                  onReOrder={(batch) => {
+                    handleOpenCheckout(batch);
+                    setActiveTab('batches');
+                  }}
+                  onSignIn={onSignIn}
+                />
               </div>
-              <button
-                onClick={() => setActiveTab('batches')}
-                className="px-6 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                Browse Fresh Batches
-              </button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -1278,63 +1320,97 @@ export function CustomerView({
                 </div>
 
                 {/* Assigned Personnel & Contact Section */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                {activeOrder.serviceType === 'RIDE' ? (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Runner</span>
-                      <span className="text-xs font-bold text-slate-900">
-                        {activeOrder.runnerName || (activeOrder.runnerId ? 'Staff Runner' : 'Awaiting Runner Claim...')}
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Driver</span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {activeOrder.riderName || 'Awaiting Driver Acceptance...'}
                       </span>
-                      <span className="text-[11px] text-slate-500 block">Bundle Quality & Photo Verifier</span>
-                    </div>
-                    {activeOrder.runnerId ? (
-                      <button 
-                        onClick={() => setCommunicationTarget({ 
-                          role: 'RUNNER', 
-                          name: activeOrder.runnerName || 'Staff Runner', 
-                          phone: '+251 92 888 7766',
-                          order: activeOrder
-                        })}
-                        className="p-2 bg-white rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                        title="Contact Runner"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>Chat</span>
-                      </button>
-                    ) : (
-                      <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-semibold">
-                        In Dispatch Pool
+                      <span className="text-[11px] text-slate-500 block">
+                        {activeOrder.riderId ? 'Jijiga Express Verified Fleet Driver' : 'Request broadcast to verified drivers in ' + (activeOrder.customerCity || 'Jijiga')}
                       </span>
-                    )}
-                  </div>
-
-                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Rider</span>
-                      <span className="text-xs font-bold text-slate-900">
-                        {activeOrder.riderName || (activeOrder.riderId ? 'Staff Rider' : 'Matching courier rider...')}
-                      </span>
-                      <span className="text-[11px] text-slate-500 block">Express Delivery Courier</span>
                     </div>
                     {activeOrder.riderId ? (
                       <button 
                         onClick={() => setCommunicationTarget({ 
                           role: 'RIDER', 
-                          name: activeOrder.riderName || 'Staff Rider', 
-                          phone: '+251 94 555 4433',
+                          name: activeOrder.riderName || 'Fleet Driver', 
+                          phone: activeOrder.riderPhone || 'In-App Encrypted Channel',
                           order: activeOrder
                         })}
-                        className="p-2 bg-white rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                        title="Contact Rider"
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                        title="Contact Driver"
                       >
                         <MessageSquare className="w-4 h-4" />
-                        <span>Chat</span>
+                        <span>Chat with Driver</span>
                       </button>
                     ) : (
-                      <span className="text-[10px] text-slate-400 italic">Assigning on pickup...</span>
+                      <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        Waiting for Driver
+                      </span>
                     )}
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Runner</span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {activeOrder.runnerName || (activeOrder.runnerId ? 'Staff Runner' : 'Awaiting Runner Claim...')}
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">Bundle Quality & Photo Verifier</span>
+                      </div>
+                      {activeOrder.runnerId ? (
+                        <button 
+                          onClick={() => setCommunicationTarget({ 
+                            role: 'RUNNER', 
+                            name: activeOrder.runnerName || 'Staff Runner', 
+                            phone: activeOrder.runnerPhone || 'In-App Encrypted Channel',
+                            order: activeOrder
+                          })}
+                          className="p-2 bg-white rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                          title="Contact Runner"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Chat</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md font-semibold">
+                          In Dispatch Pool
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Rider</span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {activeOrder.riderName || (activeOrder.riderId ? 'Staff Rider' : 'Matching courier rider...')}
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">Express Delivery Courier</span>
+                      </div>
+                      {activeOrder.riderId ? (
+                        <button 
+                          onClick={() => setCommunicationTarget({ 
+                            role: 'RIDER', 
+                            name: activeOrder.riderName || 'Staff Rider', 
+                            phone: activeOrder.riderPhone || 'In-App Encrypted Channel',
+                            order: activeOrder
+                          })}
+                          className="p-2 bg-white rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                          title="Contact Rider"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          <span>Chat</span>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">Assigning on pickup...</span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Driver Vernacular Quick-Chat & SMS Bridge Card */}
                 <div className="p-4 bg-gradient-to-r from-blue-50/90 via-sky-50/90 to-indigo-50/90 rounded-2xl border border-blue-200/90 space-y-3">
@@ -1362,7 +1438,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({
                           role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
                           name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          phone: (activeOrder.riderId ? activeOrder.riderPhone : activeOrder.runnerPhone) || 'In-App Encrypted Channel',
                           order: activeOrder,
                           initialTab: 'chat'
                         })}
@@ -1376,7 +1452,7 @@ export function CustomerView({
                         onClick={() => setCommunicationTarget({
                           role: activeOrder.riderId ? 'RIDER' : 'RUNNER',
                           name: activeOrder.riderName || activeOrder.runnerName || 'Courier',
-                          phone: activeOrder.riderId ? '+251 94 555 4433' : '+251 92 888 7766',
+                          phone: (activeOrder.riderId ? activeOrder.riderPhone : activeOrder.runnerPhone) || 'In-App Encrypted Channel',
                           order: activeOrder,
                           initialTab: 'notifications'
                         })}
@@ -1479,23 +1555,73 @@ export function CustomerView({
 
       {/* TAB 3: ORDER HISTORY & RECEIPTS */}
       {activeTab === 'history' && (
-        <div className="max-w-4xl mx-auto">
-          <OrderHistory
-            currentUser={currentUser}
-            fallbackOrders={myOrders}
-            inventory={inventory}
-            onOpenReceipt={(order) => setReceiptOrder(order)}
-            onOpenWhatsApp={(order) => setWhatsAppOrder(order)}
-            onOpenMapPreview={onOpenMapPreview}
-            onRateOrder={(order) => setRatingOrder(order)}
-            onDisputeOrder={(order) => setDisputeOrder(order)}
-            onReOrder={(batch) => {
-              handleOpenCheckout(batch);
-              setActiveTab('batches');
-            }}
-            onCancelOrder={onCancelOrder}
-            onSignIn={onSignIn}
-          />
+        <div className="max-w-4xl mx-auto space-y-4">
+          {/* Format Toggle Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <div className="flex items-center gap-2 pl-2">
+              <History className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">View Format:</span>
+            </div>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setHistoryViewFormat('simplified')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  historyViewFormat === 'simplified'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Simplified List
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryViewFormat('detailed')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  historyViewFormat === 'detailed'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                Detailed Management View
+              </button>
+            </div>
+          </div>
+
+          {/* Render Active View Format */}
+          {historyViewFormat === 'simplified' ? (
+            <SimplifiedOrderHistory
+              currentUser={currentUser}
+              fallbackOrders={myOrders}
+              inventory={inventory}
+              onOpenReceipt={(order) => setReceiptOrder(order)}
+              onOpenMapPreview={onOpenMapPreview}
+              onRateOrder={(order) => setRatingOrder(order)}
+              onDisputeOrder={(order) => setDisputeOrder(order)}
+              onReOrder={(batch) => {
+                handleOpenCheckout(batch);
+                setActiveTab('batches');
+              }}
+              onSignIn={onSignIn}
+            />
+          ) : (
+            <OrderHistory
+              currentUser={currentUser}
+              fallbackOrders={myOrders}
+              inventory={inventory}
+              onOpenReceipt={(order) => setReceiptOrder(order)}
+              onOpenWhatsApp={(order) => setWhatsAppOrder(order)}
+              onOpenMapPreview={onOpenMapPreview}
+              onRateOrder={(order) => setRatingOrder(order)}
+              onDisputeOrder={(order) => setDisputeOrder(order)}
+              onReOrder={(batch) => {
+                handleOpenCheckout(batch);
+                setActiveTab('batches');
+              }}
+              onCancelOrder={onCancelOrder}
+              onSignIn={onSignIn}
+            />
+          )}
         </div>
       )}
 

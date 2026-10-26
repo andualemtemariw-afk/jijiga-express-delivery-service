@@ -150,7 +150,7 @@ export interface RideDetails {
   driverPhone?: string;
   tripDistanceKm: number;
   tripDurationMins: number;
-  rideStatus: 'SEARCHING' | 'DRIVER_ASSIGNED' | 'ARRIVED_PICKUP' | 'ON_TRIP' | 'COMPLETED' | 'CANCELLED';
+  rideStatus: 'REQUESTED' | 'SEARCHING' | 'DRIVER_ASSIGNED' | 'ARRIVED_PICKUP' | 'ON_TRIP' | 'COMPLETED' | 'CANCELLED';
 }
 
 export interface Order {
@@ -187,10 +187,12 @@ export interface Order {
   khatDetails?: KhatOrderDetails;
   runnerId?: string;
   runnerName?: string;
+  runnerPhone?: string;
   runnerTagId?: string;
   runnerPhotoUrl?: string;
   riderId?: string;
   riderName?: string;
+  riderPhone?: string;
   riderProofUrl?: string;
   distanceKm?: number;
   etaMinutes?: number;

@@ -5,8 +5,6 @@ import {
   getFirestore, 
   connectFirestoreEmulator,
   persistentLocalCache, 
-  persistentMultipleTabManager, 
-  enableIndexedDbPersistence, 
   Firestore 
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
@@ -48,7 +46,7 @@ export function sanitizeEnvValue(val?: string | null): string {
     const parts = cleaned.split('=');
     cleaned = parts[parts.length - 1].trim();
   }
-  return cleaned.replace(/^['"]|['",;\s]+$/g, '').trim();
+  return cleaned.replace(/^['"`]+|['"`,;\s]+$/g, '').trim();
 }
 
 /**
@@ -138,27 +136,19 @@ export const app: FirebaseApp = (() => {
 // 2. Initialize Singleton Auth
 export const auth: Auth = getAuth(app);
 
-// 3. Initialize Singleton Firestore with persistent caching & long polling
+// 3. Initialize Singleton Firestore with auto-detect transport & robust persistence
 export const db: Firestore = (() => {
   const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
 
   if (typeof window !== 'undefined') {
     try {
       return initializeFirestore(app, {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager()
-        }),
-        experimentalForceLongPolling: true,
+        localCache: persistentLocalCache({}),
+        experimentalAutoDetectLongPolling: true,
       }, dbId);
     } catch (err: any) {
       console.warn('[FirebaseConfig] Persistent cache notice, falling back to default instance:', err?.message || err);
-      const fallbackDb = getFirestore(app, dbId);
-      try {
-        enableIndexedDbPersistence(fallbackDb).catch((persistErr) => {
-          console.warn('[FirebaseConfig] IndexedDB persistence fallback notice:', persistErr?.code || persistErr?.message);
-        });
-      } catch {}
-      return fallbackDb;
+      return getFirestore(app, dbId);
     }
   }
   return getFirestore(app, dbId);
