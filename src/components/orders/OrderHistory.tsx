@@ -558,7 +558,9 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
           </span>
           {[
             { id: 'ALL', label: 'All Services', icon: '🌐' },
-            { id: 'FOOD', label: 'Food & Groceries', icon: '🍱' },
+            { id: 'FOOD', label: 'Food & Restaurants', icon: '🍱' },
+            { id: 'GROCERY', label: 'Taiwan Grocery', icon: '🛒' },
+            { id: 'HOTEL', label: 'Hotels', icon: '🏨' },
             { id: 'PARCEL', label: 'Express Parcels', icon: '📦' },
             { id: 'RIDE', label: 'Marhaba Rides', icon: '🚖' },
             { id: 'EEU_RECHARGE', label: 'EEU Electricity', icon: '⚡' },

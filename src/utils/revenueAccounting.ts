@@ -40,6 +40,8 @@ export interface PlatformFinancialSummary {
     parcelLogisticsFees: number;
     rideTransportFares: number;
     eeuPlatformServiceFees: number;
+    groceryDeliveryFees?: number;
+    hotelBookingCommissions?: number;
   };
 }
 
@@ -87,10 +89,17 @@ export function calculateOrderRevenue(order: Order): OrderRevenueBreakdown {
       break;
     }
     case 'FOOD':
-    case 'KHAT': {
-      // Merchant products: delivery fee is platform courier earnings, price is Mamila inventory payout
+    case 'KHAT':
+    case 'GROCERY': {
+      // Merchant & market products: delivery fee is platform courier earnings, price is vendor payout
       platformRevenue = order.deliveryFee !== undefined ? order.deliveryFee : 150;
       merchantPayout = order.price || 0;
+      break;
+    }
+    case 'HOTEL': {
+      // Regional hotel reservations: delivery/booking commission is platform earnings, remainder is hotel payout
+      platformRevenue = order.deliveryFee !== undefined ? order.deliveryFee : 150;
+      merchantPayout = Math.max(0, grossTransactionValue - platformRevenue);
       break;
     }
     case 'PARCEL': {
@@ -183,6 +192,12 @@ export function calculatePlatformTotals(orders: Order[]): PlatformFinancialSumma
         break;
       case 'KHAT':
         serviceRevenue.khatDeliveryFees += breakdown.platformRevenue;
+        break;
+      case 'GROCERY':
+        serviceRevenue.groceryDeliveryFees = (serviceRevenue.groceryDeliveryFees || 0) + breakdown.platformRevenue;
+        break;
+      case 'HOTEL':
+        serviceRevenue.hotelBookingCommissions = (serviceRevenue.hotelBookingCommissions || 0) + breakdown.platformRevenue;
         break;
       case 'PARCEL':
         serviceRevenue.parcelLogisticsFees += breakdown.platformRevenue;

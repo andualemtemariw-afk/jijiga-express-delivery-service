@@ -40,7 +40,15 @@ import {
   Check,
   Mic,
   Bell,
-  BellRing
+  BellRing,
+  ListFilter,
+  SlidersHorizontal,
+  Hotel as HotelIcon,
+  Award,
+  Headphones,
+  AlertOctagon,
+  Compass,
+  LayoutGrid
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadOrderReceiptToDrive } from '../services/googleDrive';
@@ -55,6 +63,16 @@ import { BookEeuModal } from '../components/eeu/BookEeuModal';
 import { KhatMarketplaceModal } from '../components/khat/KhatMarketplaceModal';
 import { EeuCustodyStepper } from '../components/eeu/EeuCustodyStepper';
 import { MamilaGallery, MamilaGalleryItem } from '../components/mamila/MamilaGallery';
+import { FoodDiscovery } from '../components/customer/FoodDiscovery';
+import { ServiceGrid, ServiceTarget } from '../components/customer/ServiceGrid';
+import { BottomNav, CustomerNavTab } from '../components/customer/BottomNav';
+import { CartDrawer } from '../components/customer/CartDrawer';
+import { HotelBookingModal } from '../components/hotel/HotelBookingModal';
+import { LoyaltyCard } from '../components/loyalty/LoyaltyCard';
+import { HelpCenterModal } from '../components/communication/HelpCenterModal';
+import { PhoneOtpModal } from '../components/auth/PhoneOtpModal';
+import { HOTELS_DATA, SERVICEABILITY_ZONES } from '../data';
+import { Cart, CartItem, getCustomerFriendlyStatus, HotelReservation, SupportTicket } from '../types';
 import { CommunicationBridgeModal, ModalTab } from '../components/communication/CommunicationBridgeModal';
 import { OrderHistory } from '../components/orders/OrderHistory';
 import { SimplifiedOrderHistory } from '../components/orders/SimplifiedOrderHistory';
@@ -101,7 +119,7 @@ interface Props {
   onBookKhat?: (order: Partial<Order>) => void;
 }
 
-type TabType = 'batches' | 'tracking' | 'history' | 'profile';
+type TabType = 'batches' | 'services' | 'tracking' | 'history' | 'profile';
 
 export function CustomerView({ 
   inventory, 
@@ -149,6 +167,24 @@ export function CustomerView({
   const [showBookRideModal, setShowBookRideModal] = useState(false);
   const [showBookEeuModal, setShowBookEeuModal] = useState(false);
   const [showKhatModal, setShowKhatModal] = useState(false);
+  const [showHotelModal, setShowHotelModal] = useState(false);
+  const [showHelpCenterModal, setShowHelpCenterModal] = useState(false);
+  const [showPhoneOtpModal, setShowPhoneOtpModal] = useState(false);
+  const [activeRideConflictNotice, setActiveRideConflictNotice] = useState<string | null>(null);
+  const [hotelReservations, setHotelReservations] = useState<HotelReservation[]>([]);
+
+  // Cart State (Real Multi-Item Cart)
+  const [cart, setCart] = useState<Cart>({
+    vendorId: null,
+    vendorName: null,
+    items: [],
+    subtotal: 0,
+    deliveryFee: 60,
+    serviceFee: 25,
+    total: 85,
+  });
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartVendorConflict, setCartVendorConflict] = useState<string | null>(null);
 
   // Batch display view mode: Standard Grid vs Live Mamila Photo Gallery
   const [batchDisplayMode, setBatchDisplayMode] = useState<'grid' | 'gallery'>('grid');
@@ -156,6 +192,8 @@ export function CustomerView({
   // Search & category filters
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [sortOption, setSortOption] = useState<'featured' | 'rating' | 'price-low' | 'availability'>('featured');
+
 
   // Checkout & process state
   const [txLogs, setTxLogs] = useState<string[]>([]);
@@ -405,18 +443,199 @@ export function CustomerView({
     { id: 'COD', label: 'Cash on Delivery', sub: 'Pay the courier at handover', icon: CreditCard, color: 'text-slate-700' },
   ];
 
-  // Filtered batches
+  // Serviceability Zone Check
+  const currentZone = SERVICEABILITY_ZONES[selectedCity] || {
+    isServiceable: true,
+    zoneName: `${selectedCity} Zone`,
+    baseFee: 60,
+    etaMins: 30,
+    minOrderEtb: 150,
+  };
+
+  // Active in-flight ride check (guardrail against conflicting duplicate active rides)
+  const activeRideOrder = useMemo(() => {
+    return myOrders.find(
+      o => o.serviceType === 'RIDE' && ['PENDING', 'RUNNER_ASSIGNED', 'RIDER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT'].includes(o.status)
+    );
+  }, [myOrders]);
+
+  // Cart operations (one-vendor per cart rule, live revalidation, COD total)
+  const handleAddToCart = (batch: Batch) => {
+    const mamila = MAMILAS.find(m => m.id === batch.mamilaId);
+    const mamilaName = mamila?.name || (batch as any).mamilaName || 'Local Producer';
+
+    if (cart.vendorId && cart.vendorId !== batch.mamilaId && cart.items.length > 0) {
+      setCartVendorConflict(`Your cart already contains items from "${cart.vendorName}". Clear your cart first to add items from "${mamilaName}".`);
+      setIsCartOpen(true);
+      return;
+    }
+
+    setCart(prev => {
+      const existing = prev.items.find(i => i.batchId === batch.id);
+      let updatedItems: CartItem[];
+      if (existing) {
+        updatedItems = prev.items.map(i => i.batchId === batch.id ? { ...i, quantity: i.quantity + 1 } : i);
+      } else {
+        updatedItems = [...prev.items, {
+          id: `cart-${batch.id}-${Date.now()}`,
+          batchId: batch.id,
+          name: batch.name,
+          price: batch.price,
+          quantity: 1,
+          imageUrl: batch.imageUrl,
+          category: batch.category,
+          mamilaId: batch.mamilaId,
+          mamilaName,
+        }];
+      }
+      const subtotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const deliveryFee = currentZone.isServiceable ? currentZone.baseFee : 60;
+      const serviceFee = 25;
+      return {
+        vendorId: batch.mamilaId,
+        vendorName: mamilaName,
+        items: updatedItems,
+        subtotal,
+        deliveryFee,
+        serviceFee,
+        total: subtotal + deliveryFee + serviceFee,
+      };
+    });
+    setIsCartOpen(true);
+  };
+
+  const handleUpdateCartQuantity = (batchId: string, newQty: number) => {
+    if (newQty <= 0) {
+      handleRemoveCartItem(batchId);
+      return;
+    }
+    setCart(prev => {
+      const updated = prev.items.map(i => i.batchId === batchId ? { ...i, quantity: newQty } : i);
+      const subtotal = updated.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      return {
+        ...prev,
+        items: updated,
+        subtotal,
+        total: subtotal + prev.deliveryFee + prev.serviceFee,
+      };
+    });
+  };
+
+  const handleRemoveCartItem = (batchId: string) => {
+    setCart(prev => {
+      const updated = prev.items.filter(i => i.batchId !== batchId);
+      if (updated.length === 0) {
+        return {
+          vendorId: null,
+          vendorName: null,
+          items: [],
+          subtotal: 0,
+          deliveryFee: currentZone.isServiceable ? currentZone.baseFee : 60,
+          serviceFee: 25,
+          total: (currentZone.isServiceable ? currentZone.baseFee : 60) + 25,
+        };
+      }
+      const subtotal = updated.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      return {
+        ...prev,
+        items: updated,
+        subtotal,
+        total: subtotal + prev.deliveryFee + prev.serviceFee,
+      };
+    });
+  };
+
+  const handleClearCart = () => {
+    setCart({
+      vendorId: null,
+      vendorName: null,
+      items: [],
+      subtotal: 0,
+      deliveryFee: currentZone.isServiceable ? currentZone.baseFee : 60,
+      serviceFee: 25,
+      total: (currentZone.isServiceable ? currentZone.baseFee : 60) + 25,
+    });
+    setCartVendorConflict(null);
+  };
+
+  const handleCartCheckout = async (orderPayloads: Partial<Order>[]) => {
+    for (const payload of orderPayloads) {
+      const batch = inventory.find(b => b.id === payload.batchId);
+      if (batch) {
+        onPlaceOrder(batch, 'COD', {
+          quantity: payload.quantity,
+          specialInstructions: payload.specialInstructions,
+          deliveryCity: payload.customerCity,
+          customerAddress: payload.customerAddress,
+          customerPlusCode: payload.customerPlusCode,
+        });
+      }
+    }
+  };
+
+  const handleServiceGridSelect = (service: ServiceTarget) => {
+    switch (service) {
+      case 'RIDE_TAXI':
+      case 'RIDE_MOTO':
+        if (activeRideOrder) {
+          setActiveRideConflictNotice(`You already have an active ride request (#${activeRideOrder.id.slice(0, 8)}). Please view live tracking or wait for completion before booking another.`);
+          setActiveTab('tracking');
+          return;
+        }
+        requireAuth(() => setShowBookRideModal(true));
+        break;
+      case 'FOOD':
+      case 'GROCERY':
+        setCategoryFilter(service === 'GROCERY' ? 'Fresh Farm Produce' : 'ALL');
+        setActiveTab('batches');
+        break;
+      case 'PARCEL':
+        requireAuth(() => setShowBookParcelModal(true));
+        break;
+      case 'HOTEL':
+        setShowHotelModal(true);
+        break;
+      case 'EEU':
+        requireAuth(() => setShowBookEeuModal(true));
+        break;
+      case 'KHAT':
+        requireAuth(() => setShowKhatModal(true));
+        break;
+      case 'SUPPORT':
+        setShowHelpCenterModal(true);
+        break;
+      case 'BUSINESS':
+        requireAuth(() => setShowBookParcelModal(true));
+        break;
+    }
+  };
+
+  // Filtered and sorted batches
   const filteredBatches = useMemo(() => {
-    return inventory.filter(b => {
+    const matching = inventory.filter(b => {
+      const vendor = MAMILAS.find(m => m.id === b.mamilaId);
       const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            b.description.toLowerCase().includes(searchQuery.toLowerCase());
+                            b.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (vendor?.name.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
       const matchesCategory = categoryFilter === 'ALL' || b.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
-  }, [inventory, searchQuery, categoryFilter]);
+
+    return [...matching].sort((a, b) => {
+      if (sortOption === 'price-low') return a.price - b.price;
+      if (sortOption === 'availability') return b.available - a.available;
+      if (sortOption === 'rating') {
+        const aRating = MAMILAS.find(m => m.id === a.mamilaId)?.rating || 0;
+        const bRating = MAMILAS.find(m => m.id === b.mamilaId)?.rating || 0;
+        return bRating - aRating;
+      }
+      return 0; // 'featured'
+    });
+  }, [inventory, searchQuery, categoryFilter, sortOption]);
 
   // Categories list
-  const categories = ['ALL', 'Khat Marketplace', 'Hotel & Restaurant', 'Fresh Farm Produce', 'Bakery & Pastries', 'Dairy & Eggs', 'Restaurant & Drinks'];
+  const categories = ['ALL', 'Restaurant & Drinks', 'Bakery & Pastries', 'Fresh Farm Produce', 'Dairy & Eggs', 'Hotel & Restaurant', 'Khat Marketplace'];
+
 
 
   return (
@@ -449,26 +668,38 @@ export function CustomerView({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('batches')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'batches'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             <ShoppingBag className="w-4 h-4" />
-            Fresh Batches
+            <span>Food & Goods</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('services')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'services'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>Services Grid</span>
           </button>
 
           <button
             onClick={() => setActiveTab('tracking')}
-            className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'tracking'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             <Bike className="w-4 h-4" />
-            Live Tracking
+            <span>Live Tracking</span>
             {activeOrder && (
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
             )}
@@ -476,58 +707,62 @@ export function CustomerView({
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'history'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             <History className="w-4 h-4" />
-            Order History
-            <span className="font-mono text-xs text-slate-500 ml-1">({myOrders.length})</span>
+            <span>Orders</span>
+            <span className="font-mono text-xs text-slate-500 ml-0.5">({myOrders.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'profile'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
             <User className="w-4 h-4" />
-            Profile & Address
+            <span>Profile</span>
           </button>
         </div>
 
         <div className="flex items-center gap-2">
-          {onBookParcel && (
-            <button
-              onClick={() => requireAuth(() => setShowBookParcelModal(true))}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Package className="w-3.5 h-3.5 text-blue-600" />
-              <span>Book Parcel</span>
-            </button>
-          )}
+          {/* Cart Trigger */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Cart</span>
+            {cart.items.length > 0 && (
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                {cart.items.reduce((s, i) => s + i.quantity, 0)}
+              </span>
+            )}
+          </button>
 
-          {onBookRide && (
-            <button
-              onClick={() => requireAuth(() => setShowBookRideModal(true))}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Bike className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Book Ride</span>
-            </button>
-          )}
+          {/* Help Center Trigger */}
+          <button
+            onClick={() => setShowHelpCenterModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all cursor-pointer whitespace-nowrap border border-slate-300 shadow-2xs"
+          >
+            <Headphones className="w-3.5 h-3.5 text-slate-600" />
+            <span className="hidden sm:inline">Help</span>
+          </button>
 
-          {onBookEeu && (
+          {/* Phone OTP Login button for guests */}
+          {!currentUser && (
             <button
-              onClick={() => requireAuth(() => setShowBookEeuModal(true))}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs"
+              onClick={() => setShowPhoneOtpModal(true)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-600" />
-              <span>EEU Card Recharge</span>
+              <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+              <span>OTP Login</span>
             </button>
           )}
 
@@ -535,7 +770,7 @@ export function CustomerView({
           <button
             onClick={handleOpenNotificationCenter}
             title={`Live Alerts & Web Push (${notificationPermissionState})`}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all cursor-pointer whitespace-nowrap border border-slate-300 shadow-2xs"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all cursor-pointer whitespace-nowrap border border-slate-300 shadow-2xs"
           >
             {notificationPermissionState === 'granted' ? (
               <div className="relative">
@@ -545,14 +780,26 @@ export function CustomerView({
             ) : (
               <Bell className="w-3.5 h-3.5 text-slate-600" />
             )}
-            <span>Alerts</span>
+            <span className="hidden sm:inline">Alerts</span>
           </button>
 
           <div className="hidden md:flex items-center gap-2 px-3 text-xs text-slate-500 border-l border-slate-200">
             <MapPin className="w-3.5 h-3.5 text-blue-600" />
-            <span>{selectedCity}</span>
-            <span aria-hidden="true">·</span>
-            <span>{(customerProfile?.displayName || currentUser?.displayName || 'Customer').split(' ')[0]}</span>
+            <select
+              value={selectedCity}
+              onChange={(e) => {
+                setSelectedCity(e.target.value);
+                setEditCity(e.target.value);
+              }}
+              className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer"
+            >
+              <option value="Jijiga">Jijiga (Urban)</option>
+              <option value="Hargeisa">Hargeisa (Airport)</option>
+              <option value="Dire Dawa">Dire Dawa</option>
+              <option value="Harar">Harar</option>
+              <option value="Addis Ababa">Addis Ababa</option>
+              <option value="Remote Somali Region Outskirts">Remote Outskirts</option>
+            </select>
           </div>
         </div>
       </div>
@@ -645,6 +892,67 @@ export function CustomerView({
         </div>
       </div>
 
+      {/* Active Ride Conflict Guardrail Alert */}
+      {activeRideConflictNotice && (
+        <div className="p-4 bg-amber-50 border border-amber-300 text-amber-900 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5 text-xs font-semibold">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <span>{activeRideConflictNotice}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setActiveTab('tracking');
+                setActiveRideConflictNotice(null);
+              }}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition cursor-pointer shrink-0"
+            >
+              View Active Ride Tracking →
+            </button>
+            <button
+              onClick={() => setActiveRideConflictNotice(null)}
+              className="p-1.5 text-amber-700 hover:text-amber-900 text-xs font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Serviceability Zone Check Banner (When user selects unserviceable outskirts) */}
+      {!currentZone.isServiceable && (
+        <div className="p-4 bg-rose-50 border border-rose-300 text-rose-950 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
+              <AlertOctagon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-xs sm:text-sm">Delivery Service Unavailable in {selectedCity}</div>
+              <p className="text-[11px] text-rose-800">
+                {currentZone.reason || 'We do not currently operate delivery fleets in this exact location. Please select an active city center.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedCity('Jijiga')}
+            className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs rounded-xl transition cursor-pointer shrink-0"
+          >
+            Switch to Jijiga Metro
+          </button>
+        </div>
+      )}
+
+      {/* SERVICES TAB VIEW (Full Mobile & Desktop Grid) */}
+      {activeTab === 'services' && (
+        <div className="space-y-6">
+          <ServiceGrid 
+            onSelectService={handleServiceGridSelect} 
+            activeOrdersCount={myOrders.filter(o => !['RATED', 'DELIVERED', 'CANCELLED', 'DEFECT_REJECTED'].includes(o.status)).length} 
+          />
+          <LoyaltyCard />
+        </div>
+      )}
+
       {/* CORE INTEGRATION: DELIVERY ROUTE MAP & REAL-TIME COURIER TRACKING BANNER */}
       <DeliveryRouteMapBanner
         activeOrder={activeOrder}
@@ -661,10 +969,33 @@ export function CustomerView({
         }}
       />
 
-      {/* TAB 1: FRESH BATCHES */}
+      {/* TAB 1: FRESH BATCHES & FOOD DISCOVERY */}
       {activeTab === 'batches' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-8 space-y-6">
+        <div className="space-y-6">
+          {/* Mobile Service Grid on Home */}
+          <ServiceGrid onSelectService={handleServiceGridSelect} />
+
+          {/* Loyalty & Rewards Card */}
+          <LoyaltyCard />
+
+          {/* BANA-inspired Food Discovery Component */}
+          <FoodDiscovery
+            inventory={inventory}
+            mamilas={MAMILAS}
+            onCategorySelect={(cat) => {
+              setCategoryFilter(cat);
+              setActiveTab('batches');
+              window.scrollTo({ top: 500, behavior: 'smooth' });
+            }}
+            onSearch={(query) => {
+              setSearchQuery(query);
+              setCategoryFilter('ALL');
+              setActiveTab('batches');
+            }}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-6">
             {/* Search and Category Filters */}
             <div className="space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -735,6 +1066,25 @@ export function CustomerView({
                   </button>
                 ))}
               </div>
+
+              {/* Sort and Filter Bar */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                  <ListFilter className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Sort food & batches:</span>
+                </div>
+                <select
+                  aria-label="Sort food and delivery results"
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as typeof sortOption)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15"
+                >
+                  <option value="featured">Featured Picks</option>
+                  <option value="rating">Top Rated Vendors</option>
+                  <option value="price-low">Lowest Price First</option>
+                  <option value="availability">Highest Stock Available</option>
+                </select>
+              </div>
             </div>
             
             {/* Products Display: Standard Grid vs Live Mamila Photo Proof Gallery */}
@@ -803,16 +1153,39 @@ export function CustomerView({
                           </span>
                         </div>
 
-                        <button 
-                          disabled={batch.available === 0}
-                          className={`w-full py-2.5 rounded-xl font-semibold text-xs md:text-sm transition-colors flex items-center justify-center gap-2 ${
-                            batch.available > 0 
-                              ? 'bg-slate-900 text-white hover:bg-slate-800 cursor-pointer' 
-                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          }`}
-                        >
-                          {batch.available > 0 ? 'Select & Reserve Batch' : 'Sold Out'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            type="button"
+                            disabled={batch.available === 0 || !currentZone.isServiceable}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddToCart(batch);
+                            }}
+                            className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                              batch.available > 0 && currentZone.isServiceable
+                                ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 cursor-pointer' 
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Add to Cart</span>
+                          </button>
+                          <button 
+                            type="button"
+                            disabled={batch.available === 0 || !currentZone.isServiceable}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCheckout(batch);
+                            }}
+                            className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                              batch.available > 0 && currentZone.isServiceable
+                                ? 'bg-slate-900 text-white hover:bg-slate-800 cursor-pointer shadow-xs' 
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            <span>Quick Order</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1103,7 +1476,8 @@ export function CustomerView({
             </AnimatePresence>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* TAB 2: LIVE ORDER TRACKING & TRANSIT SIMULATOR */}
       {activeTab === 'tracking' && (
@@ -2138,6 +2512,89 @@ export function CustomerView({
         onClose={() => setWhatsAppOrder(null)}
         order={whatsAppOrder}
       />
+
+      {/* MOBILE BOTTOM NAVIGATION */}
+      <BottomNav
+        activeTab={
+          activeTab === 'batches' ? 'home'
+          : activeTab === 'services' ? 'services'
+          : activeTab === 'history' ? 'orders'
+          : activeTab === 'profile' ? 'profile'
+          : 'home'
+        }
+        onSelectTab={(tab) => {
+          if (tab === 'home') setActiveTab('batches');
+          else if (tab === 'services') setActiveTab('services');
+          else if (tab === 'orders') setActiveTab('history');
+          else if (tab === 'help') setShowHelpCenterModal(true);
+          else if (tab === 'profile') setActiveTab('profile');
+        }}
+        cartItemCount={cart.items.reduce((s, i) => s + i.quantity, 0)}
+        onOpenCart={() => setIsCartOpen(true)}
+        activeOrdersCount={myOrders.filter(o => !['RATED', 'DELIVERED', 'CANCELLED', 'DEFECT_REJECTED'].includes(o.status)).length}
+      />
+
+      {/* MULTI-ITEM CART DRAWER */}
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cart={cart}
+        inventory={inventory}
+        onUpdateQuantity={handleUpdateCartQuantity}
+        onRemoveItem={handleRemoveCartItem}
+        onClearCart={handleClearCart}
+        onCheckout={handleCartCheckout}
+        customerProfile={{
+          uid: customerProfile?.uid || currentUser?.uid,
+          id: customerProfile?.uid || currentUser?.uid,
+          name: customerProfile?.displayName || currentUser?.displayName || 'Customer',
+          phone: customerProfile?.phone || editPhone,
+          city: selectedCity,
+          address: address,
+          plusCode: plusCode,
+        }}
+      />
+
+      {/* HOTEL BOOKING BOUNDED SERVICE MODAL */}
+      <HotelBookingModal
+        isOpen={showHotelModal}
+        onClose={() => setShowHotelModal(false)}
+        customerProfile={{
+          name: customerProfile?.displayName || currentUser?.displayName || 'Customer',
+          phone: customerProfile?.phone || editPhone,
+          city: selectedCity,
+        }}
+        onConfirmReservation={(res) => {
+          setHotelReservations(prev => [res, ...prev]);
+        }}
+      />
+
+      {/* UNIFIED CATEGORIZED HELP CENTER MODAL */}
+      <HelpCenterModal
+        isOpen={showHelpCenterModal}
+        onClose={() => setShowHelpCenterModal(false)}
+        orders={myOrders}
+        customerProfile={{
+          name: customerProfile?.displayName || currentUser?.displayName || 'Customer',
+          phone: customerProfile?.phone || editPhone,
+          city: selectedCity,
+        }}
+      />
+
+      {/* PHONE-FIRST OTP ONBOARDING MODAL */}
+      <PhoneOtpModal
+        isOpen={showPhoneOtpModal}
+        onClose={() => setShowPhoneOtpModal(false)}
+        onLoginSuccess={(prof) => {
+          onUpdateProfile?.({
+            displayName: prof.displayName,
+            phone: prof.phone,
+            role: 'customer',
+          });
+        }}
+        onSwitchToGoogleAuth={onSignIn}
+      />
     </div>
   );
 }
+

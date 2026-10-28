@@ -264,3 +264,153 @@ export interface DeliveryEvent {
   location?: { lat: number; lng: number };
 }
 
+// ----------------------------------------------------
+// Super-App Upgrade Extensions
+// ----------------------------------------------------
+
+export interface CartItem {
+  id: string;
+  batchId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  imageUrl?: string;
+  category?: string;
+  mamilaId: string;
+  mamilaName: string;
+  notes?: string;
+}
+
+export interface Cart {
+  vendorId: string | null;
+  vendorName: string | null;
+  items: CartItem[];
+  subtotal: number;
+  deliveryFee: number;
+  serviceFee: number;
+  total: number;
+}
+
+export interface RoomType {
+  id: string;
+  name: string;
+  pricePerNight: number;
+  bedType: string;
+  maxGuests: number;
+  availableRooms: number;
+  amenities: string[];
+  imageUrl?: string;
+}
+
+export interface Hotel {
+  id: string;
+  name: string;
+  city: string;
+  location: string;
+  rating: number;
+  reviewCount: number;
+  priceRange: string;
+  coverImage: string;
+  amenities: string[];
+  roomTypes: RoomType[];
+  phone?: string;
+  checkInTime: string;
+  checkOutTime: string;
+  featured?: boolean;
+}
+
+export interface HotelReservation {
+  id: string;
+  hotelId: string;
+  hotelName: string;
+  city: string;
+  roomTypeId: string;
+  roomTypeName: string;
+  guestName: string;
+  guestPhone: string;
+  guestEmail?: string;
+  checkInDate: string;
+  checkOutDate: string;
+  nightsCount: number;
+  roomsCount: number;
+  pricePerNight: number;
+  totalPrice: number;
+  status: 'CONFIRMED' | 'CHECKED_IN' | 'CHECKED_OUT' | 'CANCELLED';
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  createdAt: string;
+}
+
+export type LoyaltyTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM';
+
+export interface LoyaltyProfile {
+  pointsBalance: number;
+  lifetimePoints: number;
+  tier: LoyaltyTier;
+  nextTierPointsNeeded: number;
+  tierPerks: string[];
+}
+
+export type SupportServiceCategory = 'FOOD' | 'PARCEL' | 'RIDE' | 'HOTEL' | 'EEU_RECHARGE' | 'PAYMENT' | 'OTHER';
+export type TicketStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
+
+export interface SupportTicket {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  serviceCategory: SupportServiceCategory;
+  issueCategory: string;
+  orderId?: string;
+  description: string;
+  evidenceUrl?: string;
+  status: TicketStatus;
+  createdAt: string;
+  resolutionNote?: string;
+}
+
+export interface ServiceabilityZone {
+  city: string;
+  isServiceable: boolean;
+  supportedServices: ServiceType[];
+  zoneName: string;
+  baseDeliveryFee: number;
+  estMinutes: number;
+  minOrderEtb: number;
+  unsupportedMessage?: string;
+}
+
+/**
+ * Maps internal operational order statuses to friendly customer labels and stepper indices.
+ */
+export function getCustomerFriendlyStatus(status: OrderStatus): { label: string; tone: string; step: number } {
+  switch (status) {
+    case 'PENDING':
+    case 'TRANSACTION_PENDING':
+    case 'PAYMENT_PENDING':
+      return { label: 'Order placed', tone: 'bg-amber-100 text-amber-800 border-amber-300', step: 1 };
+    case 'RUNNER_ASSIGNED':
+      return { label: 'Assigned to runner', tone: 'bg-blue-100 text-blue-800 border-blue-300', step: 2 };
+    case 'VERIFIED_READY':
+    case 'READY_FOR_RIDER':
+      return { label: 'Prepared & ready for courier', tone: 'bg-indigo-100 text-indigo-800 border-indigo-300', step: 3 };
+    case 'RIDER_DISPATCHED':
+    case 'RIDER_ACCEPTED':
+      return { label: 'Courier on the way to pickup', tone: 'bg-sky-100 text-sky-800 border-sky-300', step: 3 };
+    case 'PICKED_UP':
+    case 'IN_TRANSIT':
+      return { label: 'Out for delivery', tone: 'bg-teal-100 text-teal-800 border-teal-300', step: 4 };
+    case 'DELIVERED':
+    case 'RATED':
+      return { label: 'Delivered', tone: 'bg-emerald-100 text-emerald-800 border-emerald-300', step: 5 };
+    case 'CANCELLED':
+    case 'DECLINED':
+      return { label: 'Cancelled', tone: 'bg-slate-100 text-slate-700 border-slate-300', step: 0 };
+    case 'DEFECT_REJECTED':
+      return { label: 'Rejected at verification', tone: 'bg-rose-100 text-rose-800 border-rose-300', step: 0 };
+    default:
+      return { label: status, tone: 'bg-slate-100 text-slate-800 border-slate-300', step: 1 };
+  }
+}
+
+

@@ -125,8 +125,17 @@ export function subscribeToOrdersByRole(
     (snapshot) => {
       const loadedOrders: Order[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
+        let serviceType = data.serviceType;
+        if (data.serviceType === 'FOOD') {
+          if (data.specialInstructions?.includes('[HOTEL_RESERVATION]')) {
+            serviceType = 'HOTEL';
+          } else if (data.specialInstructions?.includes('[GROCERY_MARKET]')) {
+            serviceType = 'GROCERY';
+          }
+        }
         return {
           ...data,
+          serviceType,
           id: docSnap.id,
           createdAt: data.createdAt instanceof Timestamp
             ? data.createdAt.toDate()
@@ -176,6 +185,16 @@ export function removeUndefinedFields<T>(val: T): T {
   return result;
 }
 
+const FIRESTORE_ALLOWED_ORDER_KEYS = new Set([
+  'id', 'serviceType', 'batchId', 'batchName', 'mamilaId', 'mamilaName',
+  'mamilaLocation', 'price', 'quantity', 'deliveryFee', 'totalPrice',
+  'status', 'paymentMethod', 'paymentStatus', 'customerId', 'customerName',
+  'customerPhone', 'customerCity', 'customerPlusCode', 'customerAddress',
+  'customerCoordinates', 'mamilaCoordinates', 'specialInstructions',
+  'cookingInstruction', 'parcelDetails', 'rideDetails', 'eeuDetails',
+  'khatDetails', 'distanceKm', 'etaMinutes', 'createdAt', 'updatedAt'
+]);
+
 /**
  * Saves a new order to Cloud Firestore.
  * For FOOD and KHAT orders with active Firestore batch tracking, performs the
@@ -193,15 +212,40 @@ export async function saveOrderToFirestore(order: Order): Promise<string> {
 
   const docRef = doc(db, ORDERS_COLLECTION, orderId);
 
+  let firestoreServiceType = order.serviceType || 'FOOD';
+  let instructions = order.specialInstructions || '';
+
+  if (order.serviceType === 'GROCERY') {
+    firestoreServiceType = 'FOOD';
+    if (!instructions.includes('[GROCERY_MARKET]')) {
+      instructions = `[GROCERY_MARKET] ${instructions}`.trim();
+    }
+  } else if (order.serviceType === 'HOTEL') {
+    firestoreServiceType = 'FOOD';
+    if (!instructions.includes('[HOTEL_RESERVATION]')) {
+      instructions = `[HOTEL_RESERVATION] ${instructions}`.trim();
+    }
+  }
+
   const rawOrder: any = {
     ...order,
     id: orderId,
+    serviceType: firestoreServiceType,
+    specialInstructions: instructions || undefined,
     customerId: user.uid,
     createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : (order.createdAt || new Date().toISOString()),
     updatedAt: serverTimestamp(),
   };
 
-  const serializedOrder = removeUndefinedFields(rawOrder);
+  // Strictly filter to keys explicitly permit-listed in validCustomerOrderCreate()
+  const sanitizedOrder: any = {};
+  for (const key of Object.keys(rawOrder)) {
+    if (FIRESTORE_ALLOWED_ORDER_KEYS.has(key)) {
+      sanitizedOrder[key] = rawOrder[key];
+    }
+  }
+
+  const serializedOrder = removeUndefinedFields(sanitizedOrder);
 
   if (order.serviceType === 'FOOD' || order.serviceType === 'KHAT') {
     const batchRef = doc(db, BATCHES_COLLECTION, order.batchId);

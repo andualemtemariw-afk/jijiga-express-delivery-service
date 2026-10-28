@@ -40,4 +40,45 @@ export interface AppLocale {
     callDriver: string;
     chatCourier: string;
   };
+  navigation: {
+    home: string;
+    services: string;
+    orders: string;
+    help: string;
+    profile: string;
+    cart: string;
+  };
+  superApp: {
+    move: string;
+    deliver: string;
+    stay: string;
+    more: string;
+    taxi: string;
+    moto: string;
+    food: string;
+    parcel: string;
+    grocery: string;
+    hotel: string;
+    electricity: string;
+    khat: string;
+    helpCenter: string;
+    loyaltyPoints: string;
+  };
+  cart: {
+    title: string;
+    itemsCount: string;
+    subtotal: string;
+    deliveryFee: string;
+    serviceFee: string;
+    total: string;
+    checkoutCod: string;
+    emptyCartTitle: string;
+    emptyCartDesc: string;
+    vendorMismatchWarning: string;
+  };
+  serviceability: {
+    availableTitle: string;
+    unsupportedTitle: string;
+    unsupportedDesc: string;
+  };
 }

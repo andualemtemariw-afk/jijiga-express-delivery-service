@@ -12,7 +12,11 @@ import {
   Leaf, 
   Layers,
   ChevronRight,
-  ArrowUpRight
+  ArrowUpRight,
+  FileText,
+  Download,
+  ShoppingBag,
+  Building2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -47,6 +51,8 @@ const SERVICE_CONFIG: Record<ServiceType, { label: string; color: string; icon: 
   PARCEL: { label: 'Express Parcel', color: '#3b82f6', icon: Layers },
   RIDE: { label: 'Taxi & Moto', color: '#f59e0b', icon: Car },
   EEU_RECHARGE: { label: 'EEU Electricity', color: '#8b5cf6', icon: Zap },
+  GROCERY: { label: 'Taiwan Grocery', color: '#06b6d4', icon: ShoppingBag },
+  HOTEL: { label: 'Hotel Booking', color: '#6366f1', icon: Building2 },
 };
 
 const MAMILA_PALETTE = [
@@ -100,6 +106,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
       const parcelCount = validOrders.filter(o => o.serviceType === 'PARCEL').length;
       const rideCount = validOrders.filter(o => o.serviceType === 'RIDE').length;
       const eeuCount = validOrders.filter(o => o.serviceType === 'EEU_RECHARGE').length;
+      const groceryCount = validOrders.filter(o => o.serviceType === 'GROCERY').length;
+      const hotelCount = validOrders.filter(o => o.serviceType === 'HOTEL').length;
 
       // Breakdown by status
       const deliveredCount = dayOrders.filter(o => o.status === 'DELIVERED' || o.status === 'RATED').length;
@@ -148,6 +156,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
         Parcel: parcelCount,
         Ride: rideCount,
         EEU: eeuCount,
+        Grocery: groceryCount,
+        Hotel: hotelCount,
         ...mamilaCounts,
       });
     }
@@ -195,6 +205,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
       PARCEL: 0,
       RIDE: 0,
       EEU_RECHARGE: 0,
+      GROCERY: 0,
+      HOTEL: 0,
     };
 
     daysData.forEach(d => {
@@ -203,6 +215,8 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
       counts.PARCEL += d.Parcel;
       counts.RIDE += d.Ride;
       counts.EEU_RECHARGE += d.EEU;
+      counts.GROCERY += d.Grocery || 0;
+      counts.HOTEL += d.Hotel || 0;
     });
 
     return Object.entries(counts).map(([type, count]) => ({
@@ -216,6 +230,32 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
 
   return (
     <div className={`space-y-6 ${className}`}>
+      {/* Systems Analysis Report (.docx) Download Banner */}
+      <div className="bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 p-4 sm:p-5 rounded-2xl border border-emerald-500/30 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 shrink-0">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-base text-white">Systems Analysis & Architecture Report</h3>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">.DOCX Available</span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              Comprehensive technical systems report covering the Telegram track, RBAC security, atomic Firestore checkouts, and regional Jijiga City tariffs.
+            </p>
+          </div>
+        </div>
+        <a
+          href="/downloads/Jijiga_Express_Systems_Analysis_Report.docx"
+          download="Jijiga_Express_Systems_Analysis_Report.docx"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0 border border-emerald-400/30 w-full sm:w-auto"
+        >
+          <Download className="w-4 h-4" />
+          <span>Download Word File (.docx)</span>
+        </a>
+      </div>
+
       {/* KPI Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
