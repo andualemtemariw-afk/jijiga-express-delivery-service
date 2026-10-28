@@ -1,4 +1,4 @@
-import { useState, useEffect, type MouseEvent } from 'react';
+import { useState, useEffect, useRef, type MouseEvent } from 'react';
 import { 
   Map, 
   AdvancedMarker, 
@@ -16,7 +16,7 @@ import { getGoogleMapsMapId } from '../../services/mapsConfig';
 interface DeliveryLocationPickerMapProps {
   city: string;
   initialCoordinates?: LatLng;
-  onLocationSelect: (coords: LatLng, derivedPlusCode: string) => void;
+  onLocationSelect: (coords: LatLng, derivedPlusCode: string, userSelected?: boolean) => void;
   heightClass?: string;
 }
 
@@ -107,6 +107,7 @@ export function DeliveryLocationPickerMap({
   const [authFailed, setAuthFailed] = useState(false);
   const defaultCenter = CITY_COORDINATES[city] || CITY_COORDINATES['Jijiga'];
   const [markerPos, setMarkerPos] = useState<LatLng>(initialCoordinates || defaultCenter);
+  const previousCityRef = useRef<string | null>(null);
   const currentKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || (typeof window !== 'undefined' ? localStorage.getItem('user_google_maps_api_key') : null) || '';
 
   useEffect(() => {
@@ -115,16 +116,24 @@ export function DeliveryLocationPickerMap({
     return () => window.removeEventListener('gmp-auth-failed', handleAuthFail);
   }, []);
 
-  // Update center when city changes
+  // Respect the initial pin on mount; only choose a city default after the city changes.
+  // This avoids replacing a saved or user-selected starting point during initialization.
   useEffect(() => {
+    const isInitialMount = previousCityRef.current === null;
+    if (!isInitialMount && previousCityRef.current === city) return;
+
+    previousCityRef.current = city;
     const cityBase = CITY_COORDINATES[city] || CITY_COORDINATES['Jijiga'];
-    const newPos = {
-      lat: cityBase.lat + 0.0015,
-      lng: cityBase.lng + 0.003,
-    };
+    const newPos = isInitialMount && initialCoordinates
+      ? initialCoordinates
+      : {
+          lat: cityBase.lat + 0.0015,
+          lng: cityBase.lng + 0.003,
+        };
+
     setMarkerPos(newPos);
     const code = derivePlusCode(city, newPos);
-    onLocationSelect(newPos, code);
+    onLocationSelect(newPos, code, false);
   }, [city]);
 
   const derivePlusCode = (cityName: string, coords: LatLng) => {
@@ -141,13 +150,13 @@ export function DeliveryLocationPickerMap({
     };
     setMarkerPos(newCoords);
     const code = derivePlusCode(city, newCoords);
-    onLocationSelect(newCoords, code);
+    onLocationSelect(newCoords, code, true);
   };
 
   const handleVectorPinChange = (newCoords: LatLng) => {
     setMarkerPos(newCoords);
     const code = derivePlusCode(city, newCoords);
-    onLocationSelect(newCoords, code);
+    onLocationSelect(newCoords, code, true);
   };
 
   const mamilaHub = MAMILA_COORDINATES.m1;
