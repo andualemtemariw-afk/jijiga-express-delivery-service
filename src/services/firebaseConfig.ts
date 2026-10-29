@@ -5,6 +5,7 @@ import {
   getFirestore, 
   connectFirestoreEmulator,
   persistentLocalCache, 
+  persistentMultipleTabManager,
   Firestore 
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
@@ -136,19 +137,27 @@ export const app: FirebaseApp = (() => {
 // 2. Initialize Singleton Auth
 export const auth: Auth = getAuth(app);
 
-// 3. Initialize Singleton Firestore with auto-detect transport & robust persistence
+// 3. Initialize Singleton Firestore with forced long-polling & robust multi-tab persistence
 export const db: Firestore = (() => {
   const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
 
   if (typeof window !== 'undefined') {
     try {
       return initializeFirestore(app, {
-        localCache: persistentLocalCache({}),
-        experimentalAutoDetectLongPolling: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+        experimentalForceLongPolling: true,
       }, dbId);
     } catch (err: any) {
-      console.warn('[FirebaseConfig] Persistent cache notice, falling back to default instance:', err?.message || err);
-      return getFirestore(app, dbId);
+      console.warn('[FirebaseConfig] Multi-tab persistent cache notice, falling back to basic long-polling instance:', err?.message || err);
+      try {
+        return initializeFirestore(app, {
+          experimentalForceLongPolling: true,
+        }, dbId);
+      } catch {
+        return getFirestore(app, dbId);
+      }
     }
   }
   return getFirestore(app, dbId);

@@ -4,7 +4,22 @@ import { OrderFilterState } from '../components/orders/OrderSearchFilterBar';
 /**
  * Extracts a list of unique cities across a list of orders + default known hubs.
  */
-export function extractAvailableCities(orders: Order[], defaultCities: string[] = ['Jijiga', 'Hargeisa', 'Dire Dawa', 'Harar', 'Addis Ababa']): string[] {
+export function extractAvailableCities(
+  orders: Order[], 
+  defaultCities: string[] = [
+    'Jijiga', 
+    'Babile', 
+    'Kurfa Chele', 
+    'Girawa', 
+    'Badeno', 
+    'Dawee', 
+    'Mombas', 
+    'Hargeisa', 
+    'Dire Dawa', 
+    'Harar', 
+    'Addis Ababa'
+  ]
+): string[] {
   const citiesSet = new Set<string>(defaultCities);
   orders.forEach((o) => {
     if (o.customerCity) citiesSet.add(o.customerCity.trim());

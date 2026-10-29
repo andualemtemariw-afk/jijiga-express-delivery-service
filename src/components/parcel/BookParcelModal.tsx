@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CITIES } from '../../data';
 import { PaymentMethod, ParcelDetails, Order } from '../../types';
+import { CITY_COORDINATES, calculateDistanceKm } from '../../utils/geo';
 import { 
   X, 
   Package, 
@@ -55,8 +56,17 @@ export function BookParcelModal({
 
   if (!isOpen) return null;
 
-  // Inter-city fee calculation
+  // Inter-city fee & distance calculation
   const isIntercity = senderCity !== receiverCity;
+  const senderCoords = CITY_COORDINATES[senderCity];
+  const receiverCoords = CITY_COORDINATES[receiverCity];
+  const calculatedDistance = (senderCoords && receiverCoords && isIntercity)
+    ? Math.round(calculateDistanceKm(senderCoords, receiverCoords))
+    : (isIntercity ? 145 : 6.5);
+  const calculatedEtaMinutes = isIntercity
+    ? Math.max(45, Math.round(calculatedDistance * 1.3))
+    : 35;
+
   const baseRate = isIntercity ? 200 : 120; // 200 ETB inter-city matching walkthrough video
   const weightAddon = weight === '< 1 kg' ? 50 : weight === '1 - 3 kg' ? 100 : weight === '3 - 5 kg' ? 180 : 250;
   const sealAddon = tamperSeal ? 30 : 0;
@@ -86,6 +96,8 @@ export function BookParcelModal({
     };
 
     const generatedId = 'ord-pcl-' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    const destPlusCode = CITIES.find((c) => c.name.toLowerCase() === receiverCity.toLowerCase())?.defaultPlusCode 
+      || (receiverCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga');
 
     const newOrder: Partial<Order> = {
       id: generatedId,
@@ -106,12 +118,12 @@ export function BookParcelModal({
       customerName: senderName,
       customerPhone: senderPhone,
       customerCity: receiverCity,
-      customerPlusCode: receiverCity === 'Hargeisa' ? 'H654+7G Hargeisa' : '8F2P+5H Jijiga',
+      customerPlusCode: destPlusCode,
       customerAddress: receiverAddress,
       specialInstructions: specialNote || '',
       parcelDetails,
-      distanceKm: isIntercity ? 145 : 6.5,
-      etaMinutes: isIntercity ? 180 : 35,
+      distanceKm: calculatedDistance,
+      etaMinutes: calculatedEtaMinutes,
       createdAt: new Date(),
     };
 
@@ -132,7 +144,7 @@ export function BookParcelModal({
             </div>
             <div>
               <h3 className="font-bold text-lg">Book Express Parcel Service</h3>
-              <p className="text-xs text-slate-400">Inter-city & Express Courier • Jijiga • Hargeisa • Dire Dawa</p>
+              <p className="text-xs text-slate-400">Inter-city & Express Courier • Jijiga • Babile • Kurfa Chele • Girawa • Badeno • Dawee • Mombas • Hargeisa</p>
             </div>
           </div>
           <button
@@ -144,6 +156,45 @@ export function BookParcelModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {/* Quick Route Selector */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-2 flex items-center justify-between">
+              <span>Popular Express Routes</span>
+              <span className="text-[10px] text-slate-500 font-normal">Click to quick-select origin & destination</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { from: 'Jijiga', to: 'Babile' },
+                { from: 'Jijiga', to: 'Kurfa Chele' },
+                { from: 'Jijiga', to: 'Girawa' },
+                { from: 'Jijiga', to: 'Badeno' },
+                { from: 'Jijiga', to: 'Dawee' },
+                { from: 'Jijiga', to: 'Mombas' },
+                { from: 'Jijiga', to: 'Hargeisa' },
+                { from: 'Jijiga', to: 'Dire Dawa' },
+              ].map((route) => {
+                const isSelected = senderCity === route.from && receiverCity === route.to;
+                return (
+                  <button
+                    key={`${route.from}-${route.to}`}
+                    type="button"
+                    onClick={() => {
+                      setSenderCity(route.from);
+                      setReceiverCity(route.to);
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-600 border-blue-700 text-white shadow-xs font-semibold'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+                    }`}
+                  >
+                    {route.from} → {route.to}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Sender & Receiver Dual Column Layout */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Sender Details */}
@@ -372,7 +423,7 @@ export function BookParcelModal({
                 <span>{senderCity}</span>
                 <ArrowRight className="w-3 h-3 text-emerald-400" />
                 <span>{receiverCity}</span>
-                <span>• ~{isIntercity ? '145 km express corridor' : '6 km intra-city'}</span>
+                <span>• ~{isIntercity ? `${calculatedDistance} km express corridor (~${Math.floor(calculatedEtaMinutes / 60) > 0 ? `${Math.floor(calculatedEtaMinutes / 60)}h ` : ''}${calculatedEtaMinutes % 60}m)` : '6.5 km intra-city (~35 mins)'}</span>
               </div>
             </div>
 

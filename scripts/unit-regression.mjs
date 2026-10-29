@@ -1,6 +1,9 @@
 import assert from 'node:assert';
 import { calculateOrderRevenue, calculatePlatformTotals } from '../src/utils/revenueAccounting.ts';
 import { validateMeterNumber, validateEeuTransition, getNextEeuPhase } from '../src/utils/eeuStateMachine.ts';
+import { CITIES, NEARBY_SERVICES_PROVIDERS } from '../src/data.ts';
+import { CITY_COORDINATES, calculateDistanceKm } from '../src/utils/geo.ts';
+import { extractAvailableCities } from '../src/utils/orderFilterUtils.ts';
 
 console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---');
 
@@ -208,4 +211,112 @@ console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---'
   console.log('PASS: EEU 13-digit meter number validation and format masking validated');
 }
 
-console.log('--- ALL REGRESSION TESTS PASSED SUCCESSFULLY (7/7) ---');
+// TEST 8: Parcel Service Locations (Mombas, Babile, Dawee, Kurfa Chele, Girawa, Badeno)
+{
+  const targetLocations = ['Mombas', 'Babile', 'Dawee', 'Kurfa Chele', 'Girawa', 'Badeno'];
+  const cityNames = CITIES.map((c) => c.name);
+  for (const loc of targetLocations) {
+    assert.ok(cityNames.includes(loc), `CITIES array must contain ${loc}`);
+    assert.ok(CITY_COORDINATES[loc], `CITY_COORDINATES must define coordinates for ${loc}`);
+    assert.ok(typeof CITY_COORDINATES[loc].lat === 'number' && typeof CITY_COORDINATES[loc].lng === 'number');
+    
+    // Check distance calculation from Jijiga
+    const dist = calculateDistanceKm(CITY_COORDINATES['Jijiga'], CITY_COORDINATES[loc]);
+    assert.ok(dist > 0 && dist < 400, `Distance between Jijiga and ${loc} (${dist} km) must be realistic`);
+  }
+
+  // Check extractAvailableCities defaults
+  const available = extractAvailableCities([]);
+  for (const loc of targetLocations) {
+    assert.ok(available.includes(loc), `extractAvailableCities must include ${loc} by default`);
+  }
+
+  // Check parcel order accounting for regional route
+  const parcelOrder = {
+    id: 'ord-pcl-test-babile',
+    serviceType: 'PARCEL',
+    price: 80, // 50 ETB weight + 30 ETB tamper seal
+    quantity: 1,
+    deliveryFee: 200, // 200 ETB inter-city corridor fee
+    totalPrice: 280,
+    status: 'DELIVERED',
+    paymentMethod: 'ZAAD',
+    paymentStatus: 'COLLECTED_BY_RIDER',
+    customerId: 'cust-babile-01',
+    parcelDetails: {
+      senderName: 'Ali Ahmed',
+      senderCity: 'Jijiga',
+      receiverName: 'Hodan Omer',
+      receiverCity: 'Babile',
+      parcelCategory: 'DOCUMENTS',
+      weightCategory: '< 1 kg',
+      trackingCode: 'PARCEL-JIBA-8821',
+      tamperSealRequested: true,
+    }
+  };
+
+  const rev = calculateOrderRevenue(parcelOrder);
+  assert.strictEqual(rev.platformRevenue, 280, 'Parcel service fees and courier fees accrue to platform courier revenue');
+  assert.strictEqual(rev.merchantPayout, 0, 'Express courier parcel has 0 merchant payout');
+  console.log('PASS: Parcel Service locations (Mombas, Babile, Dawee, Kurfa Chele, Girawa, Badeno) & routes strictly validated');
+}
+
+// TEST 9: Nearby Services Radar, Proximity Calculation & Dispatch Accounting
+{
+  assert.ok(Array.isArray(NEARBY_SERVICES_PROVIDERS) && NEARBY_SERVICES_PROVIDERS.length >= 8, 'Must have at least 8 verified nearby providers');
+  
+  // Verify mandatory categories exist
+  const categories = new Set(NEARBY_SERVICES_PROVIDERS.map(p => p.category));
+  assert.ok(categories.has('WATER_TANKER'), 'Must support Clean Water Tankers');
+  assert.ok(categories.has('ELECTRIC_SOLAR'), 'Must support Solar & Electricians');
+  assert.ok(categories.has('PLUMBING'), 'Must support Master Plumbers');
+  assert.ok(categories.has('ROADSIDE_RESCUE'), 'Must support Roadside Rescue');
+  assert.ok(categories.has('GAS_REFILL'), 'Must support Cooking Gas Swap');
+  assert.ok(categories.has('EMERGENCY_PHARMACY'), 'Must support Pharmacy Runners');
+  assert.ok(categories.has('ERRAND_RUNNER'), 'Must support Errand Runners (Ergo)');
+
+  // Verify proximity calculation between Jijiga city center and providers
+  const jijigaCenter = CITY_COORDINATES['Jijiga'];
+  const waterProvider = NEARBY_SERVICES_PROVIDERS.find(p => p.id === 'nsp_water_karamara');
+  assert.ok(waterProvider, 'Karamara water provider must exist');
+  
+  const distanceKm = calculateDistanceKm(
+    jijigaCenter,
+    waterProvider.coordinates
+  );
+  assert.ok(distanceKm < 15, `Water provider distance (${distanceKm.toFixed(2)} km) must be within urban radius`);
+
+  // Verify order dispatch accounting for nearby service
+  const nearbyOrder = {
+    id: 'ord-nearby-test-01',
+    serviceType: 'NEARBY_SERVICE',
+    price: 350, // 250 base + 100 emergency
+    quantity: 1,
+    deliveryFee: 0,
+    totalPrice: 350,
+    status: 'PENDING',
+    paymentMethod: 'TELEBIRR',
+    paymentStatus: 'UNPAID',
+    customerId: 'cust-nearby-01',
+    nearbyServiceDetails: {
+      providerId: waterProvider.id,
+      providerName: waterProvider.name,
+      providerPhone: waterProvider.phone,
+      category: waterProvider.category,
+      categoryLabel: waterProvider.categoryLabel,
+      serviceRequested: '5,000L Truck Tanker Delivery',
+      urgency: 'URGENT_EMERGENCY',
+      baseDispatchFee: 350,
+      customerLandmark: 'Taiwan Market Gate 2, Jijiga',
+      issueDescription: 'Residential cistern dry, urgent fill needed.',
+    }
+  };
+
+  const rev = calculateOrderRevenue(nearbyOrder);
+  assert.strictEqual(rev.platformRevenue, 350, 'Platform receives base dispatch and priority fee');
+  assert.strictEqual(rev.merchantPayout, 0, 'No merchant Mamila payout for service dispatch');
+  console.log('PASS: Nearby Services Radar providers, distance calculations & dispatch accounting strictly validated');
+}
+
+console.log('--- ALL REGRESSION TESTS PASSED SUCCESSFULLY (9/9) ---');
+

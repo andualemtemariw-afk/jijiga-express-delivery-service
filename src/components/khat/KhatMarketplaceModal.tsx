@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mamila, Batch, Order, PaymentMethod } from '../../types';
+import { CITIES, SERVICEABILITY_ZONES } from '../../data';
 import { 
   X, 
   Store, 
@@ -59,11 +60,21 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const [selectedMamila, setSelectedMamila] = useState<Mamila | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [selectedCity, setSelectedCity] = useState<string>(customerProfile.city || 'Jijiga');
   const [landmark, setLandmark] = useState(customerProfile.address || 'Kebele 04, Near Central Plaza');
   const [plusCode, setPlusCode] = useState(customerProfile.plusCode || '8F2P+5H Jijiga');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('TELEBIRR');
   const [specialNote, setSpecialNote] = useState('');
   const [wrapType, setWrapType] = useState<'Fresh Banana Leaf' | 'Traditional Palm Fiber' | 'Moist Burlap Wrap'>('Fresh Banana Leaf');
+
+  const currentZone = SERVICEABILITY_ZONES[selectedCity] || {
+    isServiceable: true,
+    zoneName: `${selectedCity} Zone`,
+    baseFee: 60,
+    etaMins: 30,
+    minOrderEtb: 150,
+  };
+  const deliveryFee = currentZone.baseFee;
 
   if (!isOpen) return null;
 
@@ -94,7 +105,6 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
   const handlePlaceOrder = () => {
     if (!selectedMamila || !selectedBatch) return;
 
-    const deliveryFee = 60; // Standard express city fee in Jijiga
     const itemsTotal = selectedBatch.price * quantity;
     const totalPrice = itemsTotal + deliveryFee;
     const orderId = 'ord-kht-' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
@@ -117,7 +127,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
       customerId: (customerProfile as any)?.uid || (customerProfile as any)?.id || '',
       customerName: customerProfile.name,
       customerPhone: customerProfile.phone,
-      customerCity: customerProfile.city || 'Jijiga',
+      customerCity: selectedCity,
       customerAddress: landmark,
       customerPlusCode: plusCode,
       specialInstructions: specialNote || 'Handover tender leaf fresh in banana wrap.',
@@ -530,31 +540,52 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
 
                 {/* Quantity & Wrap Options */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                      Quantity (Number of Bundles)
-                    </label>
+                  <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                        Quantity (Bundles)
+                      </label>
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {selectedBatch.price * quantity} ETB
+                      </span>
+                    </div>
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                        className="w-9 h-9 rounded-xl border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 cursor-pointer"
+                        disabled={quantity <= 1}
+                        className="w-8 h-8 rounded-xl border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
                       >
                         -
                       </button>
-                      <span className="text-base font-extrabold font-mono w-10 text-center">
+                      <span className="text-base font-extrabold font-mono w-8 text-center tabular-nums">
                         {quantity}
                       </span>
                       <button
                         type="button"
                         onClick={() => setQuantity(quantity + 1)}
-                        className="w-9 h-9 rounded-xl border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 cursor-pointer"
+                        className="w-8 h-8 rounded-xl border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 cursor-pointer"
                       >
                         +
                       </button>
-                      <span className="text-xs text-slate-500 font-mono">
-                        = {selectedBatch.price * quantity} ETB
-                      </span>
+                    </div>
+                    {/* Quick quantity presets */}
+                    <div className="flex items-center gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-medium mr-1">Quick:</span>
+                      {[1, 2, 3, 5].map(q => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => setQuantity(q)}
+                          className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold cursor-pointer transition-colors ${
+                            quantity === q
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                          }`}
+                        >
+                          {q}x
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -574,6 +605,50 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </div>
                 </div>
 
+                {/* Destination City Selection */}
+                <div className="space-y-2 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-600" />
+                      <span>Delivery Destination City</span>
+                    </label>
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                      Tariff: +{deliveryFee} ETB
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {CITIES.slice(0, 6).map(c => {
+                      const zone = SERVICEABILITY_ZONES[c.name];
+                      const fee = zone?.baseFee ?? 60;
+                      const eta = zone?.etaMins ?? 30;
+                      const isSelected = selectedCity === c.name;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCity(c.name);
+                            setPlusCode(`${c.defaultPlusCode} ${c.name}`);
+                          }}
+                          className={`p-2 rounded-xl text-left border text-xs font-semibold transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-100 ring-1 ring-emerald-600/30' 
+                              : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold truncate">{c.name}</span>
+                            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                              +{fee}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-normal mt-0.5">~{eta} mins</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Delivery Landmark & Plus Code */}
                 <div className="space-y-3 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -583,7 +658,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
 
                   <div className="space-y-2">
                     <label className="text-xs text-slate-500 block">
-                      Specific Compound / Landmark in {customerProfile.city || 'Jijiga'}
+                      Specific Compound / Landmark in {selectedCity}
                     </label>
                     <input
                       type="text"
@@ -658,23 +733,48 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* Order Tariff Breakdown */}
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>{quantity}x {selectedBatch.name}</span>
-                    <span className="font-mono">{selectedBatch.price * quantity} ETB</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>Express Motorcycle Delivery Fee</span>
-                    <span className="font-mono">60 ETB</span>
-                  </div>
-                  <div className="flex justify-between text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-emerald-200 dark:border-emerald-800">
-                    <span>Total Due</span>
-                    <span className="font-mono text-emerald-700 dark:text-emerald-400">
-                      {selectedBatch.price * quantity + 60} ETB
-                    </span>
-                  </div>
-                </div>
+                {/* Real-Time Price Preview Breakdown */}
+                {(() => {
+                  const subtotal = selectedBatch.price * quantity;
+                  const total = subtotal + deliveryFee;
+
+                  return (
+                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 space-y-2.5 text-xs shadow-xs">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60 dark:border-emerald-800/60">
+                        <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Live Price Preview
+                        </span>
+                        <span className="text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                          {selectedCity} Corridor
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
+                        <span>{quantity}x {selectedBatch.name}:</span>
+                        <span className="font-mono font-bold tabular-nums">{subtotal.toLocaleString()} ETB</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
+                        <div>
+                          <span>Express Courier ({selectedCity}):</span>
+                          <span className="block text-[10px] text-slate-400">~{currentZone.etaMins} mins ETA</span>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                          +{deliveryFee} ETB
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-baseline text-base font-extrabold text-slate-900 dark:text-white pt-2 border-t border-emerald-200 dark:border-emerald-800">
+                        <div>
+                          <span>Total Due</span>
+                          <span className="block text-[10px] text-slate-500 font-normal">Delivery included</span>
+                        </div>
+                        <span className="text-lg font-mono font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
+                          {total.toLocaleString()} ETB
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -696,7 +796,7 @@ export const KhatMarketplaceModal: React.FC<Props> = ({
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/25 flex items-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Confirm & Place Khat Order ({selectedBatch ? selectedBatch.price * quantity + 60 : 0} ETB)</span>
+                <span>Confirm & Place Khat Order ({selectedBatch ? (selectedBatch.price * quantity + deliveryFee).toLocaleString() : 0} ETB)</span>
               </button>
             ) : (
               <div className="text-xs text-slate-500 font-medium">

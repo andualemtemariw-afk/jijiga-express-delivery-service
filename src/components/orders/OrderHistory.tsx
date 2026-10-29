@@ -378,6 +378,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
     RIDE: { label: 'Marhaba Ride', icon: '🚖', badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
     EEU_RECHARGE: { label: 'EEU Electricity', icon: '⚡', badgeClass: 'bg-amber-50 text-amber-800 border-amber-200' },
     KHAT: { label: 'Khat Marketplace', icon: '🌿', badgeClass: 'bg-emerald-50 text-emerald-900 border-emerald-300' },
+    NEARBY_SERVICE: { label: 'Nearby Services Radar', icon: '🧭', badgeClass: 'bg-teal-50 text-teal-900 border-teal-300' },
   };
 
   return (
@@ -562,6 +563,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
             { id: 'GROCERY', label: 'Taiwan Grocery', icon: '🛒' },
             { id: 'HOTEL', label: 'Hotels', icon: '🏨' },
             { id: 'PARCEL', label: 'Express Parcels', icon: '📦' },
+            { id: 'NEARBY_SERVICE', label: 'Nearby Services', icon: '🧭' },
             { id: 'RIDE', label: 'Marhaba Rides', icon: '🚖' },
             { id: 'EEU_RECHARGE', label: 'EEU Electricity', icon: '⚡' },
             { id: 'KHAT', label: 'Khat Market', icon: '🌿' },

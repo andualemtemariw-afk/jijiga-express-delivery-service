@@ -33,7 +33,8 @@ import {
   ExternalLink,
   Map as MapIcon,
   ShoppingBag,
-  Building2
+  Building2,
+  Compass,
 } from 'lucide-react';
 
 interface SimplifiedOrderHistoryProps {
@@ -57,6 +58,7 @@ const SERVICE_ICONS: Record<ServiceType, { icon: React.ComponentType<{ className
   EEU_RECHARGE: { icon: Zap, bg: 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800', text: 'text-purple-700 dark:text-purple-400', label: 'EEU Utility' },
   GROCERY: { icon: ShoppingBag, bg: 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800', text: 'text-teal-700 dark:text-teal-400', label: 'Taiwan Grocery' },
   HOTEL: { icon: Building2, bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800', text: 'text-indigo-700 dark:text-indigo-400', label: 'Hotel Booking' },
+  NEARBY_SERVICE: { icon: Compass, bg: 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800', text: 'text-teal-700 dark:text-teal-400', label: 'Nearby Services' },
 };
 
 const COMPLETED_STATUSES = ['DELIVERED', 'RATED'];

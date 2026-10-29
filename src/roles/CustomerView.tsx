@@ -85,6 +85,7 @@ import {
 } from '../services/notificationService';
 import { LatLng, DEFAULT_CUSTOMER_COORDINATES, CITY_COORDINATES } from '../utils/geo';
 import { AppUserProfile } from '../types';
+import { NearbyServicesModal } from '../components/nearby/NearbyServicesModal';
 
 interface Props {
   inventory: Batch[];
@@ -100,6 +101,7 @@ interface Props {
     payment: PaymentMethod,
     options?: {
       quantity?: number;
+      deliveryFee?: number;
       specialInstructions?: string;
       cookingInstruction?: string;
       deliveryCity?: string;
@@ -117,6 +119,7 @@ interface Props {
   onBookRide?: (order: Partial<Order>) => void;
   onBookEeu?: (order: Partial<Order>) => void;
   onBookKhat?: (order: Partial<Order>) => void;
+  onBookNearbyService?: (order: Partial<Order>) => void;
 }
 
 type TabType = 'batches' | 'services' | 'tracking' | 'history' | 'profile';
@@ -140,6 +143,7 @@ export function CustomerView({
   onBookRide,
   onBookEeu,
   onBookKhat,
+  onBookNearbyService,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('batches');
   const [historyViewFormat, setHistoryViewFormat] = useState<'simplified' | 'detailed'>('simplified');
@@ -169,6 +173,7 @@ export function CustomerView({
   const [showKhatModal, setShowKhatModal] = useState(false);
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [showHelpCenterModal, setShowHelpCenterModal] = useState(false);
+  const [showNearbyServicesModal, setShowNearbyServicesModal] = useState(false);
   const [showPhoneOtpModal, setShowPhoneOtpModal] = useState(false);
   const [activeRideConflictNotice, setActiveRideConflictNotice] = useState<string | null>(null);
   const [hotelReservations, setHotelReservations] = useState<HotelReservation[]>([]);
@@ -376,15 +381,17 @@ export function CustomerView({
     setIsProcessing(true);
     setTxLogs([]);
 
-    const deliveryFee = selectedCity === 'Hargeisa' ? 200 : 150;
+    const deliveryFee = currentZone.baseFee;
+    const itemSubtotal = selectedBatch.price * quantity;
+    const totalCost = itemSubtotal + deliveryFee;
 
     const steps = [
       "BEGIN TRANSACTION [ISOLATION: SERIALIZABLE]",
       `Lock batch row ID #${selectedBatch.id}`,
       `Validate stock available: ${selectedBatch.available} >= ${quantity}`,
       `Freshness timestamp check: Valid until ${selectedBatch.expiry}`,
-      `Atomically reserve ${quantity} unit(s)`,
-      `Calculate dispatch tariff for ${selectedCity} (+${deliveryFee} ETB)`,
+      `Atomically reserve ${quantity} unit(s) (${itemSubtotal.toLocaleString()} ETB)`,
+      `Calculate dispatch tariff for ${selectedCity} (+${deliveryFee} ETB | Total: ${totalCost.toLocaleString()} ETB)`,
       `Attach cooking instruction: "${cookingInstruction.trim() || 'Standard'}"`,
       "Persist immutable order state & event log",
       "Assign verified runner for photo verification",
@@ -399,6 +406,7 @@ export function CustomerView({
     await new Promise(r => setTimeout(r, 400));
     onPlaceOrder(selectedBatch, paymentMethod, {
       quantity,
+      deliveryFee,
       specialInstructions: specialInstructions.trim() || undefined,
       cookingInstruction: cookingInstruction.trim() || undefined,
       deliveryCity: selectedCity,
@@ -607,6 +615,9 @@ export function CustomerView({
       case 'BUSINESS':
         requireAuth(() => setShowBookParcelModal(true));
         break;
+      case 'NEARBY_SERVICES':
+        requireAuth(() => setShowNearbyServicesModal(true));
+        break;
     }
   };
 
@@ -794,6 +805,12 @@ export function CustomerView({
               className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer"
             >
               <option value="Jijiga">Jijiga (Urban)</option>
+              <option value="Babile">Babile</option>
+              <option value="Kurfa Chele">Kurfa Chele</option>
+              <option value="Girawa">Girawa</option>
+              <option value="Badeno">Badeno</option>
+              <option value="Dawee">Dawee</option>
+              <option value="Mombas">Mombas</option>
               <option value="Hargeisa">Hargeisa (Airport)</option>
               <option value="Dire Dawa">Dire Dawa</option>
               <option value="Harar">Harar</option>
@@ -853,7 +870,7 @@ export function CustomerView({
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900">Book Express Parcel</div>
-              <div className="text-[11px] text-slate-500">Local delivery within Jijiga</div>
+              <div className="text-[11px] text-slate-500">Babile, Kurfa Chele, Girawa, Badeno, Dawee, Mombas & more</div>
             </div>
           </div>
           <span className="text-blue-700 font-bold text-xs">Dispatch →</span>
@@ -889,6 +906,22 @@ export function CustomerView({
             </div>
           </div>
           <span className="text-amber-800 font-bold text-xs">Recharge →</span>
+        </div>
+
+        <div 
+          onClick={() => requireAuth(() => setShowNearbyServicesModal(true))}
+          className="p-3.5 bg-linear-to-r from-teal-50 to-emerald-50 border border-teal-300 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-lg shadow-xs">
+              🧭
+            </div>
+            <div>
+              <div className="font-bold text-xs text-slate-900">Nearby Services Radar</div>
+              <div className="text-[11px] text-slate-500">Water tankers, solar tech, plumbers & errando</div>
+            </div>
+          </div>
+          <span className="text-teal-800 font-bold text-xs">Radar →</span>
         </div>
       </div>
 
@@ -1236,27 +1269,54 @@ export function CustomerView({
                   </div>
 
                   {/* Quantity Selector */}
-                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">Quantity</span>
-                      <span className="text-[10px] text-slate-500">{selectedBatch.available} bundles left in batch</span>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">Quantity</span>
+                        <span className="text-[10px] text-slate-500">{selectedBatch.available} bundles left in batch</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          disabled={quantity <= 1}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer transition-colors shadow-2xs"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="font-bold font-mono text-sm w-5 text-center tabular-nums">{quantity}</span>
+                        <button 
+                          type="button"
+                          onClick={() => setQuantity(Math.min(selectedBatch.available, quantity + 1))}
+                          disabled={quantity >= selectedBatch.available}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 disabled:opacity-40 hover:bg-slate-100 cursor-pointer transition-colors shadow-2xs"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                        disabled={quantity <= 1}
-                        className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 disabled:opacity-40 cursor-pointer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="font-bold font-mono text-sm w-4 text-center">{quantity}</span>
-                      <button 
-                        onClick={() => setQuantity(Math.min(selectedBatch.available, quantity + 1))}
-                        disabled={quantity >= selectedBatch.available}
-                        className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 disabled:opacity-40 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+
+                    {/* Quick Quantity Presets */}
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60">
+                      <span className="text-[10px] text-slate-400 font-medium">Quick Select:</span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {[1, 2, 3, 5, 10].filter(n => n <= selectedBatch.available).map(qtyPreset => (
+                          <button
+                            key={qtyPreset}
+                            type="button"
+                            onClick={() => setQuantity(qtyPreset)}
+                            className={`text-[11px] px-2 py-0.5 rounded-md font-mono font-bold transition-all cursor-pointer ${
+                              quantity === qtyPreset
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {qtyPreset}x
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -1312,29 +1372,50 @@ export function CustomerView({
 
                   {/* Destination City & Plus Code */}
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                      Delivery City & Plus Code
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                        Delivery Destination City
+                      </label>
+                      <span className="text-[11px] font-mono text-blue-600 font-semibold">
+                        Zone Tariff: +{currentZone.baseFee} ETB
+                      </span>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {CITIES.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCity(c.name);
-                            setPlusCode(`${c.defaultPlusCode} ${c.name}`);
-                          }}
-                          className={`p-2 rounded-xl text-left border text-xs font-semibold transition-all cursor-pointer ${
-                            selectedCity === c.name 
-                              ? 'border-blue-600 bg-blue-50 text-blue-900' 
-                              : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <div>{c.name}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{c.region}</div>
-                        </button>
-                      ))}
+                      {CITIES.map(c => {
+                        const zone = SERVICEABILITY_ZONES[c.name];
+                        const fee = zone?.baseFee ?? 60;
+                        const eta = zone?.etaMins ?? 30;
+                        const isSelected = selectedCity === c.name;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCity(c.name);
+                              setPlusCode(`${c.defaultPlusCode} ${c.name}`);
+                            }}
+                            className={`p-2.5 rounded-xl text-left border text-xs font-semibold transition-all cursor-pointer relative ${
+                              isSelected 
+                                ? 'border-blue-600 bg-blue-50/90 text-blue-950 ring-1 ring-blue-600/30 shadow-xs' 
+                                : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold truncate">{c.name}</span>
+                              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                                isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                +{fee} ETB
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 font-normal mt-1">
+                              <span className="truncate">{c.region.split(',')[0]}</span>
+                              <span className="font-mono text-slate-500">~{eta}m</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                     <input
                       type="text"
@@ -1408,23 +1489,80 @@ export function CustomerView({
                     </div>
                   </div>
 
-                  {/* Price Calculation Breakdown */}
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal ({quantity}x {selectedBatch.price} ETB):</span>
-                      <span className="font-semibold font-mono tabular-nums">{selectedBatch.price * quantity} ETB</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Delivery Fee ({selectedCity}):</span>
-                      <span className="font-semibold font-mono tabular-nums">{selectedCity === 'Hargeisa' ? 200 : 150} ETB</span>
-                    </div>
-                    <div className="flex justify-between text-slate-900 font-bold text-sm pt-2 border-t border-slate-200">
-                      <span>Total Amount:</span>
-                      <span className="text-blue-600 font-mono tabular-nums">
-                        {(selectedBatch.price * quantity) + (selectedCity === 'Hargeisa' ? 200 : 150)} ETB
-                      </span>
-                    </div>
-                  </div>
+                  {/* Real-Time Price & Delivery Preview */}
+                  {(() => {
+                    const unitPrice = selectedBatch.price;
+                    const itemSubtotal = unitPrice * quantity;
+                    const deliveryFee = currentZone.baseFee;
+                    const totalCost = itemSubtotal + deliveryFee;
+                    const isBelowMin = itemSubtotal < currentZone.minOrderEtb;
+
+                    return (
+                      <div className="p-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 rounded-2xl border border-blue-200/80 text-xs space-y-2.5 shadow-xs">
+                        <div className="flex items-center justify-between pb-2 border-b border-blue-200/60">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="font-bold text-slate-900 tracking-tight">Real-Time Price & Tariff Preview</span>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md">
+                            {selectedCity} Express
+                          </span>
+                        </div>
+
+                        {/* Items Subtotal */}
+                        <div className="flex justify-between items-center text-slate-700">
+                          <span className="flex items-center gap-1.5">
+                            <span className="font-medium">Item Subtotal</span>
+                            <span className="text-[11px] text-slate-400 font-mono">({quantity} × {unitPrice.toLocaleString()} ETB)</span>
+                          </span>
+                          <span className="font-bold font-mono text-slate-900 tabular-nums">
+                            {itemSubtotal.toLocaleString()} ETB
+                          </span>
+                        </div>
+
+                        {/* Delivery Corridor Fee */}
+                        <div className="flex justify-between items-center text-slate-700">
+                          <div>
+                            <div className="font-medium text-slate-800">
+                              Delivery to {selectedCity}
+                            </div>
+                            <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                              <span>{currentZone.zoneName}</span>
+                              <span>•</span>
+                              <span className="font-mono text-blue-600 font-semibold">~{currentZone.etaMins} mins ETA</span>
+                            </div>
+                          </div>
+                          <span className="font-bold font-mono text-blue-700 tabular-nums">
+                            +{deliveryFee} ETB
+                          </span>
+                        </div>
+
+                        {/* Minimum Order Advisory (if applicable) */}
+                        {isBelowMin && (
+                          <div className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center justify-between">
+                            <span>Standard zone min: {currentZone.minOrderEtb} ETB</span>
+                            <span className="font-semibold text-amber-700">Small batch tariff applied</span>
+                          </div>
+                        )}
+
+                        {/* Total Cost Highlight */}
+                        <div className="flex justify-between items-baseline pt-2.5 border-t border-blue-200/80">
+                          <div>
+                            <span className="text-slate-900 font-extrabold text-sm block">Total Due</span>
+                            <span className="text-[10px] text-slate-500">Subtotal + Doorstep courier included</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xl font-black font-mono text-blue-700 tabular-nums">
+                              {totalCost.toLocaleString()} ETB
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Transaction Terminal Logs or Place Order Button */}
                   {isProcessing ? (
@@ -1444,7 +1582,7 @@ export function CustomerView({
                           className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors shadow-md cursor-pointer flex items-center justify-center gap-2"
                         >
                           <ShoppingBag className="w-4 h-4" />
-                          Confirm Order • {((selectedBatch.price * quantity) + (selectedCity === 'Hargeisa' ? 200 : 150))} ETB
+                          Confirm Order • {((selectedBatch.price * quantity) + currentZone.baseFee).toLocaleString()} ETB
                         </button>
                       ) : (
                         <button 
@@ -2578,6 +2716,45 @@ export function CustomerView({
           name: customerProfile?.displayName || currentUser?.displayName || 'Customer',
           phone: customerProfile?.phone || editPhone,
           city: selectedCity,
+        }}
+      />
+
+      {/* NEARBY SERVICES RADAR & DISPATCH MODAL */}
+      <NearbyServicesModal
+        isOpen={showNearbyServicesModal}
+        onClose={() => setShowNearbyServicesModal(false)}
+        customerProfile={{
+          name: customerProfile?.displayName || currentUser?.displayName || 'Customer',
+          phone: customerProfile?.phone || editPhone,
+          city: selectedCity,
+          address: address,
+          plusCode: plusCode,
+          coordinates: customerCoords,
+        }}
+        onConfirmOrder={(order) => {
+          if (onBookNearbyService) {
+            onBookNearbyService(order);
+          } else {
+            const batch: Batch = {
+              id: order.batchId || 'nearby_svc',
+              mamilaId: order.mamilaId || 'nearby_provider',
+              name: order.batchName || 'Nearby Service Dispatch',
+              description: order.specialInstructions || 'On-Demand Local Service',
+              price: order.price || 200,
+              available: 99,
+              expiry: 'Today',
+              imageUrl: '/src/assets/images/nearby_water_service_1793264616951.jpg',
+            };
+            onPlaceOrder(batch, order.paymentMethod || 'TELEBIRR', {
+              quantity: 1,
+              specialInstructions: order.specialInstructions,
+              deliveryCity: order.customerCity,
+              customerAddress: order.customerAddress,
+              customerPlusCode: order.customerPlusCode,
+              customerCoordinates: order.customerCoordinates,
+            });
+          }
+          setActiveTab('tracking');
         }}
       />
 

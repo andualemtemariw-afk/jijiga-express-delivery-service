@@ -2,6 +2,54 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+  Design tokens
+  -------------
+  Re-skins every screen at once, because the app is built from Tailwind's
+  `emerald-*` and `slate-*` utilities. Change a hex here and the whole app follows.
+
+  emerald-*   "Acacia"  deep green, the brand colour (was bright #059669)
+  slate-*     "Paper & ink"  neutrals with a faint green cast, so surfaces feel
+              related to the brand instead of cold blue-grey
+  marigold    the single accent: cart, the one thing you should tap
+*/
+@theme {
+  --font-sans: "Public Sans", "Noto Sans Ethiopic", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Noto Sans Ethiopic", ui-sans-serif, system-ui, sans-serif;
+
+  --color-emerald-50: #eef6f1;
+  --color-emerald-100: #d6eadf;
+  --color-emerald-200: #aed3c0;
+  --color-emerald-300: #7db89d;
+  --color-emerald-400: #4a9877;
+  --color-emerald-500: #277b5b;
+  --color-emerald-600: #176548;
+  --color-emerald-700: #0f5238;
+  --color-emerald-800: #0c402d;
+  --color-emerald-900: #0a3224;
+  --color-emerald-950: #051d15;
+
+  --color-slate-50: #f4f6f3;
+  --color-slate-100: #e9ede8;
+  --color-slate-200: #d8ded7;
+  --color-slate-300: #bcc5bb;
+  --color-slate-400: #8e9a8d;
+  --color-slate-500: #5e6a62;
+  --color-slate-600: #4c574f;
+  --color-slate-700: #37413a;
+  --color-slate-800: #232b26;
+  --color-slate-900: #151b18;
+  --color-slate-950: #0b100e;
+
+  --color-marigold-400: #f7c531;
+  --color-marigold-500: #f4b400;
+  --color-marigold-600: #d49a00;
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 :root {
   color-scheme: light;
 }
@@ -10,80 +58,125 @@ html.dark {
   color-scheme: dark;
 }
 
+html {
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
 /* Smooth theme transition */
 html, body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Global Dark Mode enhancements for high contrast & polish */
+/* Visible keyboard focus everywhere, in one place */
+:focus-visible {
+  outline: 2px solid var(--color-emerald-500);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Respect the "reduce motion" setting: stops pulses and slides */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Dark mode ----------
+   Maps the light-mode utilities onto the same paper & ink ramp. */
 .dark body {
-  background-color: #020617; /* slate-950 */
-  color: #f8fafc; /* slate-50 */
+  background-color: #0b100e; /* slate-950 */
+  color: #f4f6f3;            /* slate-50 */
 }
 
 .dark .bg-white {
-  background-color: #0f172a !important; /* slate-900 */
+  background-color: #151b18 !important; /* slate-900 */
 }
 
 .dark .bg-slate-50 {
-  background-color: #020617 !important; /* slate-950 */
+  background-color: #0b100e !important; /* slate-950 */
 }
 
 .dark .bg-slate-100 {
-  background-color: #1e293b !important; /* slate-800 */
+  background-color: #232b26 !important; /* slate-800 */
 }
 
 .dark .bg-slate-200 {
-  background-color: #334155 !important; /* slate-700 */
+  background-color: #37413a !important; /* slate-700 */
 }
 
 .dark .border-slate-200,
 .dark .border-slate-100 {
-  border-color: #1e293b !important; /* slate-800 */
+  border-color: #232b26 !important; /* slate-800 */
 }
 
 .dark .border-slate-300 {
-  border-color: #334155 !important; /* slate-700 */
+  border-color: #37413a !important; /* slate-700 */
 }
 
 .dark .text-slate-900 {
-  color: #f8fafc !important; /* slate-50 */
+  color: #f4f6f3 !important; /* slate-50 */
 }
 
 .dark .text-slate-800 {
-  color: #f1f5f9 !important; /* slate-100 */
+  color: #e9ede8 !important; /* slate-100 */
 }
 
 .dark .text-slate-700 {
-  color: #cbd5e1 !important; /* slate-300 */
+  color: #d8ded7 !important; /* slate-200 */
 }
 
-.dark .text-slate-600 {
-  color: #94a3b8 !important; /* slate-400 */
-}
-
+.dark .text-slate-600,
 .dark .text-slate-500 {
-  color: #94a3b8 !important; /* slate-400 */
+  color: #a3ada2 !important;
+}
+
+/* Greens: pale tints become translucent tints, deep text becomes light text,
+   so chips and badges stay readable on dark surfaces. */
+.dark .bg-emerald-50 {
+  background-color: rgba(74, 152, 119, 0.12) !important;
+}
+
+.dark .bg-emerald-100 {
+  background-color: rgba(74, 152, 119, 0.22) !important;
+}
+
+.dark .border-emerald-200,
+.dark .border-emerald-300 {
+  border-color: rgba(74, 152, 119, 0.38) !important;
+}
+
+.dark .text-emerald-600,
+.dark .text-emerald-700 {
+  color: #7db89d !important; /* emerald-300 */
+}
+
+.dark .text-emerald-800,
+.dark .text-emerald-900 {
+  color: #aed3c0 !important; /* emerald-200 */
 }
 
 .dark input,
 .dark select,
 .dark textarea {
-  background-color: #1e293b !important;
-  color: #f8fafc !important;
-  border-color: #334155 !important;
+  background-color: #232b26 !important;
+  color: #f4f6f3 !important;
+  border-color: #37413a !important;
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #64748b !important;
+  color: #7c887d !important;
 }
 
 .dark button.bg-slate-900 {
-  background-color: #2563eb !important;
+  background-color: #277b5b !important; /* emerald-500 */
   color: #ffffff !important;
 }
 
 .dark button.bg-slate-900:hover {
-  background-color: #1d4ed8 !important;
+  background-color: #176548 !important; /* emerald-600 */
 }

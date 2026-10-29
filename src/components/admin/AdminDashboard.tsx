@@ -16,7 +16,8 @@ import {
   FileText,
   Download,
   ShoppingBag,
-  Building2
+  Building2,
+  Compass,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -53,6 +54,7 @@ const SERVICE_CONFIG: Record<ServiceType, { label: string; color: string; icon: 
   EEU_RECHARGE: { label: 'EEU Electricity', color: '#8b5cf6', icon: Zap },
   GROCERY: { label: 'Taiwan Grocery', color: '#06b6d4', icon: ShoppingBag },
   HOTEL: { label: 'Hotel Booking', color: '#6366f1', icon: Building2 },
+  NEARBY_SERVICE: { label: 'Nearby Services', color: '#0d9488', icon: Compass },
 };
 
 const MAMILA_PALETTE = [
@@ -207,6 +209,7 @@ export function AdminDashboard({ orders, inventory = [], className = '' }: Admin
       EEU_RECHARGE: 0,
       GROCERY: 0,
       HOTEL: 0,
+      NEARBY_SERVICE: 0,
     };
 
     daysData.forEach(d => {

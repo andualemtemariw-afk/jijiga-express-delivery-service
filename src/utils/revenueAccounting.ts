@@ -114,6 +114,12 @@ export function calculateOrderRevenue(order: Order): OrderRevenueBreakdown {
       merchantPayout = 0;
       break;
     }
+    case 'NEARBY_SERVICE': {
+      // Nearby artisan & utility dispatch: platform receives base dispatch fee
+      platformRevenue = grossTransactionValue;
+      merchantPayout = 0;
+      break;
+    }
     default: {
       platformRevenue = order.deliveryFee || 0;
       merchantPayout = order.price || 0;
@@ -155,6 +161,8 @@ export function calculatePlatformTotals(orders: Order[]): PlatformFinancialSumma
     parcelLogisticsFees: 0,
     rideTransportFares: 0,
     eeuPlatformServiceFees: 0,
+    groceryDeliveryFees: 0,
+    hotelBookingCommissions: 0,
   };
 
   for (const order of orders) {

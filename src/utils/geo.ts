@@ -6,6 +6,12 @@ export interface LatLng {
 // City centers
 export const CITY_COORDINATES: Record<string, LatLng> = {
   Jijiga: { lat: 9.3547, lng: 42.7955 },
+  Babile: { lat: 9.2215, lng: 42.3308 },
+  'Kurfa Chele': { lat: 9.1764, lng: 41.8683 },
+  Girawa: { lat: 9.1333, lng: 41.8333 },
+  Badeno: { lat: 9.1100, lng: 41.6300 },
+  Dawee: { lat: 8.9500, lng: 42.1000 },
+  Mombas: { lat: 9.4200, lng: 42.5800 },
   'Addis Ababa': { lat: 9.0249, lng: 38.7468 },
   'Dire Dawa': { lat: 9.5931, lng: 41.8661 },
   Hargeisa: { lat: 9.5600, lng: 44.0650 },

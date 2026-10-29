@@ -1,6 +1,6 @@
 export type Role = 'CUSTOMER' | 'MAMILA' | 'RUNNER' | 'RIDER' | 'ADMIN';
 
-export type ServiceType = 'FOOD' | 'PARCEL' | 'RIDE' | 'EEU_RECHARGE' | 'KHAT';
+export type ServiceType = 'FOOD' | 'PARCEL' | 'RIDE' | 'EEU_RECHARGE' | 'KHAT' | 'GROCERY' | 'HOTEL' | 'NEARBY_SERVICE';
 
 export type PaymentMethod = 
   | 'TELEBIRR' 
@@ -153,6 +153,54 @@ export interface RideDetails {
   rideStatus: 'REQUESTED' | 'SEARCHING' | 'DRIVER_ASSIGNED' | 'ARRIVED_PICKUP' | 'ON_TRIP' | 'COMPLETED' | 'CANCELLED';
 }
 
+export type NearbyServiceCategory = 
+  | 'WATER_TANKER'
+  | 'ELECTRIC_SOLAR'
+  | 'PLUMBING'
+  | 'ROADSIDE_RESCUE'
+  | 'EMERGENCY_PHARMACY'
+  | 'GAS_REFILL'
+  | 'ERRAND_RUNNER';
+
+export interface NearbyServiceProvider {
+  id: string;
+  name: string;
+  phone: string;
+  whatsapp?: string;
+  category: NearbyServiceCategory;
+  categoryLabel: string;
+  city: string;
+  location: string;
+  plusCode: string;
+  coordinates: { lat: number; lng: number };
+  rating: number;
+  reviewCount: number;
+  completedJobs: number;
+  baseDispatchFee: number; // in ETB
+  estPriceRange: string;   // e.g. "250 - 600 ETB"
+  avgResponseMins: number;
+  availableNow: boolean;
+  isEmergency247: boolean;
+  badges: string[];
+  description: string;
+  servicesOffered: string[];
+}
+
+export interface NearbyServiceOrderDetails {
+  providerId: string;
+  providerName: string;
+  providerPhone: string;
+  category: NearbyServiceCategory;
+  categoryLabel: string;
+  serviceRequested: string;
+  urgency: 'STANDARD' | 'URGENT_EMERGENCY';
+  baseDispatchFee: number;
+  estimatedLaborCost?: string;
+  customerLandmark: string;
+  issueDescription: string;
+  preferredTime?: string;
+}
+
 export interface Order {
   id: string;
   serviceType?: ServiceType;
@@ -185,6 +233,32 @@ export interface Order {
   rideDetails?: RideDetails;
   eeuDetails?: EeuRechargeDetails;
   khatDetails?: KhatOrderDetails;
+  groceryDetails?: {
+    marketName: string;
+    stallNumber: string;
+    category?: any;
+    weightKg: number;
+    unitLabel: string;
+    farmOrigin?: string;
+    freshnessTimestamp?: string;
+  };
+  hotelDetails?: {
+    hotelId: string;
+    hotelName: string;
+    hotelCity: string;
+    roomType: string;
+    checkInDate: string;
+    checkOutDate: string;
+    nights: number;
+    guests: number;
+    guestName: string;
+    guestPhone: string;
+    specialRequests?: string;
+    bookingReference: string;
+    dailyRate: number;
+    totalAmount: number;
+  };
+  nearbyServiceDetails?: NearbyServiceOrderDetails;
   runnerId?: string;
   runnerName?: string;
   runnerPhone?: string;
@@ -349,6 +423,35 @@ export interface LoyaltyProfile {
   tier: LoyaltyTier;
   nextTierPointsNeeded: number;
   tierPerks: string[];
+}
+
+export interface LoyaltyReward {
+  id: string;
+  title: string;
+  pointsCost: number;
+  discountEtb: number;
+  minOrderEtb?: number;
+  description: string;
+}
+
+export interface LoyaltyAccount {
+  userId?: string;
+  pointsBalance: number;
+  lifetimePoints: number;
+  tier: LoyaltyTier;
+  nextTierPointsNeeded?: number;
+  tierLabel?: string;
+  discountPct?: number;
+  tierPerks?: string[];
+  perks?: string[];
+  redeemedRewards?: string[];
+  history?: Array<{
+    id: string;
+    type: 'EARNED' | 'REDEEMED' | 'BONUS';
+    points: number;
+    description: string;
+    timestamp: string;
+  }>;
 }
 
 export type SupportServiceCategory = 'FOOD' | 'PARCEL' | 'RIDE' | 'HOTEL' | 'EEU_RECHARGE' | 'PAYMENT' | 'OTHER';

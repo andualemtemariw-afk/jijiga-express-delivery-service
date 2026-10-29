@@ -5,7 +5,7 @@ import { APIProvider } from '@vis.gl/react-google-maps';
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry' | 'visualization')[] = ['marker', 'places', 'routes', 'geometry', 'visualization'];
 import { User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
-import { INITIAL_BATCHES, MAMILAS } from './data';
+import { INITIAL_BATCHES, MAMILAS, SERVICEABILITY_ZONES } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
 import { MapPreviewModal } from './components/map/MapPreviewModal';
 import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
@@ -260,7 +260,11 @@ export default function App() {
 
     const mamila = mamilasList.find(m => m.id === batch.mamilaId);
     const quantity = options?.quantity || 1;
-    const deliveryFee = options?.deliveryCity === 'Hargeisa' ? 200 : 150;
+    const deliveryCity = options?.deliveryCity || userProfile?.city || 'Jijiga';
+    const cityZone = SERVICEABILITY_ZONES[deliveryCity];
+    const deliveryFee = options?.deliveryFee !== undefined 
+      ? options.deliveryFee 
+      : (cityZone ? cityZone.baseFee : (deliveryCity === 'Hargeisa' ? 200 : 60));
     const subtotal = batch.price * quantity;
     const totalPrice = subtotal + deliveryFee;
 
@@ -496,6 +500,47 @@ export default function App() {
       // Rollback state on persistence failure
       setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
       showAlert(`Could not save Khat order: ${err.message}`, 'error');
+    }
+  };
+
+  const handleBookNearbyService = async (serviceOrder: Partial<Order>) => {
+    if (!currentUser) {
+      showAlert('Please sign in with Google to dispatch a nearby service.', 'error');
+      return;
+    }
+    const orderDocId = generateOrderId();
+    const effectiveCustomerId = currentUser.uid;
+    const effectiveCustomerName = userProfile?.displayName || currentUser.displayName || serviceOrder.customerName || 'Customer';
+    const effectivePhone = userProfile?.phone || serviceOrder.customerPhone || '';
+
+    const fullOrder: Order = {
+      ...(serviceOrder as Order),
+      id: orderDocId,
+      customerId: effectiveCustomerId,
+      customerName: effectiveCustomerName,
+      customerPhone: effectivePhone,
+      status: 'PENDING',
+      createdAt: new Date(),
+    };
+
+    setOrders(prev => [fullOrder, ...prev]);
+
+    try {
+      await saveOrderToFirestore(fullOrder);
+      await logDeliveryEventToFirestore({
+        orderId: fullOrder.id,
+        status: fullOrder.status,
+        timestamp: new Date().toISOString(),
+        actorRole: 'CUSTOMER',
+        actorId: currentUser.uid,
+        actorName: fullOrder.customerName,
+        note: `Nearby service dispatched: ${fullOrder.batchName} (${fullOrder.nearbyServiceDetails?.providerName || 'Local Specialist'}).`
+      });
+      showAlert(`Nearby service order #${fullOrder.id.slice(-6)} securely dispatched!`, 'success');
+    } catch (err: any) {
+      // Rollback state on persistence failure
+      setOrders(prev => prev.filter(o => o.id !== fullOrder.id));
+      showAlert(`Could not dispatch nearby service order: ${err.message}`, 'error');
     }
   };
 
@@ -866,7 +911,7 @@ export default function App() {
       region="ET"
       onError={(e) => console.warn('Google Maps Provider warning:', e)}
     >
-      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900 pb-16">
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-emerald-100 selection:text-emerald-950 pb-24 md:pb-8">
         {/* Google Maps Quota Exhaustion Banner */}
         {isQuotaExceeded && (
           <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
@@ -930,30 +975,30 @@ export default function App() {
         )}
 
         {/* 3-Zone Top Bar */}
-        <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-3.5 sticky top-0 z-40">
+        <header className="bg-white border-b border-slate-200 px-4 md:px-6 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sticky top-0 z-40">
           <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             
             {/* Zone 1: Wordmark & Network Status */}
             <div className="flex items-center justify-between sm:justify-start gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="bg-slate-900 p-2.5 rounded-xl text-white shadow-xs">
-                  <Package2 className="w-5 h-5 text-emerald-400" />
+                <div className="bg-emerald-800 p-2 rounded-xl text-marigold-500">
+                  <Package2 className="w-5 h-5" aria-hidden="true" />
                 </div>
                 <div>
-                  <a href="/" className="text-lg md:text-xl font-bold tracking-tight text-slate-900 block leading-tight">
+                  <a href="/" className="font-display text-xl font-bold tracking-tight text-slate-900 block leading-none">
                     Jijiga Express
                   </a>
-                  <span className="text-[10px] text-slate-500 font-medium">Horn of Africa Delivery Network</span>
+                  <span className="hidden sm:block mt-1 text-xs text-slate-600">Horn of Africa Delivery Network</span>
                 </div>
               </div>
 
               {!isDemoMode ? (
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                   <span>Live Production</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-400/15 dark:text-amber-300 dark:border-amber-400/30">
                   <Database className="w-3 h-3 text-amber-600" />
                   <span>Demo Sandbox</span>
                 </div>
@@ -1020,18 +1065,18 @@ export default function App() {
             <div className="flex items-center justify-between sm:justify-end gap-2 text-xs">
               <button
                 onClick={() => setShowDriveModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 min-h-9 px-2.5 text-xs font-semibold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
                 title="Google Drive Receipts Vault"
               >
-                <HardDrive className="w-3.5 h-3.5 text-amber-600" />
+                <HardDrive className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
                 <span className="hidden sm:inline">Drive</span>
               </button>
               <button
                 onClick={() => setShowGmailModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 min-h-9 px-2.5 text-xs font-semibold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
                 title="Gmail Dispatch Alerts"
               >
-                <Mail className="w-3.5 h-3.5 text-red-600" />
+                <Mail className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
                 <span className="hidden sm:inline">Gmail</span>
               </button>
 
@@ -1048,7 +1093,7 @@ export default function App() {
                         className="w-7 h-7 rounded-full object-cover border border-slate-300" 
                       />
                     ) : (
-                      <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                      <div className="w-7 h-7 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-xs">
                         {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : 'U'}
                       </div>
                     )}
@@ -1056,14 +1101,14 @@ export default function App() {
                       <p className="font-semibold text-xs leading-none text-slate-900 truncate max-w-[100px]">
                         {currentUser.displayName || currentUser.email?.split('@')[0]}
                       </p>
-                      <span className="text-[10px] font-mono text-emerald-600 uppercase font-bold">
+                      <span className="text-xs capitalize font-semibold text-emerald-700">
                         {userProfile?.role || 'customer'}
                       </span>
                     </div>
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                    aria-label="Sign out" className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                     title="Sign Out"
                   >
                     <LogOut className="w-4 h-4" />
@@ -1072,9 +1117,9 @@ export default function App() {
               ) : (
                 <button
                   onClick={handleSignIn}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 min-h-9 px-3.5 bg-emerald-800 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                  <LogIn className="w-3.5 h-3.5 text-marigold-400" aria-hidden="true" />
                   <span>Sign In</span>
                 </button>
               )}
@@ -1099,14 +1144,14 @@ export default function App() {
         {/* Unauthenticated Production Banner */}
         {!currentUser && !isDemoMode && (
           <div className="max-w-7xl mx-auto px-4 md:px-6 mt-3">
-            <div className="p-4 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs md:text-sm text-blue-950 shadow-xs">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs md:text-sm text-emerald-950">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-600 text-white rounded-xl shadow-xs">
+                <div className="p-2 bg-emerald-800 text-white rounded-xl">
                   <UserCheck className="w-5 h-5 shrink-0" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-blue-950">Customer Authentication Required for Orders</h4>
-                  <p className="text-xs text-blue-800 mt-0.5">
+                  <h4 className="font-display font-bold text-base text-emerald-950">Sign in to place orders</h4>
+                  <p className="text-xs text-emerald-900 mt-0.5">
                     Sign in with email/password or Google to place verified orders, book express parcels, and track live deliveries.
                   </p>
                 </div>
@@ -1114,16 +1159,16 @@ export default function App() {
               <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                 <button
                   onClick={() => handleOpenAuth('signin')}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none min-h-11 px-4 bg-emerald-800 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Sign In</span>
                 </button>
                 <button
                   onClick={() => handleOpenAuth('register')}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-white hover:bg-slate-50 text-blue-950 border border-blue-300 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none min-h-11 px-4 bg-white hover:bg-slate-50 text-slate-900 border border-slate-300 font-bold rounded-xl text-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <UserPlus className="w-4 h-4 text-emerald-700" />
                   <span>Register</span>
                 </button>
               </div>
@@ -1161,6 +1206,7 @@ export default function App() {
               onBookRide={handleBookRide}
               onBookEeu={handleBookEeu}
               onBookKhat={handleBookKhat}
+              onBookNearbyService={handleBookNearbyService}
             />
           )}
           {activeRole === 'MAMILA' && (
