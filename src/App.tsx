@@ -653,8 +653,16 @@ export default function App() {
     if (!target) return;
 
     if (target.serviceType === 'EEU_RECHARGE' && target.eeuDetails) {
+      if (!isDemoMode) {
+        showAlert('EEU custody must be advanced by the assigned rider after the actual terminal recharge and paper receipt capture.', 'error');
+        return;
+      }
       const nextPhase = getNextEeuPhase(target.eeuDetails.custodyPhase);
       if (nextPhase) {
+        if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && target.eeuDetails.receiptCaptured !== true) {
+          showAlert('Capture the actual EEU terminal paper receipt before advancing the demo custody flow.', 'error');
+          return;
+        }
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const stepConfig = EEU_STATE_CHAIN.find(s => s.phase === nextPhase);
         const isReturned = nextPhase === 'RETURNED';
@@ -672,12 +680,7 @@ export default function App() {
               note: `Step advanced to ${stepConfig ? stepConfig.title : nextPhase}.`,
               actor: 'Custody Dispatch'
             }
-          ],
-          receiptImageUrl: target.eeuDetails.receiptImageUrl || (nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED'
-            ? '/src/assets/images/dairy_farm_essentials_1790430944133.jpg'
-            : undefined),
-          receiptTimestamp: target.eeuDetails.receiptTimestamp || (nextPhase === 'WITH_RIDER_RETURN' ? `${new Date().toISOString().slice(0, 10)} ${nowTime}` : undefined),
-          tokenCode: target.eeuDetails.tokenCode || '4920-1928-4820-9182-3849'
+          ]
         };
 
         handleUpdateOrder(orderId, {
