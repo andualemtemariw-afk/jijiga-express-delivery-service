@@ -124,7 +124,6 @@ export function RiderView({
 
   // EEU Prepaid Card State Machine & Camera Receipt Intent State
   const [cameraOrder, setCameraOrder] = useState<Order | null>(null);
-  const [cameraTokenInput, setCameraTokenInput] = useState<string>('');
   const [isCapturingReceipt, setIsCapturingReceipt] = useState(false);
   const [eeuErrorMsg, setEeuErrorMsg] = useState<Record<string, string | null>>({});
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -212,7 +211,6 @@ export function RiderView({
         ...cameraOrder.eeuDetails,
         receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
-        tokenCode: cameraTokenInput.trim(),
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
@@ -546,13 +544,13 @@ export function RiderView({
 
                         {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
                           <div className="space-y-2">
-                            {!(order.eeuDetails.receiptCaptured || order.eeuDetails.receiptImageUrl) ? (
+                            {order.eeuDetails.receiptCaptured !== true ? (
                               <button
                                 onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
                                 className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
                               >
                                 <Camera className="w-5 h-5 animate-pulse" />
-                                <span>Mandatory Camera Intent: Snap Paper Receipt & STS Token</span>
+                                <span>Capture Actual EEU Terminal Paper Receipt</span>
                               </button>
                             ) : (
                               <button
@@ -736,7 +734,7 @@ export function RiderView({
                   </div>
                   <span className="font-bold text-sm">EEU Terminal Printout Viewfinder</span>
                   <span className="text-[11px] text-slate-400 text-center mt-1">
-                    Frame the 20-digit STS token, meter number, and date/time clearly.
+                    Frame the EEU terminal name, meter number, recharge amount, and date/time clearly.
                   </span>
 
                   {/* Camera Reticle corners */}
@@ -754,27 +752,13 @@ export function RiderView({
                   <img src={receiptPreviewUrl} alt="Captured EEU receipt preview" className="w-full max-h-64 object-contain rounded-xl border border-slate-200 bg-slate-50" />
                 )}
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Confirmed 20-Digit STS Prepaid Token (Printed on Slip)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={cameraTokenInput}
-                    onChange={(e) => setCameraTokenInput(e.target.value)}
-                    placeholder="e.g. 4920 1928 4820 9182 3849"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider text-center font-bold"
-                  />
-                </div>
-
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
                     <Receipt className="w-3.5 h-3.5 text-amber-700" />
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
+                    The actual terminal paper receipt is compressed and stored as an immutable document in this order's protected receipts subcollection.
                   </p>
                 </div>
 
@@ -788,7 +772,7 @@ export function RiderView({
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || !cameraTokenInput.trim()}
+                    disabled={isCapturingReceipt}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
