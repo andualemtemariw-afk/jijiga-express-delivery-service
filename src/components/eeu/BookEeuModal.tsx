@@ -37,7 +37,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
 }) => {
   const [meterInput, setMeterInput] = useState<string>('');
   const [cardSerial, setCardSerial] = useState<string>('');
-  const [rechargeAmount, setRechargeAmount] = useState<number>(500);
+  const [rechargeAmount, setRechargeAmount] = useState<number>(0);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
   const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
@@ -50,7 +50,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const estimatedKwh = calculateEstimatedUnits(rechargeAmount);
 
   const meterValidation = validateMeterNumber(meterInput);
-  const serviceCity = customerProfile?.city?.trim() || 'Jijiga';
+  const serviceCity = customerProfile?.city?.trim() || '';
   const isJijigaServiceArea = serviceCity.toLowerCase() === 'jijiga';
 
   const handleMeterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,7 +170,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
         {!isJijigaServiceArea && (
           <div className="px-5 pt-4">
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
-              EEU physical-card recharge is currently available in Jijiga only. Your profile city is {serviceCity}; update your profile city to Jijiga before placing this request.
+              EEU physical-card recharge is currently available in Jijiga only. Your profile city is {serviceCity || 'not set'}; update your profile city to Jijiga before placing this request.
             </div>
           </div>
         )}

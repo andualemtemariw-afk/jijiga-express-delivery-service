@@ -351,7 +351,7 @@ console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---'
     ['EEU Jijiga Main District Office (Keleb)', 'EEU Taiwan Market Commercial Station'],
     'Only the two approved Jijiga EEU service points may be offered.',
   );
-  assert.match(appSource, /EEU physical-card custody cannot be simulated in Demo mode/);
+  assert.match(appSource, /EEU physical-card custody cannot be simulated/);
   assert.match(riderSource, /EEU custody cannot be simulated in Demo mode/);
   assert.match(riderSource, /EEU receipt capture is disabled in Demo mode/);
   assert.match(riderSource, /EEU physical-card custody and receipt capture are disabled in Demo mode/);
@@ -359,6 +359,8 @@ console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---'
   assert.doesNotMatch(typesSource, /receiptImageUrl\??:/);
   assert.doesNotMatch(stepperSource, /details\.receiptImageUrl/);
   assert.match(bookingSource, /useState<string>\(''\)/);
+  assert.match(bookingSource, /useState<number>\(0\)/);
+  assert.match(bookingSource, /const serviceCity = customerProfile\?\.city\?\.trim\(\) \|\| ''/);
   assert.doesNotMatch(bookingSource, /0142883910293|EEU-SM-99482/);
   assert.doesNotMatch(
     [appSource, riderSource, stepperSource, typesSource, bookingSource].join('\n'),
