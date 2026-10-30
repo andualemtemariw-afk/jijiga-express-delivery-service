@@ -59,7 +59,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
         if (!cancelled) setReceiptLoading(false);
       });
     return () => { cancelled = true; };
-  }, [showReceiptModal, order.id, hasReceipt];
+  }, [showReceiptModal, order.id, hasReceipt]);
 
   if (!details) return null;
 
