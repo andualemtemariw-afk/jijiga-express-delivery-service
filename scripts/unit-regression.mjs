@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { calculateOrderRevenue, calculatePlatformTotals } from '../src/utils/revenueAccounting.ts';
 import { validateMeterNumber, validateEeuTransition, getNextEeuPhase } from '../src/utils/eeuStateMachine.ts';
 import { CITIES, NEARBY_SERVICES_PROVIDERS } from '../src/data.ts';
@@ -6,6 +7,25 @@ import { CITY_COORDINATES, calculateDistanceKm } from '../src/utils/geo.ts';
 import { extractAvailableCities } from '../src/utils/orderFilterUtils.ts';
 
 console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---');
+
+ // TEST 0: Production customer UI must not expose simulated phone OTP.
+{
+  const customerViewSource = readFileSync(
+    new URL('../src/roles/CustomerView.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(
+    customerViewSource,
+    /PhoneOtpModal|showPhoneOtpModal|phone-usr-|OTP Login|Auto-verified sandbox mode/,
+    'Customer UI must not expose the simulated phone OTP flow.',
+  );
+  assert.match(
+    customerViewSource,
+    /\{\/\* Guest sign-in button for unauthenticated customers \*\/\}\s*\{!currentUser && \(\s*<button\s+onClick=\{onSignIn\}/,
+    'Guest sign-in must use the existing authenticated sign-in handler.',
+  );
+  console.log('PASS: customer guests use the existing sign-in flow; simulated OTP is not reachable');
+}
 
 // TEST 1: EEU Prepaid Electricity Accounting Separation
 {
