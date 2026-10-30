@@ -35,11 +35,11 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   onSubmit,
   customerProfile
 }) => {
-  const [meterInput, setMeterInput] = useState<string>('0142883910293');
-  const [cardSerial, setCardSerial] = useState<string>('EEU-SM-99482');
+  const [meterInput, setMeterInput] = useState<string>('');
+  const [cardSerial, setCardSerial] = useState<string>('');
   const [rechargeAmount, setRechargeAmount] = useState<number>(500);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
-  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
+  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
@@ -198,7 +198,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               required
               value={meterInput}
               onChange={handleMeterChange}
-              placeholder="e.g. 0142 8839 1029 3"
+              placeholder="Enter the 13-digit meter number"
               className={`w-full p-2.5 rounded-xl border font-mono text-sm tracking-wide focus:outline-hidden focus:ring-2 ${
                 meterValidation.isValid
                   ? 'border-emerald-300 focus:ring-emerald-500/20 bg-emerald-50/20'
@@ -220,7 +220,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                 type="text"
                 value={cardSerial}
                 onChange={(e) => setCardSerial(e.target.value)}
-                placeholder="e.g. EEU-SM-99482"
+                placeholder="Enter card serial number (optional)"
                 className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
               />
             </div>
@@ -289,6 +289,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 text-xs"
+                placeholder="Kebele, street, and nearby landmark in Jijiga"
               />
             </div>
             <div>

@@ -62,7 +62,6 @@ export interface EeuRechargeDetails {
     note: string;
     actor: string;
   }>;
-  receiptImageUrl?: string; // Legacy/demo-only preview; production images live in the protected receipts subcollection
   receiptTimestamp?: string;
   kwhUnits?: number;
 }

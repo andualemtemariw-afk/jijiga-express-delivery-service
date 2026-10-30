@@ -4,7 +4,7 @@ import { APIProvider } from '@vis.gl/react-google-maps';
 
 const GOOGLE_MAPS_LIBRARIES: ('marker' | 'places' | 'routes' | 'geometry' | 'visualization')[] = ['marker', 'places', 'routes', 'geometry', 'visualization'];
 import { User } from 'firebase/auth';
-import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
+import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS, SERVICEABILITY_ZONES } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
 import { MapPreviewModal } from './components/map/MapPreviewModal';
@@ -32,7 +32,6 @@ import {
   subscribeToFirestoreMamilas
 } from './services/firestoreSync';
 import { MAMILA_COORDINATES, DEFAULT_CUSTOMER_COORDINATES } from './utils/geo';
-import { getNextEeuPhase, EEU_STATE_CHAIN } from './utils/eeuStateMachine';
 import { 
   Package2, 
   Users, 
@@ -652,45 +651,12 @@ export default function App() {
     const target = orders.find(o => o.id === orderId);
     if (!target) return;
 
-    if (target.serviceType === 'EEU_RECHARGE' && target.eeuDetails) {
-      if (!isDemoMode) {
-        showAlert('EEU custody must be advanced by the assigned rider after the actual terminal recharge and paper receipt capture.', 'error');
-        return;
-      }
-      const nextPhase = getNextEeuPhase(target.eeuDetails.custodyPhase);
-      if (nextPhase) {
-        if ((nextPhase === 'WITH_RIDER_RETURN' || nextPhase === 'RETURNED') && target.eeuDetails.receiptCaptured !== true) {
-          showAlert('Capture the actual EEU terminal paper receipt before advancing the demo custody flow.', 'error');
-          return;
-        }
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const stepConfig = EEU_STATE_CHAIN.find(s => s.phase === nextPhase);
-        const isReturned = nextPhase === 'RETURNED';
-
-        const updatedEeuDetails: EeuRechargeDetails = {
-          ...target.eeuDetails,
-          custodyPhase: nextPhase,
-          custodyLabel: stepConfig ? stepConfig.label : (nextPhase as any),
-          custodyTimeline: [
-            ...target.eeuDetails.custodyTimeline,
-            {
-              phase: nextPhase,
-              label: stepConfig ? stepConfig.label : nextPhase,
-              timestamp: nowTime,
-              note: `Step advanced to ${stepConfig ? stepConfig.title : nextPhase}.`,
-              actor: 'Custody Dispatch'
-            }
-          ]
-        };
-
-        handleUpdateOrder(orderId, {
-          eeuDetails: updatedEeuDetails,
-          status: isReturned ? 'DELIVERED' : 'PICKED_UP',
-          riderId: target.riderId || currentUser?.uid || 'simulated-rider',
-          riderName: target.riderName || userProfile?.displayName || 'Staff Rider'
-        });
-        return;
-      }
+    if (target.serviceType === 'EEU_RECHARGE') {
+      showAlert(
+        'EEU physical-card custody cannot be simulated in Demo mode. Use the assigned rider workflow with the actual EEU terminal recharge and paper receipt.',
+        'info'
+      );
+      return;
     }
 
     if (target.status === 'RUNNER_ASSIGNED' || target.status === 'PENDING' || target.status === 'TRANSACTION_PENDING') {

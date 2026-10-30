@@ -155,6 +155,13 @@ export function RiderView({
   }, [activeJobs.map(o => `${o.id}:${o.status}`).join('|'), onUpdateOrder]);
 
   const handleAdvanceEeuCustody = (order: Order, nextPhase: EeuCustodyPhase) => {
+    if (isDemoMode) {
+      setEeuErrorMsg(prev => ({
+        ...prev,
+        [order.id]: 'EEU custody cannot be simulated in Demo mode. Use a verified production EEU order.'
+      }));
+      return;
+    }
     if (!order.eeuDetails) return;
 
     const check = validateEeuTransition(order.eeuDetails, nextPhase);
@@ -203,6 +210,13 @@ export function RiderView({
 
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
+    if (isDemoMode) {
+      setEeuErrorMsg(prev => ({
+        ...prev,
+        [cameraOrder.id]: 'EEU receipt capture is disabled in Demo mode. Use a verified production EEU order.'
+      }));
+      return;
+    }
     setIsCapturingReceipt(true);
     try {
       const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
@@ -219,16 +233,9 @@ export function RiderView({
           actor: `Rider ${currentRiderId}`
         }]
       };
-      if (isDemoMode) {
-        // Demo-only local previews may use the legacy inline field; it is never persisted to Firestore.
-        onUpdateOrder(cameraOrder.id, {
-          eeuDetails: { ...updatedEeu, receiptImageUrl }
-        }, false);
-      } else {
-        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
-        // The service committed order metadata and photo atomically; update app state without a duplicate write.
-        onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
-      }
+      await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
+      // The service committed order metadata and photo atomically; update app state without a duplicate write.
+      onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);

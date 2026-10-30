@@ -38,11 +38,12 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   const [receiptLoadError, setReceiptLoadError] = useState<string | null>(null);
   const details = order.eeuDetails;
   const hasReceipt = details?.receiptCaptured === true;
-  const displayedReceiptImage = details?.receiptImageUrl || receiptImage;
+  const displayedReceiptImage = receiptImage;
 
   useEffect(() => {
-    if (!showReceiptModal || !hasReceipt || details?.receiptImageUrl) return;
+    if (!showReceiptModal || !hasReceipt) return;
     let cancelled = false;
+    setReceiptImage(null);
     setReceiptLoading(true);
     setReceiptLoadError(null);
     loadEeuReceiptImage(order.id)
@@ -58,7 +59,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
         if (!cancelled) setReceiptLoading(false);
       });
     return () => { cancelled = true; };
-  }, [showReceiptModal, order.id, hasReceipt, details?.receiptImageUrl]);
+  }, [showReceiptModal, order.id, hasReceipt];
 
   if (!details) return null;
 
@@ -205,18 +206,9 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
           {hasReceipt ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-3">
-                {details.receiptImageUrl ? (
-                  <img
-                    src={details.receiptImageUrl}
-                    alt="EEU Receipt preview"
-                    className="w-14 h-14 rounded-lg object-cover border border-emerald-300 shadow-2xs cursor-pointer hover:opacity-90"
-                    onClick={() => setShowReceiptModal(true)}
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg border border-emerald-300 bg-white flex items-center justify-center">
-                    <Receipt className="w-6 h-6 text-emerald-700" />
-                  </div>
-                )}
+                <div className="w-14 h-14 rounded-lg border border-emerald-300 bg-white flex items-center justify-center">
+                  <Receipt className="w-6 h-6 text-emerald-700" />
+                </div>
                 <div className="space-y-0.5">
                   <div className="font-mono font-bold text-xs text-slate-900">
                     Terminal paper receipt captured
