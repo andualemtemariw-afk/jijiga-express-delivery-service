@@ -900,11 +900,6 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                       {order.eeuDetails.custodyPhase.replace(/_/g, ' ')}
                     </span>
                   </div>
-                  {order.eeuDetails.tokenCode && (
-                    <div className="p-2 bg-white dark:bg-slate-800 rounded-lg border border-amber-200 dark:border-amber-700 font-mono text-center font-bold text-slate-900 dark:text-white tracking-widest text-sm">
-                      {order.eeuDetails.tokenCode}
-                    </div>
-                  )}
                 </div>
               )}
 

@@ -41,7 +41,7 @@ const ISSUE_CATEGORIES: Record<SupportServiceCategory, string[]> = {
   PARCEL: ['Tamper seal broken or damaged', 'Delivery address redirection', 'Package delayed', 'Proof of delivery query'],
   RIDE: ['Driver did not arrive', 'Fare discrepancy', 'Lost item in vehicle', 'Route navigation issue'],
   HOTEL: ['Reservation check-in query', 'Room type change', 'Cancellation request', 'Hotel contact assistance'],
-  EEU_RECHARGE: ['20-digit token not received', 'Physical card delay', 'Terminal paper receipt query', 'Wrong meter number entered'],
+  EEU_RECHARGE: ['Physical card not returned', 'Terminal paper receipt not received', 'Recharge amount discrepancy', 'Wrong meter number entered'],
   PAYMENT: ['Cash on delivery change dispute', 'Double deduction query', 'Receipt request'],
   OTHER: ['Account & profile updates', 'Feedback & suggestions', 'Commercial business inquiry'],
 };

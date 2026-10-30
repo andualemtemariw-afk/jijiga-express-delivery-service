@@ -37,12 +37,13 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptLoadError, setReceiptLoadError] = useState<string | null>(null);
   const details = order.eeuDetails;
-  const hasReceipt = Boolean(details?.receiptCaptured || details?.receiptImageUrl);
-  const displayedReceiptImage = details?.receiptImageUrl || receiptImage;
+  const hasReceipt = details?.receiptCaptured === true;
+  const displayedReceiptImage = receiptImage;
 
   useEffect(() => {
-    if (!showReceiptModal || !hasReceipt || details?.receiptImageUrl) return;
+    if (!showReceiptModal || !hasReceipt) return;
     let cancelled = false;
+    setReceiptImage(null);
     setReceiptLoading(true);
     setReceiptLoadError(null);
     loadEeuReceiptImage(order.id)
@@ -58,7 +59,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
         if (!cancelled) setReceiptLoading(false);
       });
     return () => { cancelled = true; };
-  }, [showReceiptModal, order.id, hasReceipt, details?.receiptImageUrl]);
+  }, [showReceiptModal, order.id, hasReceipt]);
 
   if (!details) return null;
 
@@ -205,24 +206,15 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
           {hasReceipt ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-3">
-                {details.receiptImageUrl ? (
-                  <img
-                    src={details.receiptImageUrl}
-                    alt="EEU Receipt preview"
-                    className="w-14 h-14 rounded-lg object-cover border border-emerald-300 shadow-2xs cursor-pointer hover:opacity-90"
-                    onClick={() => setShowReceiptModal(true)}
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg border border-emerald-300 bg-white flex items-center justify-center">
-                    <Receipt className="w-6 h-6 text-emerald-700" />
-                  </div>
-                )}
+                <div className="w-14 h-14 rounded-lg border border-emerald-300 bg-white flex items-center justify-center">
+                  <Receipt className="w-6 h-6 text-emerald-700" />
+                </div>
                 <div className="space-y-0.5">
                   <div className="font-mono font-bold text-xs text-slate-900">
-                    STS Token: {details.tokenCode || 'Not recorded'}
+                    Terminal paper receipt captured
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Captured at {details.receiptTimestamp || 'EEU Kiosk Counter'}
+                    Captured at {details.receiptTimestamp || 'Time unavailable'}
                   </div>
                   <div className="text-[10px] text-emerald-700">
                     Photo stored separately to keep order-list downloads small.
@@ -243,7 +235,7 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
               <p className="text-[11px]">
                 {isRiderView 
                   ? 'As a Rider, you must execute the Camera Intent to snap the EEU terminal printout before returning card to customer.'
-                  : 'Rider is instructed to photograph the physical terminal paper receipt with 20-digit token upon terminal recharge.'}
+                  : 'Rider must photograph the actual physical terminal paper receipt after the card recharge.'}
               </p>
               {isRiderView && onRequestCameraReceipt && (
                 <button
@@ -335,17 +327,15 @@ export const EeuCustodyStepper: React.FC<EeuCustodyStepperProps> = ({
 
                 <div className="bg-amber-50/80 p-3 rounded-xl border border-amber-200 space-y-2 text-xs">
                   <div className="font-bold text-amber-950 flex items-center justify-between">
-                    <span>20-Digit STS Prepaid Token</span>
-                    <span className="font-mono text-amber-800">{details.kwhUnits} kWh</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-amber-200 font-mono font-bold text-center text-sm tracking-wider text-slate-900 select-all">
-                    {details.tokenCode || 'Not recorded'}
+                    <span>Physical Card Recharge Details</span>
+                    <span className="font-mono text-amber-800">~{details.kwhUnits} estimated kWh</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1 font-mono">
                     <div>Meter: <strong>{details.meterNumber}</strong></div>
-                    <div>Amount: <strong>{details.rechargeAmount} ETB</strong></div>
-                    <div>Terminal: <strong>{details.eeuHubName.slice(0, 24)}...</strong></div>
-                    <div>Custody Status: <strong>{details.custodyLabel}</strong></div>
+                    <div>Recharge amount: <strong>{details.rechargeAmount} ETB</strong></div>
+                    <div>Service fee: <strong>{details.serviceFee} ETB</strong></div>
+                    <div>Custody status: <strong>{details.custodyLabel}</strong></div>
+                    <div className="col-span-2">EEU service point: <strong>{details.eeuHubName}</strong></div>
                   </div>
                 </div>
               </div>

@@ -35,11 +35,11 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   onSubmit,
   customerProfile
 }) => {
-  const [meterInput, setMeterInput] = useState<string>('0142883910293');
-  const [cardSerial, setCardSerial] = useState<string>('EEU-SM-99482');
-  const [rechargeAmount, setRechargeAmount] = useState<number>(500);
+  const [meterInput, setMeterInput] = useState<string>('');
+  const [cardSerial, setCardSerial] = useState<string>('');
+  const [rechargeAmount, setRechargeAmount] = useState<number>(0);
   const [selectedHubId, setSelectedHubId] = useState<string>(EEU_HUBS[0].id);
-  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || 'Kebele 04, Jijiga');
+  const [customerAddress, setCustomerAddress] = useState<string>(customerProfile?.address || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.phone || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('COD');
   const [customerAuthorized, setCustomerAuthorized] = useState(false);
@@ -50,6 +50,8 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
   const estimatedKwh = calculateEstimatedUnits(rechargeAmount);
 
   const meterValidation = validateMeterNumber(meterInput);
+  const serviceCity = customerProfile?.city?.trim() || '';
+  const isJijigaServiceArea = serviceCity.toLowerCase() === 'jijiga';
 
   const handleMeterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMeterInput(e.target.value);
@@ -61,7 +63,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meterValidation.isValid) return;
+    if (!meterValidation.isValid || !isJijigaServiceArea || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0) return;
 
     const hub = EEU_HUBS.find(h => h.id === selectedHubId) || EEU_HUBS[0];
     const nowIso = new Date().toISOString();
@@ -108,7 +110,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
       customerId: customerProfile?.uid || '',
       customerName: customerDisplayName,
       customerPhone: customerPhone,
-      customerCity: customerProfile?.city || 'Jijiga',
+      customerCity: 'Jijiga',
       customerAddress: customerAddress,
       customerPlusCode: customerProfile?.plusCode || '8F2P+5H Jijiga',
       specialInstructions: specialNote ? `EEU Note: ${specialNote}` : '',
@@ -160,10 +162,18 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               WITH_CUSTOMER → WITH_RIDER → AT_EEU_HUB → WITH_RIDER → RETURNED
             </div>
             <p className="text-[11px] text-amber-700">
-              Rider collects your physical card, visits the EEU terminal, captures a mandatory photo of the paper receipt with 20-digit STS token, and returns the charged card back to your doorstep.
+              Rider collects your physical card, takes it to one of the approved Jijiga EEU service points, captures the actual terminal paper receipt, and returns the charged card and receipt to your address.
             </p>
           </div>
         </div>
+
+        {!isJijigaServiceArea && (
+          <div className="px-5 pt-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="alert">
+              EEU physical-card recharge is currently available in Jijiga only. Your profile city is {serviceCity || 'not set'}; update your profile city to Jijiga before placing this request.
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 text-xs">
           {/* 13-Digit Meter Number Field */}
@@ -188,7 +198,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               required
               value={meterInput}
               onChange={handleMeterChange}
-              placeholder="e.g. 0142 8839 1029 3"
+              placeholder="Enter the 13-digit meter number"
               className={`w-full p-2.5 rounded-xl border font-mono text-sm tracking-wide focus:outline-hidden focus:ring-2 ${
                 meterValidation.isValid
                   ? 'border-emerald-300 focus:ring-emerald-500/20 bg-emerald-50/20'
@@ -210,7 +220,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                 type="text"
                 value={cardSerial}
                 onChange={(e) => setCardSerial(e.target.value)}
-                placeholder="e.g. EEU-SM-99482"
+                placeholder="Enter card serial number (optional)"
                 className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-xs"
               />
             </div>
@@ -279,6 +289,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
                 value={customerAddress}
                 onChange={(e) => setCustomerAddress(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 text-xs"
+                placeholder="Kebele, street, and nearby landmark in Jijiga"
               />
             </div>
             <div>
@@ -359,7 +370,7 @@ export const BookEeuModal: React.FC<BookEeuModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!meterValidation.isValid || rechargeAmount <= 0}
+                disabled={!meterValidation.isValid || !isJijigaServiceArea || rechargeAmount < 100 || rechargeAmount > 15000 || rechargeAmount % 50 !== 0}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition"
               >
                 <span>Dispatch Rider for Card Pickup</span>

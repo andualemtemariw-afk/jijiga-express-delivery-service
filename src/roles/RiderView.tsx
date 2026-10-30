@@ -124,7 +124,6 @@ export function RiderView({
 
   // EEU Prepaid Card State Machine & Camera Receipt Intent State
   const [cameraOrder, setCameraOrder] = useState<Order | null>(null);
-  const [cameraTokenInput, setCameraTokenInput] = useState<string>('');
   const [isCapturingReceipt, setIsCapturingReceipt] = useState(false);
   const [eeuErrorMsg, setEeuErrorMsg] = useState<Record<string, string | null>>({});
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
@@ -156,6 +155,13 @@ export function RiderView({
   }, [activeJobs.map(o => `${o.id}:${o.status}`).join('|'), onUpdateOrder]);
 
   const handleAdvanceEeuCustody = (order: Order, nextPhase: EeuCustodyPhase) => {
+    if (isDemoMode) {
+      setEeuErrorMsg(prev => ({
+        ...prev,
+        [order.id]: 'EEU custody cannot be simulated in Demo mode. Use a verified production EEU order.'
+      }));
+      return;
+    }
     if (!order.eeuDetails) return;
 
     const check = validateEeuTransition(order.eeuDetails, nextPhase);
@@ -204,6 +210,13 @@ export function RiderView({
 
   const handleCaptureReceiptSubmit = async () => {
     if (!cameraOrder?.eeuDetails || !receiptFile) return;
+    if (isDemoMode) {
+      setEeuErrorMsg(prev => ({
+        ...prev,
+        [cameraOrder.id]: 'EEU receipt capture is disabled in Demo mode. Use a verified production EEU order.'
+      }));
+      return;
+    }
     setIsCapturingReceipt(true);
     try {
       const receiptImageUrl = await compressReceiptForFirestore(receiptFile);
@@ -212,7 +225,6 @@ export function RiderView({
         ...cameraOrder.eeuDetails,
         receiptCaptured: true,
         receiptTimestamp: new Date().toISOString(),
-        tokenCode: cameraTokenInput.trim(),
         custodyTimeline: [...cameraOrder.eeuDetails.custodyTimeline, {
           phase: cameraOrder.eeuDetails.custodyPhase,
           label: cameraOrder.eeuDetails.custodyLabel,
@@ -221,16 +233,9 @@ export function RiderView({
           actor: `Rider ${currentRiderId}`
         }]
       };
-      if (isDemoMode) {
-        // Demo-only local previews may use the legacy inline field; it is never persisted to Firestore.
-        onUpdateOrder(cameraOrder.id, {
-          eeuDetails: { ...updatedEeu, receiptImageUrl }
-        }, false);
-      } else {
-        await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
-        // The service committed order metadata and photo atomically; update app state without a duplicate write.
-        onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
-      }
+      await saveEeuReceiptAndOrderDetails(cameraOrder.id, currentRiderId, receiptImageUrl, updatedEeu);
+      // The service committed order metadata and photo atomically; update app state without a duplicate write.
+      onUpdateOrder(cameraOrder.id, { eeuDetails: updatedEeu }, false);
       setReceiptFile(null);
       if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
       setReceiptPreviewUrl(null);
@@ -306,9 +311,9 @@ export function RiderView({
                     <div className="space-y-3">
                       <EeuCustodyStepper
                         order={order}
-                        isRiderView={true}
-                        onAdvanceState={(nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
-                        onRequestCameraReceipt={() => setCameraOrder(order)}
+                        isRiderView={!isDemoMode}
+                        onAdvanceState={isDemoMode ? undefined : (nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
+                        onRequestCameraReceipt={isDemoMode ? undefined : () => setCameraOrder(order)}
                       />
                       {eeuErrorMsg[order.id] && (
                         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
@@ -523,66 +528,72 @@ export function RiderView({
                   {/* Action Handlers */}
                   <div>
                     {order.serviceType === 'EEU_RECHARGE' ? (
-                      <div className="space-y-2">
-                        {order.eeuDetails?.custodyPhase === 'WITH_CUSTOMER' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_OUTBOUND')}
-                            className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                          >
-                            <Zap className="w-5 h-5 text-amber-200" />
-                            <span>Collect Physical Card & Cash Float from Customer (WITH_RIDER)</span>
-                          </button>
-                        )}
+                      isDemoMode ? (
+                        <div className="p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs">
+                          EEU physical-card custody and receipt capture are disabled in Demo mode. Use a verified production order and the assigned rider.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {order.eeuDetails?.custodyPhase === 'WITH_CUSTOMER' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_OUTBOUND')}
+                              className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                            >
+                              <Zap className="w-5 h-5 text-amber-200" />
+                              <span>Collect Physical Card & Cash Float from Customer (WITH_RIDER)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'WITH_RIDER_OUTBOUND' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'AT_EEU_HUB')}
-                            className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                          >
-                            <Zap className="w-5 h-5 text-amber-400" />
-                            <span>Arrived at EEU Branch Terminal (AT_EEU_HUB)</span>
-                          </button>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'WITH_RIDER_OUTBOUND' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'AT_EEU_HUB')}
+                              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                            >
+                              <Zap className="w-5 h-5 text-amber-400" />
+                              <span>Arrived at EEU Branch Terminal (AT_EEU_HUB)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
-                          <div className="space-y-2">
-                            {!(order.eeuDetails.receiptCaptured || order.eeuDetails.receiptImageUrl) ? (
-                              <button
-                                onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
-                                className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
-                              >
-                                <Camera className="w-5 h-5 animate-pulse" />
-                                <span>Mandatory Camera Intent: Snap Paper Receipt & STS Token</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_RETURN')}
-                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                              >
-                                <CheckCircle2 className="w-5 h-5 text-blue-200" />
-                                <span>Receipt Verified - Start Return to Customer (WITH_RIDER)</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
+                            <div className="space-y-2">
+                              {order.eeuDetails.receiptCaptured !== true ? (
+                                <button
+                                  onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
+                                  className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
+                                >
+                                  <Camera className="w-5 h-5 animate-pulse" />
+                                  <span>Capture Actual EEU Terminal Paper Receipt</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_RETURN')}
+                                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-5 h-5 text-blue-200" />
+                                  <span>Receipt Verified - Start Return to Customer (WITH_RIDER)</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'WITH_RIDER_RETURN' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'RETURNED')}
-                            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span>Hand Back Recharged Card & Paper Receipt (RETURNED)</span>
-                          </button>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'WITH_RIDER_RETURN' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'RETURNED')}
+                              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span>Hand Back Recharged Card & Paper Receipt (RETURNED)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'RETURNED' && (
-                          <div className="w-full py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            <span>Chain of Custody Completed & Recharged Card Returned</span>
-                          </div>
-                        )}
-                      </div>
+                          {order.eeuDetails?.custodyPhase === 'RETURNED' && (
+                            <div className="w-full py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Chain of Custody Completed & Recharged Card Returned</span>
+                            </div>
+                          )}
+                        </div>
+                      )
                     ) : (
                       order.status === 'RIDER_ACCEPTED' ? (
                         <button 
@@ -736,7 +747,7 @@ export function RiderView({
                   </div>
                   <span className="font-bold text-sm">EEU Terminal Printout Viewfinder</span>
                   <span className="text-[11px] text-slate-400 text-center mt-1">
-                    Frame the 20-digit STS token, meter number, and date/time clearly.
+                    Frame the EEU terminal name, meter number, recharge amount, and date/time clearly.
                   </span>
 
                   {/* Camera Reticle corners */}
@@ -754,27 +765,13 @@ export function RiderView({
                   <img src={receiptPreviewUrl} alt="Captured EEU receipt preview" className="w-full max-h-64 object-contain rounded-xl border border-slate-200 bg-slate-50" />
                 )}
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Confirmed 20-Digit STS Prepaid Token (Printed on Slip)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={cameraTokenInput}
-                    onChange={(e) => setCameraTokenInput(e.target.value)}
-                    placeholder="e.g. 4920 1928 4820 9182 3849"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm tracking-wider text-center font-bold"
-                  />
-                </div>
-
                 <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
                     <Receipt className="w-3.5 h-3.5 text-amber-700" />
                     Strict EEU Audit Protocol:
                   </div>
                   <p>
-                    The captured receipt is uploaded to protected Firebase Storage and linked to this order. The rider must verify the printed token before submitting.
+                    The actual terminal paper receipt is compressed and stored as an immutable document in this order's protected receipts subcollection.
                   </p>
                 </div>
 
@@ -788,7 +785,7 @@ export function RiderView({
                   </button>
                   <button
                     type="button"
-                    disabled={isCapturingReceipt || !cameraTokenInput.trim()}
+                    disabled={isCapturingReceipt}
                     onClick={() => receiptFile ? handleCaptureReceiptSubmit() : document.getElementById('eeu-receipt-camera')?.click()}
                     className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >

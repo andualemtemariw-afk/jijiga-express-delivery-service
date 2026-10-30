@@ -68,25 +68,13 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/orders/$(orderId));
     }
 
-    // Prefer the protected subcollection receipt; recognize existing legacy inline receipts during rollout.
+    // The immutable terminal receipt subcollection document is the only evidence accepted for custody return.
     function hasEeuReceipt(orderId) {
-      return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
-        || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
-        );
+      return exists(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal);
     }
 
     function hasEeuReceiptAfter(orderId) {
-      return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal)
-        || (
-          orderDoc(orderId).data.eeuDetails is map
-          && ('receiptImageUrl' in orderDoc(orderId).data.eeuDetails)
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl is string
-          && orderDoc(orderId).data.eeuDetails.receiptImageUrl != ''
-        );
+      return existsAfter(/databases/$(database)/documents/orders/$(orderId)/receipts/terminal);
     }
 
     function isOrderCustomer(orderId) {
@@ -169,6 +157,11 @@ service cloud.firestore {
         && request.resource.data.eeuDetails.rechargeAmount <= 15000
         && request.resource.data.eeuDetails.rechargeAmount % 50 == 0
         && request.resource.data.eeuDetails.serviceFee == 75
+        && request.resource.data.customerCity == 'Jijiga'
+        && request.resource.data.eeuDetails.eeuHubName in [
+          'EEU Jijiga Main District Office (Keleb)',
+          'EEU Taiwan Market Commercial Station'
+        ]
         && request.resource.data.price == request.resource.data.eeuDetails.rechargeAmount
         && request.resource.data.deliveryFee == 75
         && request.resource.data.totalPrice == request.resource.data.price + request.resource.data.deliveryFee
@@ -181,8 +174,7 @@ service cloud.firestore {
         && request.resource.data.eeuDetails.custodyTimeline[0].phase == 'WITH_CUSTOMER'
         && !('receiptImageUrl' in request.resource.data.eeuDetails)
         && !('receiptCaptured' in request.resource.data.eeuDetails)
-        && !('receiptTimestamp' in request.resource.data.eeuDetails)
-        && !('tokenCode' in request.resource.data.eeuDetails);
+        && !('receiptTimestamp' in request.resource.data.eeuDetails);
     }
 
     function validEeuDetailsUpdate(orderId) {
@@ -190,7 +182,7 @@ service cloud.firestore {
         && resource.data.eeuDetails is map
         && request.resource.data.eeuDetails is map
         && request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasOnly([
-          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp', 'tokenCode'
+          'custodyPhase', 'custodyLabel', 'custodyTimeline', 'receiptCaptured', 'receiptTimestamp'
         ])
         && request.resource.data.eeuDetails.meterNumber == resource.data.eeuDetails.meterNumber
         && request.resource.data.eeuDetails.customerAuthorized == resource.data.eeuDetails.customerAuthorized
@@ -206,7 +198,7 @@ service cloud.firestore {
         // Metadata is attached once while at the hub, and only when a bounded receipt document exists.
         && (
           !request.resource.data.eeuDetails.diff(resource.data.eeuDetails).affectedKeys().hasAny([
-            'receiptCaptured', 'receiptTimestamp', 'tokenCode'
+            'receiptCaptured', 'receiptTimestamp'
           ])
           || (
             resource.data.eeuDetails.custodyPhase == 'AT_EEU_HUB'
@@ -215,7 +207,6 @@ service cloud.firestore {
             && request.resource.data.eeuDetails.receiptCaptured == true
             && hasEeuReceiptAfter(orderId)
             && request.resource.data.eeuDetails.receiptTimestamp is string
-            && request.resource.data.eeuDetails.tokenCode is string
           )
         )
         && (

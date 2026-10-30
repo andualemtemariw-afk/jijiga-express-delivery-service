@@ -1,11 +1,31 @@
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { calculateOrderRevenue, calculatePlatformTotals } from '../src/utils/revenueAccounting.ts';
-import { validateMeterNumber, validateEeuTransition, getNextEeuPhase } from '../src/utils/eeuStateMachine.ts';
+import { validateMeterNumber, validateEeuTransition, getNextEeuPhase, EEU_HUBS } from '../src/utils/eeuStateMachine.ts';
 import { CITIES, NEARBY_SERVICES_PROVIDERS } from '../src/data.ts';
 import { CITY_COORDINATES, calculateDistanceKm } from '../src/utils/geo.ts';
 import { extractAvailableCities } from '../src/utils/orderFilterUtils.ts';
 
 console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---');
+
+ // TEST 0: Production customer UI must not expose simulated phone OTP.
+{
+  const customerViewSource = readFileSync(
+    new URL('../src/roles/CustomerView.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(
+    customerViewSource,
+    /PhoneOtpModal|showPhoneOtpModal|phone-usr-|OTP Login|Auto-verified sandbox mode/,
+    'Customer UI must not expose the simulated phone OTP flow.',
+  );
+  assert.match(
+    customerViewSource,
+    /\{\/\* Guest sign-in button for unauthenticated customers \*\/\}\s*\{!currentUser && \(\s*<button\s+onClick=\{onSignIn\}/,
+    'Guest sign-in must use the existing authenticated sign-in handler.',
+  );
+  console.log('PASS: customer guests use the existing sign-in flow; simulated OTP is not reachable');
+}
 
 // TEST 1: EEU Prepaid Electricity Accounting Separation
 {
@@ -318,5 +338,37 @@ console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---'
   console.log('PASS: Nearby Services Radar providers, distance calculations & dispatch accounting strictly validated');
 }
 
-console.log('--- ALL REGRESSION TESTS PASSED SUCCESSFULLY (9/9) ---');
+// TEST 10: EEU physical-card workflow cannot fabricate evidence or simulate custody.
+{
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const riderSource = readFileSync(new URL('../src/roles/RiderView.tsx', import.meta.url), 'utf8');
+  const stepperSource = readFileSync(new URL('../src/components/eeu/EeuCustodyStepper.tsx', import.meta.url), 'utf8');
+  const typesSource = readFileSync(new URL('../src/types.ts', import.meta.url), 'utf8');
+  const bookingSource = readFileSync(new URL('../src/components/eeu/BookEeuModal.tsx', import.meta.url), 'utf8');
+
+  assert.deepStrictEqual(
+    EEU_HUBS.map((hub) => hub.name),
+    ['EEU Jijiga Main District Office (Keleb)', 'EEU Taiwan Market Commercial Station'],
+    'Only the two approved Jijiga EEU service points may be offered.',
+  );
+  assert.match(appSource, /EEU physical-card custody cannot be simulated/);
+  assert.match(riderSource, /EEU custody cannot be simulated in Demo mode/);
+  assert.match(riderSource, /EEU receipt capture is disabled in Demo mode/);
+  assert.match(riderSource, /EEU physical-card custody and receipt capture are disabled in Demo mode/);
+  assert.doesNotMatch(riderSource, /eeuDetails:\s*\{\s*\.\.\.updatedEeu,\s*receiptImageUrl\s*\}/);
+  assert.doesNotMatch(typesSource, /receiptImageUrl\??:/);
+  assert.doesNotMatch(stepperSource, /details\.receiptImageUrl/);
+  assert.match(bookingSource, /useState<string>\(''\)/);
+  assert.match(bookingSource, /useState<number>\(0\)/);
+  assert.match(bookingSource, /const serviceCity = customerProfile\?\.city\?\.trim\(\) \|\| ''/);
+  assert.doesNotMatch(bookingSource, /0142883910293|EEU-SM-99482/);
+  assert.doesNotMatch(
+    [appSource, riderSource, stepperSource, typesSource, bookingSource].join('\n'),
+    /tokenCode|STS token|20-digit token/i,
+    'EEU customer and rider flows must not implement token generation.',
+  );
+  console.log('PASS: EEU is physical-card-only, Jijiga-only, and demo cannot fabricate receipt or custody evidence');
+}
+
+console.log('--- ALL REGRESSION TESTS PASSED SUCCESSFULLY (11/11) ---');
 
