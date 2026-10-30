@@ -327,14 +327,14 @@ async function main() {
   const directEeuId = 'valid-eeu-' + Date.now();
   await setDoc(doc(profileWithoutActive.db, 'orders', directEeuId), {
     id: directEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga', batchName: 'EEU recharge test',
-    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+    mamilaId: 'eeu_hub', mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
     price: 500, quantity: 1, deliveryFee: 75, totalPrice: 575, status: 'PENDING',
     paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
     customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
     customerPlusCode: '', customerAddress: 'Kebele 04',
     eeuDetails: {
       meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-01',
-      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+      rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
       custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
       custodyTimeline: [{ phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(), note: 'Customer authorized physical card service', actor: 'Customer' }],
       kwhUnits: 232.6
@@ -342,6 +342,30 @@ async function main() {
     createdAt: new Date().toISOString()
   });
   console.log('PASS COD EEU order created directly with meter, amount, and authorization validation');
+
+  const validDirectEeuSnapshot = await getDoc(doc(profileWithoutActive.db, 'orders', directEeuId));
+  if (!validDirectEeuSnapshot.exists()) throw new Error('Valid Jijiga EEU order was not readable by its customer.');
+  const validDirectEeuData = validDirectEeuSnapshot.data();
+
+  await expectDenied('customer cannot create EEU order for a city outside Jijiga', async () => {
+    const orderId = 'non-jijiga-eeu-' + Date.now();
+    await setDoc(doc(profileWithoutActive.db, 'orders', orderId), {
+      ...validDirectEeuData,
+      id: orderId,
+      customerCity: 'Dire Dawa'
+    });
+  });
+  await expectDenied('customer cannot select an unapproved EEU service point', async () => {
+    const orderId = 'unapproved-eeu-hub-' + Date.now();
+    await setDoc(doc(profileWithoutActive.db, 'orders', orderId), {
+      ...validDirectEeuData,
+      id: orderId,
+      eeuDetails: {
+        ...validDirectEeuData.eeuDetails,
+        eeuHubName: 'EEU Dire Dawa Regional Operations Hub'
+      }
+    });
+  });
 
   const zeroParcelId = 'zero-price-parcel-' + Date.now();
   await expectDenied('customer cannot set Parcel price to zero when tariff is nonzero', async () => {
@@ -384,14 +408,14 @@ async function main() {
     await setDoc(doc(profileWithoutActive.db, 'orders', mismatchedEeuId), {
       id: mismatchedEeuId, serviceType: 'EEU_RECHARGE', batchId: 'eeu-jijiga',
       batchName: 'Mismatched-price EEU recharge', mamilaId: 'eeu_hub',
-      mamilaName: 'EEU Jijiga Test Hub', mamilaLocation: 'Jijiga',
+      mamilaName: 'EEU Jijiga Main District Office (Keleb)', mamilaLocation: 'Jijiga',
       price: 0, quantity: 1, deliveryFee: 75, totalPrice: 75, status: 'PENDING',
       paymentMethod: 'COD', paymentStatus: 'UNPAID', customerId: profileWithoutActiveUid,
       customerName: 'New Test Customer', customerPhone: '', customerCity: 'Jijiga',
       customerPlusCode: '', customerAddress: 'Kebele 04',
       eeuDetails: {
         meterNumber: '0142-8839-1029-3', cardSerialNumber: 'EEU-TEST-02',
-        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Test Hub',
+        rechargeAmount: 500, serviceFee: 75, eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
         custodyPhase: 'WITH_CUSTOMER', custodyLabel: 'WITH_CUSTOMER', customerAuthorized: true,
         custodyTimeline: [{
           phase: 'WITH_CUSTOMER', label: 'WITH_CUSTOMER', timestamp: new Date().toISOString(),
@@ -763,7 +787,7 @@ async function main() {
     cardSerialNumber: 'EEU-TEST-01',
     rechargeAmount: 500,
     serviceFee: 75,
-    eeuHubName: 'EEU Jijiga Test Hub',
+    eeuHubName: 'EEU Jijiga Main District Office (Keleb)',
     custodyPhase: 'AT_EEU_HUB',
     custodyLabel: 'AT_EEU_HUB',
     customerAuthorized: true,
@@ -813,6 +837,40 @@ async function main() {
     });
   });
 
+  const legacyReceiptOrderId = 'test-eeu-legacy-inline-receipt';
+  const legacyReceiptTimestamp = new Date().toISOString();
+  const legacyReceiptDetails = {
+    ...eeuDetailsFixture,
+    receiptCaptured: true,
+    receiptTimestamp: legacyReceiptTimestamp,
+    receiptImageUrl: 'data:image/jpeg;base64,AAAA'
+  };
+  await adminDb.doc(`orders/${legacyReceiptOrderId}`).set({
+    ...validOrder,
+    id: legacyReceiptOrderId,
+    serviceType: 'EEU_RECHARGE',
+    status: 'PICKED_UP',
+    riderId: riderUid,
+    riderName: 'rider User',
+    eeuDetails: legacyReceiptDetails
+  });
+  await expectDenied('legacy inline receipt image cannot authorize custody return without protected receipt document', async () => {
+    await updateDoc(doc(rider.db, 'orders', legacyReceiptOrderId), {
+      eeuDetails: {
+        ...legacyReceiptDetails,
+        custodyPhase: 'WITH_RIDER_RETURN',
+        custodyLabel: 'WITH_RIDER',
+        custodyTimeline: [...legacyReceiptDetails.custodyTimeline, {
+          phase: 'WITH_RIDER_RETURN',
+          label: 'WITH_RIDER',
+          timestamp: new Date().toISOString(),
+          note: 'Attempted return using legacy inline image only.',
+          actor: `Rider ${riderUid}`
+        }]
+      }
+    });
+  });
+
   const codOrder = { ...validOrder, id: 'test-cod-order', paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'PICKED_UP' };
   await adminDb.doc(`orders/${codOrder.id}`).set(codOrder);
   await expectDenied('rider cannot deliver COD order before collecting payment', async () => {
@@ -826,7 +884,6 @@ async function main() {
     ...eeuDetailsFixture,
     receiptCaptured: true,
     receiptTimestamp,
-    tokenCode: '',
     custodyTimeline: [...eeuDetailsFixture.custodyTimeline, {
       phase: 'AT_EEU_HUB',
       label: 'AT_EEU_HUB',
@@ -847,6 +904,41 @@ async function main() {
   });
   await receiptBatch.commit();
   console.log('PASS assigned rider can atomically attach one capped receipt in the protected subcollection at AT_EEU_HUB');
+
+  const withRiderReturnDetails = {
+    ...receiptEeuDetails,
+    custodyPhase: 'WITH_RIDER_RETURN',
+    custodyLabel: 'WITH_RIDER',
+    custodyTimeline: [...receiptEeuDetails.custodyTimeline, {
+      phase: 'WITH_RIDER_RETURN',
+      label: 'WITH_RIDER',
+      timestamp: new Date().toISOString(),
+      note: 'Returning charged card and terminal paper receipt.',
+      actor: `Rider ${riderUid}`
+    }]
+  };
+  await updateDoc(doc(rider.db, 'orders', eeuOrderId), { eeuDetails: withRiderReturnDetails });
+  console.log('PASS protected terminal receipt permits rider to start the return journey');
+
+  const returnedDetails = {
+    ...withRiderReturnDetails,
+    custodyPhase: 'RETURNED',
+    custodyLabel: 'RETURNED',
+    custodyTimeline: [...withRiderReturnDetails.custodyTimeline, {
+      phase: 'RETURNED',
+      label: 'RETURNED',
+      timestamp: new Date().toISOString(),
+      note: 'Charged physical card and terminal receipt handed back to customer.',
+      actor: `Rider ${riderUid}`
+    }]
+  };
+  await updateDoc(doc(rider.db, 'orders', eeuOrderId), {
+    status: 'DELIVERED',
+    paymentStatus: 'COLLECTED_BY_RIDER',
+    eeuDetails: returnedDetails,
+    updatedAt: new Date().toISOString()
+  });
+  console.log('PASS returned EEU order requires receipt evidence and completes the COD handover');
 
   await expectDenied('rider cannot replace an attached EEU receipt', async () => {
     await setDoc(doc(rider.db, 'orders', eeuOrderId, 'receipts', 'terminal'), {
