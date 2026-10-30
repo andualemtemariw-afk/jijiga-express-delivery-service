@@ -311,9 +311,9 @@ export function RiderView({
                     <div className="space-y-3">
                       <EeuCustodyStepper
                         order={order}
-                        isRiderView={true}
-                        onAdvanceState={(nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
-                        onRequestCameraReceipt={() => setCameraOrder(order)}
+                        isRiderView={!isDemoMode}
+                        onAdvanceState={isDemoMode ? undefined : (nextPhase) => handleAdvanceEeuCustody(order, nextPhase)}
+                        onRequestCameraReceipt={isDemoMode ? undefined : () => setCameraOrder(order)}
                       />
                       {eeuErrorMsg[order.id] && (
                         <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
@@ -528,66 +528,72 @@ export function RiderView({
                   {/* Action Handlers */}
                   <div>
                     {order.serviceType === 'EEU_RECHARGE' ? (
-                      <div className="space-y-2">
-                        {order.eeuDetails?.custodyPhase === 'WITH_CUSTOMER' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_OUTBOUND')}
-                            className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                          >
-                            <Zap className="w-5 h-5 text-amber-200" />
-                            <span>Collect Physical Card & Cash Float from Customer (WITH_RIDER)</span>
-                          </button>
-                        )}
+                      isDemoMode ? (
+                        <div className="p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-xs">
+                          EEU physical-card custody and receipt capture are disabled in Demo mode. Use a verified production order and the assigned rider.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {order.eeuDetails?.custodyPhase === 'WITH_CUSTOMER' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_OUTBOUND')}
+                              className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                            >
+                              <Zap className="w-5 h-5 text-amber-200" />
+                              <span>Collect Physical Card & Cash Float from Customer (WITH_RIDER)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'WITH_RIDER_OUTBOUND' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'AT_EEU_HUB')}
-                            className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                          >
-                            <Zap className="w-5 h-5 text-amber-400" />
-                            <span>Arrived at EEU Branch Terminal (AT_EEU_HUB)</span>
-                          </button>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'WITH_RIDER_OUTBOUND' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'AT_EEU_HUB')}
+                              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                            >
+                              <Zap className="w-5 h-5 text-amber-400" />
+                              <span>Arrived at EEU Branch Terminal (AT_EEU_HUB)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
-                          <div className="space-y-2">
-                            {order.eeuDetails.receiptCaptured !== true ? (
-                              <button
-                                onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
-                                className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
-                              >
-                                <Camera className="w-5 h-5 animate-pulse" />
-                                <span>Capture Actual EEU Terminal Paper Receipt</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_RETURN')}
-                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                              >
-                                <CheckCircle2 className="w-5 h-5 text-blue-200" />
-                                <span>Receipt Verified - Start Return to Customer (WITH_RIDER)</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'AT_EEU_HUB' && (
+                            <div className="space-y-2">
+                              {order.eeuDetails.receiptCaptured !== true ? (
+                                <button
+                                  onClick={() => { setCameraOrder(order); setReceiptFile(null); setReceiptPreviewUrl(null); }}
+                                  className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-amber-400/40"
+                                >
+                                  <Camera className="w-5 h-5 animate-pulse" />
+                                  <span>Capture Actual EEU Terminal Paper Receipt</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleAdvanceEeuCustody(order, 'WITH_RIDER_RETURN')}
+                                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-5 h-5 text-blue-200" />
+                                  <span>Receipt Verified - Start Return to Customer (WITH_RIDER)</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'WITH_RIDER_RETURN' && (
-                          <button
-                            onClick={() => handleAdvanceEeuCustody(order, 'RETURNED')}
-                            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span>Hand Back Recharged Card & Paper Receipt (RETURNED)</span>
-                          </button>
-                        )}
+                          {order.eeuDetails?.custodyPhase === 'WITH_RIDER_RETURN' && (
+                            <button
+                              onClick={() => handleAdvanceEeuCustody(order, 'RETURNED')}
+                              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                            >
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span>Hand Back Recharged Card & Paper Receipt (RETURNED)</span>
+                            </button>
+                          )}
 
-                        {order.eeuDetails?.custodyPhase === 'RETURNED' && (
-                          <div className="w-full py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            <span>Chain of Custody Completed & Recharged Card Returned</span>
-                          </div>
-                        )}
-                      </div>
+                          {order.eeuDetails?.custodyPhase === 'RETURNED' && (
+                            <div className="w-full py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Chain of Custody Completed & Recharged Card Returned</span>
+                            </div>
+                          )}
+                        </div>
+                      )
                     ) : (
                       order.status === 'RIDER_ACCEPTED' ? (
                         <button 

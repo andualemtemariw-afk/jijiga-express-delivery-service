@@ -653,7 +653,7 @@ export default function App() {
 
     if (target.serviceType === 'EEU_RECHARGE') {
       showAlert(
-        'EEU physical-card custody cannot be simulated in Demo mode. Use the assigned rider workflow with the actual EEU terminal recharge and paper receipt.',
+        'EEU physical-card custody cannot be simulated. Use the assigned rider workflow with the actual EEU terminal recharge and paper receipt.',
         'info'
       );
       return;

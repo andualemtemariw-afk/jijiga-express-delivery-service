@@ -354,6 +354,7 @@ console.log('--- Starting Jijiga Express Unit & Accounting Regression Suite ---'
   assert.match(appSource, /EEU physical-card custody cannot be simulated in Demo mode/);
   assert.match(riderSource, /EEU custody cannot be simulated in Demo mode/);
   assert.match(riderSource, /EEU receipt capture is disabled in Demo mode/);
+  assert.match(riderSource, /EEU physical-card custody and receipt capture are disabled in Demo mode/);
   assert.doesNotMatch(riderSource, /eeuDetails:\s*\{\s*\.\.\.updatedEeu,\s*receiptImageUrl\s*\}/);
   assert.doesNotMatch(typesSource, /receiptImageUrl\??:/);
   assert.doesNotMatch(stepperSource, /details\.receiptImageUrl/);
