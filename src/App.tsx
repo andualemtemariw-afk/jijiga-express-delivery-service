@@ -245,6 +245,7 @@ export default function App() {
     paymentMethod: PaymentMethod,
     options?: {
       quantity?: number;
+      deliveryFee?: number;
       specialInstructions?: string;
       cookingInstruction?: string;
       deliveryCity?: string;
