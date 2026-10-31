@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, lazy } from 'react';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { APIProvider } from '@vis.gl/react-google-maps';
 
@@ -7,11 +7,6 @@ import { User } from 'firebase/auth';
 import { Role, Order, Batch, Mamila, PaymentMethod, ChatMessage, EeuRechargeDetails, AppUserProfile } from './types';
 import { INITIAL_BATCHES, MAMILAS, SERVICEABILITY_ZONES } from './data';
 import { INITIAL_ORDER_CHATS } from './data/vernacularPhrases';
-import { MapPreviewModal } from './components/map/MapPreviewModal';
-import { UpdateApiKeyModal } from './components/map/UpdateApiKeyModal';
-import { GoogleDriveSyncModal } from './components/drive/GoogleDriveSyncModal';
-import { GmailNotificationModal } from './components/gmail/GmailNotificationModal';
-import { AuthModal } from './components/auth/AuthModal';
 import { subscribeToNetworkStatus, isCapacitorAndroid } from './services/googleAuth';
 import { useAuth } from './context/AuthContext';
 import { 
@@ -56,11 +51,16 @@ import {
 } from 'lucide-react';
 
 
-import { CustomerView } from './roles/CustomerView';
-import { RunnerView } from './roles/RunnerView';
-import { RiderView } from './roles/RiderView';
-import { AdminView } from './roles/AdminView';
-import { MamilaView } from './roles/MamilaView';
+const CustomerView = lazy(() => import('./roles/CustomerView').then((module) => ({ default: module.CustomerView })));
+const RunnerView = lazy(() => import('./roles/RunnerView').then((module) => ({ default: module.RunnerView })));
+const RiderView = lazy(() => import('./roles/RiderView').then((module) => ({ default: module.RiderView })));
+const AdminView = lazy(() => import('./roles/AdminView').then((module) => ({ default: module.AdminView })));
+const MamilaView = lazy(() => import('./roles/MamilaView').then((module) => ({ default: module.MamilaView })));
+const MapPreviewModal = lazy(() => import('./components/map/MapPreviewModal').then((module) => ({ default: module.MapPreviewModal })));
+const UpdateApiKeyModal = lazy(() => import('./components/map/UpdateApiKeyModal').then((module) => ({ default: module.UpdateApiKeyModal })));
+const GoogleDriveSyncModal = lazy(() => import('./components/drive/GoogleDriveSyncModal').then((module) => ({ default: module.GoogleDriveSyncModal })));
+const GmailNotificationModal = lazy(() => import('./components/gmail/GmailNotificationModal').then((module) => ({ default: module.GmailNotificationModal })));
+const AuthModal = lazy(() => import('./components/auth/AuthModal').then((module) => ({ default: module.AuthModal })));
 
 export default function App() {
   const { 
@@ -1267,46 +1267,53 @@ export default function App() {
         </Suspense>
         </AppErrorBoundary>
 
-        {/* Global Map Preview Modal */}
-        <MapPreviewModal
-          order={globalModalOrder}
-          isOpen={!!globalModalOrder}
-          onClose={() => setGlobalModalOrder(null)}
-        />
+        <Suspense fallback={null}>
+          {globalModalOrder && (
+            <MapPreviewModal
+              order={globalModalOrder}
+              isOpen={!!globalModalOrder}
+              onClose={() => setGlobalModalOrder(null)}
+            />
+          )}
 
-        {/* Google Maps API Key Modal */}
-        <UpdateApiKeyModal
-          isOpen={showKeyModal}
-          onClose={() => setShowKeyModal(false)}
-          currentKey={apiKey}
-          onSaveKey={(newK) => {
-            localStorage.setItem('user_google_maps_api_key', newK);
-            setApiKey(newK);
-            window.location.reload();
-          }}
-        />
+          {showKeyModal && (
+            <UpdateApiKeyModal
+              isOpen={showKeyModal}
+              onClose={() => setShowKeyModal(false)}
+              currentKey={apiKey}
+              onSaveKey={(newK) => {
+                localStorage.setItem('user_google_maps_api_key', newK);
+                setApiKey(newK);
+                window.location.reload();
+              }}
+            />
+          )}
 
-        {/* Google Drive Vault Sync Modal */}
-        <GoogleDriveSyncModal
-          isOpen={showDriveModal}
-          onClose={() => setShowDriveModal(false)}
-          orders={orders}
-        />
+          {showDriveModal && (
+            <GoogleDriveSyncModal
+              isOpen={showDriveModal}
+              onClose={() => setShowDriveModal(false)}
+              orders={orders}
+            />
+          )}
 
-        {/* Gmail Dispatch Notifications Modal */}
-        <GmailNotificationModal
-          isOpen={showGmailModal}
-          onClose={() => setShowGmailModal(false)}
-          orders={orders}
-        />
+          {showGmailModal && (
+            <GmailNotificationModal
+              isOpen={showGmailModal}
+              onClose={() => setShowGmailModal(false)}
+              orders={orders}
+            />
+          )}
 
-        {/* Unified Authentication Modal (Email/Password for Android & Web Google Auth) */}
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
-          defaultTab={authModalTab}
-          onSuccess={() => showAlert('Authentication successful! Welcome to Jijiga Express.', 'success')}
-        />
+          {showAuthModal && (
+            <AuthModal
+              isOpen={showAuthModal}
+              onClose={() => setShowAuthModal(false)}
+              defaultTab={authModalTab}
+              onSuccess={() => showAlert('Authentication successful! Welcome to Jijiga Express.', 'success')}
+            />
+          )}
+        </Suspense>
 
         {/* Production Footer with Subtle Developer / Sandbox Trigger */}
         <footer className="max-w-7xl mx-auto px-4 md:px-6 pt-12 pb-6 border-t border-slate-200 mt-12 text-slate-500 text-xs flex flex-col sm:flex-row items-center justify-between gap-4">
