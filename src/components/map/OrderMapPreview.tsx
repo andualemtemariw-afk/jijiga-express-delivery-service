@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { 
   Map, 
-  AdvancedMarker, 
-  Pin, 
+  AdvancedMarker,
   InfoWindow, 
   useMap, 
   useApiLoadingStatus, 
@@ -261,9 +260,11 @@ function LiveGoogleMap({
               title={`Destination: ${order.customerName}`}
               onClick={() => setSelectedMarker('customer')}
             >
-              <Pin background="#2563eb" glyphColor="#ffffff" borderColor="#1e3a8a">
-                <MapPin className="w-3.5 h-3.5 text-white" />
-              </Pin>
+              <div className="relative group cursor-pointer -translate-x-1/2 -translate-y-1/2">
+                <div className="w-7 h-7 rounded-full bg-blue-600 text-white shadow-xl border-2 border-white flex items-center justify-center transform transition-transform group-hover:scale-110">
+                  <MapPin className="w-3.5 h-3.5" />
+                </div>
+              </div>
             </AdvancedMarker>
           )}
 

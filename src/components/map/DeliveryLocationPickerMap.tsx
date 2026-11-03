@@ -1,8 +1,7 @@
 import { useState, useEffect, type MouseEvent } from 'react';
 import { 
   Map, 
-  AdvancedMarker, 
-  Pin, 
+  AdvancedMarker,
   useMap, 
   useApiLoadingStatus, 
   APILoadingStatus,
@@ -212,9 +211,11 @@ export function DeliveryLocationPickerMap({
 
                 {typeof window !== 'undefined' && !!window.google?.maps?.marker?.AdvancedMarkerElement && (
                   <AdvancedMarker position={markerPos} title="Your Dropoff Pinpoint">
-                    <Pin background="#2563eb" glyphColor="#ffffff" borderColor="#1e3a8a">
-                      <MapPin className="w-4 h-4 text-white" />
-                    </Pin>
+                    <div className="relative group cursor-pointer -translate-x-1/2 -translate-y-1/2">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white shadow-xl border-2 border-white flex items-center justify-center transform transition-transform group-hover:scale-110">
+                        <MapPin className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
                   </AdvancedMarker>
                 )}
               </Map>
