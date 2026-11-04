@@ -25,6 +25,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Validate deployment configuration
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        shell: bash
+        run: |
+          missing=0
+          if [[ -z "$FIREBASE_SERVICE_ACCOUNT" ]]; then
+            echo "::error::Missing GitHub Actions secret FIREBASE_SERVICE_ACCOUNT. Add the service-account JSON as a secret for the production environment."
+            missing=1
+          fi
+          if [[ -z "$VITE_GOOGLE_MAPS_API_KEY" ]]; then
+            echo "::error::Missing GitHub Actions secret VITE_GOOGLE_MAPS_API_KEY. Add the restricted Google Maps browser API key for the production environment."
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then
+            echo "Configure secrets at Settings > Environments > production > Environment secrets, then rerun this workflow."
+            exit 1
+          fi
+
       - name: Set up Node.js 22
         uses: actions/setup-node@v5
         with:
