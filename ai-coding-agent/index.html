@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="A read-only, free-tier coding assistant for Jijiga Express Delivery Service.">
+  <title>Jijiga Express · Code Lab</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --surface:#111a2d; --surface2:#172238; --line:#29364d; --text:#f4f7fb; --muted:#a8b5c9; --accent:#73e0b0; --accent2:#b2f5d8; --warn:#f9d48a; --danger:#ffb4b4; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(900px 520px at 80% -20%, #173b4a 0%, transparent 65%),var(--bg); color:var(--text); font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .wrap { width:min(1100px,100% - 32px); margin:0 auto; padding:28px 0 48px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:8px 0 28px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .mark { display:grid; place-items:center; width:42px; height:42px; border-radius:13px; background:var(--accent); color:#08251a; font-weight:900; font-size:20px; }
+    .brand h1 { margin:0; font-size:18px; letter-spacing:-.025em; }
+    .brand p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+    .plan { border:1px solid #396d5a; border-radius:999px; color:var(--accent2); padding:5px 10px; white-space:nowrap; font-size:12px; font-weight:700; }
+    .hero { padding:34px 0 24px; max-width:800px; }
+    .eyebrow { color:var(--accent); font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    h2 { margin:10px 0 12px; font-size:clamp(28px,5vw,43px); line-height:1.08; letter-spacing:-.045em; }
+    .hero p { color:var(--muted); margin:0; max-width:720px; }
+    .grid { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(255px,.8fr); gap:18px; align-items:start; }
+    .panel { background:linear-gradient(180deg,rgba(24,36,57,.96),rgba(16,25,42,.96)); border:1px solid var(--line); border-radius:20px; padding:22px; box-shadow:0 20px 55px rgba(0,0,0,.15); }
+    label { display:block; margin:0 0 7px; color:#e6edf7; font-size:13px; font-weight:750; }
+    input,textarea { width:100%; border:1px solid #3a4b64; border-radius:12px; background:#0b1324; color:var(--text); font:inherit; padding:12px 13px; outline:none; }
+    input:focus,textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(115,224,176,.12); }
+    textarea { min-height:145px; resize:vertical; }
+    .field { margin-bottom:16px; }
+    .two { display:grid; grid-template-columns:1fr 1.1fr; gap:12px; }
+    .hint { margin:7px 0 0; font-size:12px; color:var(--muted); }
+    .examples { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 18px; }
+    .example { color:#d8e6f3; border:1px solid #394b65; background:#16243a; padding:7px 10px; border-radius:999px; font-size:12px; cursor:pointer; }
+    .example:hover { border-color:var(--accent); color:var(--accent2); }
+    .primary { border:0; border-radius:12px; padding:12px 17px; background:var(--accent); color:#08251a; font:inherit; font-weight:850; cursor:pointer; }
+    .primary:disabled { opacity:.55; cursor:wait; }
+    .actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+    .small { color:var(--muted); font-size:12px; }
+    .status { margin-top:17px; padding:12px 13px; border:1px solid #35445b; background:#0d1728; border-radius:12px; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+    .status[data-kind="error"] { color:var(--danger); border-color:#7d3d49; }
+    .status[data-kind="success"] { color:var(--accent2); border-color:#396d5a; }
+    .result { margin-top:18px; }
+    .result h3 { margin:0 0 10px; font-size:15px; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:0; max-height:60vh; overflow:auto; background:#080e1b; border:1px solid var(--line); border-radius:12px; padding:16px; font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; color:#deebf8; }
+    aside h3 { margin:0 0 14px; font-size:15px; }
+    .rule { display:flex; gap:10px; padding:13px 0; border-top:1px solid var(--line); }
+    .check { display:grid; place-items:center; flex:0 0 24px; height:24px; border-radius:8px; color:var(--accent); background:#143427; font-weight:900; }
+    .rule strong { display:block; font-size:13px; margin-bottom:3px; }
+    .rule p { margin:0; color:var(--muted); font-size:12px; }
+    .warning { margin-top:17px; padding:13px; border:1px solid #6b5b39; border-radius:12px; background:#2b2518; color:var(--warn); font-size:12px; }
+    footer { border-top:1px solid var(--line); margin-top:24px; padding-top:18px; color:var(--muted); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    a { color:var(--accent2); }
+    @media(max-width:760px) { .grid{grid-template-columns:1fr;} header{align-items:flex-start;} .plan{font-size:11px;} .two{grid-template-columns:1fr;} .panel{padding:17px;} .hero{padding-top:27px;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="mark" aria-hidden="true">JX</div>
+        <div><h1>Jijiga Express</h1><p>Code Lab · Isolated preview</p></div>
+      </div>
+      <div class="plan">FREE-TIER ONLY</div>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow">Phase 1 · Coding agent</div>
+      <h2>Understand the code.<br>Make safer decisions.</h2>
+      <p>A read-only assistant for reviewing source files, diagnosing failures, planning fixes, and drafting patches. It cannot commit, merge, deploy, or access Firebase data.</p>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <form id="agent-form">
+          <div class="two">
+            <div class="field">
+              <label for="branch">Git branch to inspect</label>
+              <input id="branch" name="branch" maxlength="120" value="main" autocomplete="off" spellcheck="false" required>
+              <p class="hint">Reads code only; no Git writes.</p>
+            </div>
+            <div class="field">
+              <label for="access-code">Preview access code</label>
+              <input id="access-code" name="access-code" type="password" minlength="8" maxlength="128" autocomplete="current-password" placeholder="Configured by owner" required>
+              <p class="hint">Never stored in the source code.</p>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="task">What should the coding agent investigate?</label>
+            <textarea id="task" name="task" maxlength="4000" required placeholder="Example: Inspect the Firestore rules smoke test and explain why an unexpected permission-denied error might be treated as a successful test. Give a minimal patch and a test plan."></textarea>
+            <p class="hint"><span id="count">0</span>/4000 characters. Do not paste API keys, credentials, customer details, or live order data.</p>
+          </div>
+
+          <div class="examples" aria-label="Example tasks">
+            <button class="example" type="button" data-prompt="Review Firebase authentication and list likely failure points. Do not change settings or request secrets.">Authentication review</button>
+            <button class="example" type="button" data-prompt="Review Firestore rules and test coverage. Identify security risks and propose emulator tests; never suggest weakening authorization to make a test pass.">Rules & tests</button>
+            <button class="example" type="button" data-prompt="Review the runner handover/tag flow for mismatched tags, invalid state transitions, or unsafe writes. Propose a small patch and tests.">Runner tag flow</button>
+            <button class="example" type="button" data-prompt="Inspect build configuration and dependency scripts for safe, minimal fixes. Do not touch deployment secrets or production.">Build diagnosis</button>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="run" type="submit">Analyze repository</button>
+            <span class="small">Read-only · Max 2,000 output tokens per request</span>
+          </div>
+        </form>
+        <div id="status" class="status" role="status" aria-live="polite">Safely locked until preview-only environment variables are configured. The page itself does not call an AI model.</div>
+        <section id="result-section" class="result" hidden>
+          <h3>Agent response</h3>
+          <pre id="result" tabindex="0"></pre>
+        </section>
+      </section>
+
+      <aside class="panel">
+        <h3>Safety & cost controls</h3>
+        <div class="rule"><div class="check">✓</div><div><strong>No Vercel AI Gateway</strong><p>Uses one fixed Gemini free-tier model directly. No paid-model fallback or automatic top-up path.</p></div></div>
+        <div class="rule"><div class="check">✓</div><div><strong>No Firebase connection</strong><p>No Firestore reads/writes, live customer records, payment actions, or production credentials.</p></div></div>
+        <div class="rule"><div class="check">✓</div><div><strong>No GitHub write access</strong><p>Reads selected source files from a branch. It can suggest patches, but cannot commit or open a pull request.</p></div></div>
+        <div class="rule"><div class="check">✓</div><div><strong>Fail closed</strong><p>Requests are rejected if the preview key or access code is missing, or if free-tier quota is exceeded.</p></div></div>
+        <div class="warning"><strong>Free-tier privacy note:</strong> Google states that content submitted on its free Gemini API tier may be used to improve its products. Send source code only if you accept that policy. Never submit secrets or private customer/order data.</div>
+      </aside>
+    </div>
+
+    <footer>
+      <span>Jijiga Express Delivery Service · Phase 1</span>
+      <span><a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noreferrer">Gemini pricing</a> · <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noreferrer">Free-tier limits</a></span>
+    </footer>
+  </div>
+
+  <script>
+    const form = document.getElementById('agent-form');
+    const taskField = document.getElementById('task');
+    const count = document.getElementById('count');
+    const status = document.getElementById('status');
+    const runButton = document.getElementById('run');
+    const resultSection = document.getElementById('result-section');
+    const result = document.getElementById('result');
+
+    taskField.addEventListener('input', () => { count.textContent = String(taskField.value.length); });
+    document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => {
+      taskField.value = button.dataset.prompt || '';
+      count.textContent = String(taskField.value.length);
+      taskField.focus();
+    }));
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const task = taskField.value.trim();
+      const branch = document.getElementById('branch').value.trim();
+      const accessCode = document.getElementById('access-code').value;
+      if (!task || !branch || !accessCode) return;
+      resultSection.hidden = true;
+      result.textContent = '';
+      runButton.disabled = true;
+      runButton.textContent = 'Analyzing…';
+      status.dataset.kind = '';
+      status.textContent = 'Checking preview lock, then reading a small allowlist of source files. No repository writes will occur.';
+      try {
+        const response = await fetch('/api/agent', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-agent-access-code': accessCode },
+          body: JSON.stringify({ task, branch })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || ('Request failed with status ' + response.status));
+        result.textContent = body.answer || 'The model returned no text.';
+        resultSection.hidden = false;
+        status.dataset.kind = 'success';
+        status.textContent = 'Analysis complete. This response is advice only; no file was modified, committed, or deployed.';
+      } catch (error) {
+        status.dataset.kind = 'error';
+        status.textContent = error instanceof Error ? error.message : 'Request failed. No changes were made.';
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Analyze repository';
+      }
+    });
+  </script>
+</body>
+</html>

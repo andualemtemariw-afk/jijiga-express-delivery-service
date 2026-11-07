@@ -1,0 +1,29 @@
+name: AI Coding Agent Safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "ai-coding-agent/**"
+      - ".github/workflows/ai-coding-agent-safety.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-check:
+    name: Static safety checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Run coding-agent safety checks
+        working-directory: ai-coding-agent
+        run: npm test
