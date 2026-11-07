@@ -70,7 +70,6 @@ import { CartDrawer } from '../components/customer/CartDrawer';
 import { HotelBookingModal } from '../components/hotel/HotelBookingModal';
 import { LoyaltyCard } from '../components/loyalty/LoyaltyCard';
 import { HelpCenterModal } from '../components/communication/HelpCenterModal';
-import { PhoneOtpModal } from '../components/auth/PhoneOtpModal';
 import { HOTELS_DATA, SERVICEABILITY_ZONES } from '../data';
 import { Cart, CartItem, getCustomerFriendlyStatus, HotelReservation, SupportTicket } from '../types';
 import { CommunicationBridgeModal, ModalTab } from '../components/communication/CommunicationBridgeModal';
@@ -174,7 +173,6 @@ export function CustomerView({
   const [showHotelModal, setShowHotelModal] = useState(false);
   const [showHelpCenterModal, setShowHelpCenterModal] = useState(false);
   const [showNearbyServicesModal, setShowNearbyServicesModal] = useState(false);
-  const [showPhoneOtpModal, setShowPhoneOtpModal] = useState(false);
   const [activeRideConflictNotice, setActiveRideConflictNotice] = useState<string | null>(null);
   const [hotelReservations, setHotelReservations] = useState<HotelReservation[]>([]);
 
@@ -766,14 +764,14 @@ export function CustomerView({
             <span className="hidden sm:inline">Help</span>
           </button>
 
-          {/* Phone OTP Login button for guests */}
+          {/* Guest sign-in button for unauthenticated customers */}
           {!currentUser && (
             <button
-              onClick={() => setShowPhoneOtpModal(true)}
+              onClick={onSignIn}
               className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
             >
-              <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-              <span>OTP Login</span>
+              <LogIn className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Sign In</span>
             </button>
           )}
 
@@ -2758,19 +2756,6 @@ export function CustomerView({
         }}
       />
 
-      {/* PHONE-FIRST OTP ONBOARDING MODAL */}
-      <PhoneOtpModal
-        isOpen={showPhoneOtpModal}
-        onClose={() => setShowPhoneOtpModal(false)}
-        onLoginSuccess={(prof) => {
-          onUpdateProfile?.({
-            displayName: prof.displayName,
-            phone: prof.phone,
-            role: 'customer',
-          });
-        }}
-        onSwitchToGoogleAuth={onSignIn}
-      />
     </div>
   );
 }
