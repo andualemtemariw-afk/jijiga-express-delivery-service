@@ -18,3 +18,11 @@ assert.ok(api.includes("generativelanguage.googleapis.com"), "Model calls must g
 assert.doesNotMatch(api, /ai-gateway\.vercel\.sh|createPullRequest|createBranch|firebase-admin|initializeApp\(/i, "Agent must not add a paid Gateway fallback, Git writes, or Firebase access");
 
 console.log("SAFETY CHECK PASS: isolated read-only code agent; fixed Gemini free-tier model; env-only lock; no Firebase, GitHub writes, or paid Gateway fallback.");
+
+const tsconfig = JSON.parse(await readFile(new URL("../tsconfig.json", import.meta.url), "utf8"));
+assert.ok(tsconfig.compilerOptions.types.includes("node"), "Agent TypeScript config must explicitly load Node.js ambient types");
+assert.equal(tsconfig.compilerOptions.moduleResolution, "NodeNext", "Agent TypeScript config must resolve Node.js built-ins");
+assert.ok(tsconfig.include.includes("api/**/*.ts"), "Agent TypeScript config must typecheck API handlers");
+assert.match(api, /"ai-coding-agent\\/api\\/agent\\.ts"/, "Agent source allowlist must include its API handler for self-diagnosis");
+assert.match(api, /"ai-coding-agent\\/tsconfig\\.json"/, "Agent source allowlist must include its own TypeScript config");
+console.log("AGENT TYPECHECK CONFIG PASS: Node types enabled; API handlers included; self-diagnostic source paths allowlisted.");
