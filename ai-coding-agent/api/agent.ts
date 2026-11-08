@@ -49,6 +49,10 @@ When a change is useful, include a minimal unified diff or clearly labelled code
 const CORE_FILES = ["package.json"];
 const SAFE_PATHS = new Set([
   "package.json",
+  "ai-coding-agent/package.json",
+  "ai-coding-agent/tsconfig.json",
+  "ai-coding-agent/api/agent.ts",
+  "ai-coding-agent/scripts/safety-check.mjs",
   "vite.config.ts",
   "tsconfig.json",
   "firestore.rules",
@@ -125,8 +129,15 @@ function selectSourcePaths(task: string): string[] {
   if (/(khat|mamila|batch|catalog|customer|delivery|order|payment|rider)/i.test(text)) {
     add("src/App.tsx", "src/roles/CustomerView.tsx", "src/roles/RiderView.tsx");
   }
-  if (/(build|bundle|typescript|typecheck|vite|npm|dependency|compile|workflow)/i.test(text)) {
-    add("vite.config.ts", "tsconfig.json");
+  if (/(node:crypto|\\bbuffer\\b|\\bprocess\\b|typescript|tsconfig|typecheck|compile|agent build|coding agent|build|bundle|vite|npm|dependency|workflow)/i.test(text)) {
+    add(
+      "ai-coding-agent/package.json",
+      "ai-coding-agent/tsconfig.json",
+      "ai-coding-agent/api/agent.ts",
+      "ai-coding-agent/scripts/safety-check.mjs",
+      "vite.config.ts",
+      "tsconfig.json"
+    );
   }
   if (paths.length === 1) add("src/App.tsx", "firestore.rules", "src/services/googleAuth.ts");
   return paths.filter((path) => SAFE_PATHS.has(path)).slice(0, 6);
