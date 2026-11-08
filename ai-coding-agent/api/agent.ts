@@ -129,7 +129,7 @@ function selectSourcePaths(task: string): string[] {
   if (/(khat|mamila|batch|catalog|customer|delivery|order|payment|rider)/i.test(text)) {
     add("src/App.tsx", "src/roles/CustomerView.tsx", "src/roles/RiderView.tsx");
   }
-  if (/(node:crypto|\\bbuffer\\b|\\bprocess\\b|typescript|tsconfig|typecheck|compile|agent build|coding agent|build|bundle|vite|npm|dependency|workflow)/i.test(text)) {
+  if (/(node:crypto|\bbuffer\b|\bprocess\b|typescript|tsconfig|typecheck|compile|agent build|coding agent|build|bundle|vite|npm|dependency|workflow)/i.test(text)) {
     add(
       "ai-coding-agent/package.json",
       "ai-coding-agent/tsconfig.json",
